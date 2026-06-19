@@ -12,6 +12,7 @@ class CiImportsTest(unittest.TestCase):
             "cache_manager",
             "parameter_sweep",
             "walk_forward",
+            "daily_report",
         ]:
             with self.subTest(module=module_name):
                 self.assertIsNotNone(importlib.import_module(module_name))

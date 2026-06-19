@@ -78,6 +78,51 @@ python scan_stocks.py --file stocks.txt --errors-only --log-errors
 - `output/stock_ranking.html`
 - `output/scan_errors.log`，需使用 `--log-errors`
 
+
+## Daily Report
+
+`daily_report.py` 用於每天快速產生值得研究的股票候選清單。它會重用既有多股票掃描器，先掃描股票，再依訊號與分數篩選候選股，最後可輸出 Excel 報表。
+
+CLI 範例：
+
+```bash
+python daily_report.py --file stocks.txt
+python daily_report.py --stocks 2330 2317 2454
+python daily_report.py --file stocks.txt --signals BUY WATCH
+python daily_report.py --file stocks.txt --min-score 4
+python daily_report.py --file stocks.txt --top 20
+python daily_report.py --file stocks.txt --output
+python daily_report.py --file stocks.txt --output output/daily_report.xlsx
+python daily_report.py --file stocks.txt --force-refresh
+```
+
+常用參數：
+
+- `--stocks`: 股票清單
+- `--file`: 從 txt 載入股票清單
+- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
+- `--interval`: K 線週期，預設 `DEFAULT_INTERVAL`
+- `--signals`: 候選訊號，預設 `BUY WATCH`
+- `--min-score`: 候選最低分數，預設 `4`
+- `--top`: 候選股前 N 名，預設 `20`
+- `--force-refresh`: 忽略快取重新下載
+- `--auto-adjust`: 使用專案設定的調整價選項
+- `--output`: 輸出 Excel，省略路徑時使用 `output/daily_report.xlsx`
+
+Excel sheets：
+
+- `Summary`: 報告日期、掃描股票數、候選股票數、BUY / WATCH 數量、平均分數與平均量比
+- `Candidates`: 符合條件的候選股票
+- `All`: 全部掃描結果
+- `Errors`: 掃描失敗股票
+
+候選股排序規則：
+
+1. `Score` 由高到低
+2. `Volume_Ratio` 由高到低
+
+Daily Report 只是研究候選清單，不代表買賣建議，也不提供自動下單。
+
 ## Benchmark
 
 benchmark 工具檔名維持 `benchmark.py`，輸出分為三段：
@@ -288,6 +333,12 @@ python scan_stocks.py --file stocks.txt
 python scan_stocks.py --stocks 2330 2317 2454
 ```
 
+如果想直接產生每日候選清單：
+
+```bash
+python daily_report.py --file stocks.txt --output
+```
+
 說明：
 
 - 掃描多檔股票
@@ -476,6 +527,12 @@ python main.py --help
 python scan_stocks.py --file stocks.txt
 ```
 
+如果想直接產生每日候選清單 Excel：
+
+```bash
+python daily_report.py --file stocks.txt --output
+```
+
 這一步會從多檔股票中找出值得進一步研究的標的。
 
 觀察：
@@ -627,6 +684,7 @@ python benchmark.py --file stocks.txt --workers 8 --repeat 3
 | `main.py` | 單股分析圖表 | `output/{stock}_chart.png` | 需搭配 `--save-chart`。 |
 | `scan_stocks.py` | 股票排行報表 | `output/stock_ranking.xlsx`<br>`output/stock_ranking.csv`<br>`output/stock_ranking.html` | 執行掃描後輸出；可用 `--output-dir` 指定資料夾。 |
 | `scan_stocks.py` | 錯誤紀錄 | `output/scan_errors.log` | 需使用 `--log-errors`。 |
+| `daily_report.py` | 每日候選清單 Excel | `output/daily_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
 | `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 需搭配 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep Excel | `output/{stock}_parameter_sweep.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
@@ -881,6 +939,41 @@ python cache_manager.py --clear
 
 ## 輸出欄位說明
 
+
+### Daily Report 欄位說明
+
+適用：`daily_report.py`
+
+#### Summary
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Report Date` | 報告產生日期。 |
+| `Stocks Scanned` | 掃描股票總數。 |
+| `Candidates` | 符合條件的候選股票數。 |
+| `BUY Count` | 候選清單中的 BUY 數量。 |
+| `WATCH Count` | 候選清單中的 WATCH 數量。 |
+| `Average Score` | 候選股票平均技術分數。 |
+| `Average Volume Ratio` | 候選股票平均成交量比例。 |
+
+#### Candidates
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Rank` | 候選股票排名。 |
+| `Stock` | 股票代號。 |
+| `Signal` | 技術訊號，通常為 `BUY` 或 `WATCH`。 |
+| `Score` | 技術分數。 |
+| `Close` | 最新收盤價。 |
+| `Volume_Ratio` | 成交量與 20 日均量的比例。 |
+| `RSI` | 相對強弱指標。 |
+| `Analysis` | 文字化技術分析摘要。 |
+
+#### All / Errors
+
+- `All`: 保留完整 `scan_stocks.py` 掃描結果。
+- `Errors`: 保留 `Status != OK` 的失敗股票與錯誤訊息。
+
 ### Stock Ranking 欄位說明
 
 適用：`scan_stocks.py`
@@ -1068,6 +1161,7 @@ python -m unittest discover -s tests
 - `strategy_compare.py` 分數門檻 CLI 傳遞
 - `parameter_sweep.py` 參數組合、排序、錯誤處理
 - `walk_forward.py` 視窗切分、策略驗證、錯誤處理與 Excel 輸出
+- `daily_report.py` Summary、候選股篩選、排序、Errors sheet 與 Excel 輸出
 
 ## 專案結構
 
@@ -1076,6 +1170,7 @@ tw_stock_tool/
   .github/workflows/python-tests.yml
   main.py
   scan_stocks.py
+  daily_report.py
   strategy_compare.py
   parameter_sweep.py
   walk_forward.py
