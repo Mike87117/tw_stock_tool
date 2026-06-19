@@ -128,6 +128,63 @@ python strategy_compare.py --stock 2330 --period 2y --output
 - `score_buy` 必須大於 `score_sell`
 - 若指定其中一個門檻，另一個也必須指定
 
+## 策略參數掃描
+
+`parameter_sweep.py` 會自動測試多組策略參數，並用歷史回測結果比較不同參數組合的表現。
+
+```bash
+python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
+python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
+python parameter_sweep.py --stock 2330 --period 2y --strategy score
+python parameter_sweep.py --stock 2330 --period 2y --top 10
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
+```
+
+支援策略：
+
+- `all`: 預設，掃描全部策略
+- `ma_cross`: 掃描 MA 交叉策略
+- `rsi`: 掃描 RSI 策略
+- `score`: 掃描技術分數策略
+
+參數組合：
+
+- `ma_cross`: `short_window` 使用 `5, 10, 20`，`long_window` 使用 `20, 30, 60`，且 `short_window < long_window`
+- `rsi`: `buy_below` 使用 `25, 30, 35`，`sell_above` 使用 `65, 70, 75`，且 `buy_below < sell_above`
+- `score`: `buy_score` 使用 `4, 5, 6`，`sell_score` 使用 `-2, -3, -4`，且 `buy_score > sell_score`
+
+常用參數：
+
+- `--stock`: 股票代號，必填
+- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
+- `--strategy`: `all`、`ma_cross`、`rsi`、`score`，預設 `all`
+- `--sort-by`: 排序欄位，預設 `Total Return %`
+- `--top`: 顯示前 N 筆，預設 `20`
+- `--force-refresh`: 忽略快取重新下載
+- `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
+- `--stop-loss`: 停損百分比
+- `--take-profit`: 停利百分比
+- `--max-hold-days`: 最大持有天數
+- `--position-size`: 每次投入資金比例，需符合 `0 < value <= 1`
+
+輸出欄位：
+
+- `Rank`
+- `Strategy`
+- `Parameters`
+- `Total Return %`
+- `Buy and Hold Return %`
+- `CAGR %`
+- `Trade Count`
+- `Win Rate %`
+- `Max Drawdown %`
+- `Profit Factor`
+- `Sharpe Ratio`
+- `Sortino Ratio`
+- `Error`
+
+注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
 ## 資料來源與快取
 
 主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
@@ -182,6 +239,7 @@ python -m unittest discover -s tests
 - `benchmark.py` Summary / Detail / Errors
 - `score_strategy` 分數門檻
 - `strategy_compare.py` 分數門檻 CLI 傳遞
+- `parameter_sweep.py` 參數組合、排序、錯誤處理
 
 ## 專案結構
 
@@ -191,6 +249,7 @@ tw_stock_tool/
   main.py
   scan_stocks.py
   strategy_compare.py
+  parameter_sweep.py
   benchmark.py
   cache_manager.py
   analysis.py
@@ -216,4 +275,6 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
+
+
 
