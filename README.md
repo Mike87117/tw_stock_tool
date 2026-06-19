@@ -618,6 +618,51 @@ python benchmark.py --file stocks.txt --workers 8 --repeat 3
 - 歷史績效不代表未來績效
 
 
+
+## 輸出檔案位置總覽
+
+| 工具 | 功能 | 預設輸出位置 | 備註 |
+| --- | --- | --- | --- |
+| `main.py` | 單股分析 Excel | `output/{stock}_report.xlsx` | 需搭配 `--export-excel`。 |
+| `main.py` | 單股分析圖表 | `output/{stock}_chart.png` | 需搭配 `--save-chart`。 |
+| `scan_stocks.py` | 股票排行報表 | `output/stock_ranking.xlsx`<br>`output/stock_ranking.csv`<br>`output/stock_ranking.html` | 執行掃描後輸出；可用 `--output-dir` 指定資料夾。 |
+| `scan_stocks.py` | 錯誤紀錄 | `output/scan_errors.log` | 需使用 `--log-errors`。 |
+| `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 需搭配 `--output`；也可指定自訂路徑。 |
+| `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
+| `parameter_sweep.py` | Parameter Sweep Excel | `output/{stock}_parameter_sweep.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
+| `walk_forward.py` | Walk Forward Excel | `output/{stock}_walk_forward.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
+| `benchmark.py` | Benchmark 統計結果 | `output/benchmark/benchmark_summary.csv`<br>`output/benchmark/benchmark_detail.csv`<br>`output/benchmark/benchmark_errors.csv` | 使用 `--output` 時建立；可指定自訂資料夾或檔名前綴。 |
+| `cache/` | 快取資料 | `cache/{symbol}_{period}_{interval}_adjusted-{auto_adjust}.csv` | 由系統自動建立。 |
+| `cache_manager.py` | 快取管理 | 無固定輸出檔 | 主要顯示資訊與清除快取。 |
+
+### output/ 目錄
+
+大部分分析結果都會放在：
+
+```text
+output/
+```
+
+建議：
+
+- 定期整理
+- 不要直接刪除仍在使用的分析結果
+
+### cache/ 目錄
+
+`cache/` 是資料快取目錄。
+
+用途：
+
+- 減少重複下載
+- 加速分析流程
+
+可使用下列指令清除快取：
+
+```bash
+python cache_manager.py --clear
+```
+
 ## 常見問題 FAQ
 
 ### Q: 執行 python 指令時出現 `'python' is not recognized...` 怎麼辦？
