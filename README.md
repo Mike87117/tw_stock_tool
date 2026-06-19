@@ -185,6 +185,7 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
 - `Error`
 
 注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
+
 ## 資料來源與快取
 
 主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
@@ -275,6 +276,4 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
-
-
 
