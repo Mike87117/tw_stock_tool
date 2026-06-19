@@ -26,6 +26,18 @@ SWEEP_COLUMNS = [
     "Error",
 ]
 
+SORTABLE_COLUMNS = {
+    "Total Return %",
+    "Buy and Hold Return %",
+    "CAGR %",
+    "Trade Count",
+    "Win Rate %",
+    "Max Drawdown %",
+    "Profit Factor",
+    "Sharpe Ratio",
+    "Sortino Ratio",
+}
+
 MA_SHORT_WINDOWS = (5, 10, 20)
 MA_LONG_WINDOWS = (20, 30, 60)
 RSI_BUY_BELOW = (25, 30, 35)
@@ -182,8 +194,12 @@ def run_parameter_sweep(
             rows.append(_error_row(strategy_name, params, exc))
 
     result_df = pd.DataFrame(rows, columns=SWEEP_COLUMNS)
-    if sort_by not in result_df.columns:
-        raise ValueError(f"sort-by column does not exist: {sort_by}")
+    if sort_by not in SORTABLE_COLUMNS:
+        supported = ", ".join(sorted(SORTABLE_COLUMNS))
+        raise ValueError(
+            f"Unsupported sort-by column: {sort_by}. "
+            f"Supported columns: {supported}"
+        )
 
     ok = result_df[result_df["Error"] == ""].copy()
     errors = result_df[result_df["Error"] != ""].copy()

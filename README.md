@@ -1,4 +1,4 @@
-﻿# 台股技術分析工具
+# 台股技術分析工具
 
 ![Python Tests](https://github.com/Mike87117/tw_stock_tool/actions/workflows/python-tests.yml/badge.svg)
 
@@ -159,7 +159,16 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
 - `--stock`: 股票代號，必填
 - `--period`: 分析期間，預設 `DEFAULT_PERIOD`
 - `--strategy`: `all`、`ma_cross`、`rsi`、`score`，預設 `all`
-- `--sort-by`: 排序欄位，預設 `Total Return %`
+- `--sort-by`: ??????? `Total Return %`?????????
+  - `Total Return %`
+  - `Buy and Hold Return %`
+  - `CAGR %`
+  - `Trade Count`
+  - `Win Rate %`
+  - `Max Drawdown %`
+  - `Profit Factor`
+  - `Sharpe Ratio`
+  - `Sortino Ratio`
 - `--top`: 顯示前 N 筆，預設 `20`
 - `--force-refresh`: 忽略快取重新下載
 - `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
