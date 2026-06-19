@@ -26,7 +26,6 @@ pip install -r requirements.txt
 & "C:\Users\Mike\AppData\Local\Programs\Python\Python312\python.exe" -m unittest discover -s tests
 ```
 
-
 ## 常用指令速查表
 
 以下列出最常使用的指令，方便快速查找。
@@ -69,472 +68,6 @@ Walk Forward
 - Parameter Sweep 用來找歷史最佳參數。
 - Walk Forward 用來驗證參數穩定性。
 - Walk Forward 結果比單純 Parameter Sweep 更具參考價值。
-
-## 單股票分析
-
-### 互動式模式
-
-不帶任何參數時，會保留原本互動式輸入流程：
-
-```bash
-python main.py
-```
-
-### CLI 模式
-
-帶參數時會進入 CLI 模式：
-
-```bash
-python main.py --stock 2330 --period 1y
-python main.py --stock 2330 --period 2y --stop-loss 8 --take-profit 20 --max-hold-days 30
-python main.py --stock 2330 --period 1y --export-excel --save-chart
-python main.py --stock 2330 --period 1y --force-refresh
-```
-
-常用參數：
-
-- `--stock`: 股票代號，例如 `2330`
-- `--period`: 分析期間，例如 `1y`、`2y`、`5y`、`max`
-- `--interval`: K 線週期，支援 `1d`、`1wk`、`1mo`
-- `--force-refresh`: 忽略今日快取並重新下載
-- `--auto-adjust` / `--no-auto-adjust`: 是否使用 yfinance 除權息調整價
-- `--stop-loss`: 停損百分比，例如 `8`
-- `--take-profit`: 停利百分比，例如 `20`
-- `--max-hold-days`: 最大持有天數
-- `--position-size`: 每次投入資金比例，預設 `1.0`
-- `--export-excel`: 匯出 Excel 報表
-- `--save-chart`: 儲存技術分析圖表
-
-## 多股票掃描
-
-```bash
-python scan_stocks.py --stocks 2330 2317 2454 2308 0050
-python scan_stocks.py --file stocks.txt
-python scan_stocks.py --stocks 2330 2317 2454 --period 1y --signals BUY WATCH --top 10
-python scan_stocks.py --file stocks.txt --min-score 3 --sort-by Volume_Ratio --force-refresh
-python scan_stocks.py --file stocks.txt --errors-only --log-errors
-```
-
-輸出檔案：
-
-- `output/stock_ranking.xlsx`
-- `output/stock_ranking.csv`
-- `output/stock_ranking.html`
-- `output/scan_errors.log`，需使用 `--log-errors`
-
-
-## Daily Report
-
-`daily_report.py` 用於每天快速產生值得研究的股票候選清單。它會重用既有多股票掃描器，先掃描股票，再依訊號與分數篩選候選股，最後可輸出 Excel 報表。
-
-CLI 範例：
-
-```bash
-python daily_report.py --file stocks.txt
-python daily_report.py --stocks 2330 2317 2454
-python daily_report.py --file stocks.txt --signals BUY WATCH
-python daily_report.py --file stocks.txt --min-score 4
-python daily_report.py --file stocks.txt --top 20
-python daily_report.py --file stocks.txt --output
-python daily_report.py --file stocks.txt --output output/daily_report.xlsx
-python daily_report.py --file stocks.txt --force-refresh
-python daily_report.py --file stocks.txt --no-auto-adjust
-```
-
-常用參數：
-
-- `--stocks`: 股票清單
-- `--file`: 從 txt 載入股票清單
-- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
-- `--interval`: K 線週期，預設 `DEFAULT_INTERVAL`
-- `--signals`: 候選訊號，預設 `BUY WATCH`
-- `--min-score`: 候選最低分數，預設 `4`
-- `--top`: 候選股前 N 名，預設 `20`
-- `--force-refresh`: 忽略快取重新下載
-- `--auto-adjust` / `--no-auto-adjust`: 是否使用 yfinance 除權息調整價
-- `--output`: 輸出 Excel，省略路徑時使用 `output/daily_report.xlsx`
-
-Excel sheets：
-
-- `Summary`: 報告日期、掃描股票數、候選股票數、BUY / WATCH 數量、平均分數與平均量比
-- `Candidates`: 符合條件的候選股票
-- `All`: 全部掃描結果
-- `Errors`: 掃描失敗股票
-
-候選股排序規則：
-
-1. `Score` 由高到低
-2. `Volume_Ratio` 由高到低
-
-Daily Report 只是研究候選清單，不代表買賣建議，也不提供自動下單。
-
-## Benchmark
-
-benchmark 工具檔名維持 `benchmark.py`，輸出分為三段：
-
-- `Summary`: 多次 benchmark 的平均、最快、最慢與成功率
-- `Detail`: 每一次 run 的耗時、成功數、失敗數
-- `Errors`: 每一次 run 的失敗股票與錯誤訊息
-
-```bash
-python benchmark.py --stocks 2330 2317 2454 --period 1y --workers 8
-python benchmark.py --file stocks.txt --period 1y --workers 8 --repeat 3 --warmup 1
-python benchmark.py --stocks 2330 2317 2454 --period 1y --workers 8 --output
-python benchmark.py --stocks 2330 2317 2454 --period 1y --interval 1d --no-auto-adjust
-```
-
-常用參數：
-
-- `--repeat`: 正式 benchmark 次數，預設 `1`
-- `--warmup`: 暖身次數，不納入輸出，預設 `0`
-- `--workers`: 掃描執行緒數，必須大於 `0`
-- `--interval`: K 線週期，預設 `1d`
-- `--auto-adjust` / `--no-auto-adjust`: 是否使用調整價
-- `--output`: 輸出 `benchmark_summary.csv`、`benchmark_detail.csv`、`benchmark_errors.csv`
-
-## 策略比較
-
-```bash
-python strategy_compare.py --stock 2330 --period 2y
-python strategy_compare.py --stock 2330 --period 2y --ma-short 10 --ma-long 30
-python strategy_compare.py --stock 2330 --period 2y --rsi-buy-below 35 --rsi-sell-above 75
-python strategy_compare.py --stock 2330 --period 2y --score-buy 5 --score-sell -3
-python strategy_compare.py --stock 2330 --period 2y --output
-```
-
-目前策略：
-
-- `score_strategy`: 預設使用 `signals.py` 產生的 `Signal`
-- `score_strategy`: 若指定 `--score-buy` 與 `--score-sell`，會用 `Score` 重新產生 BUY / SELL / HOLD
-- `ma_cross_strategy`: MA 短長線交叉
-- `macd_strategy`: MACD 與 MACD Signal 交叉
-- `rsi_strategy`: RSI 門檻策略
-
-`score_strategy` 門檻規則：
-
-- `Score >= score_buy`: `BUY`
-- `Score <= score_sell`: `SELL`
-- 其他：`HOLD`
-- `score_buy` 必須大於 `score_sell`
-- 若指定其中一個門檻，另一個也必須指定
-
-## 策略參數掃描
-
-`parameter_sweep.py` 會自動測試多組策略參數，並用歷史回測結果比較不同參數組合的表現。
-
-```bash
-python parameter_sweep.py --stock 2330 --period 2y
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
-python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
-python parameter_sweep.py --stock 2330 --period 2y --strategy score
-python parameter_sweep.py --stock 2330 --period 2y --top 10
-python parameter_sweep.py --stock 2330 --period 2y --output
-python parameter_sweep.py --stock 2330 --period 2y --output-excel
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel output/2330_ma_sweep.xlsx
-```
-
-支援策略：
-
-- `all`: 預設，掃描全部策略
-- `ma_cross`: 掃描 MA 交叉策略
-- `rsi`: 掃描 RSI 策略
-- `score`: 掃描技術分數策略
-
-參數組合：
-
-- `ma_cross`: `short_window` 使用 `5, 10, 20`，`long_window` 使用 `20, 30, 60`，且 `short_window < long_window`
-- `rsi`: `buy_below` 使用 `25, 30, 35`，`sell_above` 使用 `65, 70, 75`，且 `buy_below < sell_above`
-- `score`: `buy_score` 使用 `4, 5, 6`，`sell_score` 使用 `-2, -3, -4`，且 `buy_score > sell_score`
-
-常用參數：
-
-- `--stock`: 股票代號，必填
-- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
-- `--strategy`: `all`、`ma_cross`、`rsi`、`score`，預設 `all`
-- `--sort-by`: 排序欄位，預設 `Total Return %`，僅支援下列數值欄位：
-  - `Total Return %`
-  - `Buy and Hold Return %`
-  - `CAGR %`
-  - `Trade Count`
-  - `Win Rate %`
-  - `Max Drawdown %`
-  - `Profit Factor`
-  - `Sharpe Ratio`
-  - `Sortino Ratio`
-- `--top`: 顯示前 N 筆，預設 `20`
-  - `--top <= 0` 時會顯示全部結果
-- `--force-refresh`: 忽略快取重新下載
-- `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
-- `--output-excel`: 輸出 Excel，省略路徑時使用 `output/{stock}_parameter_sweep.xlsx`
-- `--stop-loss`: 停損百分比
-- `--take-profit`: 停利百分比
-- `--max-hold-days`: 最大持有天數
-- `--position-size`: 每次投入資金比例，需符合 `0 < value <= 1`
-
-輸出欄位：
-
-- `Rank`
-- `Strategy`
-- `Parameters`
-- `Total Return %`
-- `Buy and Hold Return %`
-- `CAGR %`
-- `Trade Count`
-- `Win Rate %`
-- `Max Drawdown %`
-- `Profit Factor`
-- `Sharpe Ratio`
-- `Sortino Ratio`
-- `Error`
-
-CSV / Excel 輸出：
-
-- `--output`: 輸出 CSV，預設路徑為 `output/{stock}_parameter_sweep.csv`。
-- `--output-excel`: 輸出 Excel，預設路徑為 `output/{stock}_parameter_sweep.xlsx`。
-- `--output-excel output/custom.xlsx`: 輸出 Excel 到指定路徑。
-- Excel 會固定建立 `All`、`MA_Cross`、`RSI`、`Score`、`Errors` sheets。
-- 若某個 sheet 沒有資料，仍會保留欄位標題。
-
-注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
-
-
-## Walk Forward Test
-
-`walk_forward.py` 用於驗證 `parameter_sweep.py` 找到的最佳參數是否可能過度擬合。
-
-流程：
-
-1. 將歷史資料切成 train / test 視窗
-2. 在 train 區間尋找最佳參數
-3. 將最佳參數套用到 test 區間
-4. 比較 train 與 test 表現
-5. 輸出 Summary / Detail / Errors Excel
-
-CLI 範例：
-
-```bash
-python walk_forward.py --stock 2330 --period 5y
-python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
-python walk_forward.py --stock 2330 --period 10y --strategy rsi
-python walk_forward.py --stock 2330 --period 10y --strategy score
-python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
-python walk_forward.py --stock 2330 --period 10y --output
-python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
-```
-
-參數說明：
-
-- `--stock`：股票代號，必填
-- `--period`：分析期間，預設 `DEFAULT_PERIOD`
-- `--strategy`：`all`、`ma_cross`、`rsi`、`score`，預設 `all`
-- `--train-days`：訓練區間交易日數，預設 `504`
-- `--test-days`：驗證區間交易日數，預設 `126`
-- `--step-days`：每次視窗往後移動的交易日數，預設等於 `test-days`
-- `--sort-by`：train 區間選最佳參數用的欄位，預設 `Train Sharpe Ratio`
-- `--force-refresh`：忽略快取重新下載
-- `--output`：輸出 Excel，省略路徑時使用 `output/{stock}_walk_forward.xlsx`
-- `--stop-loss`：停損百分比
-- `--take-profit`：停利百分比
-- `--max-hold-days`：最大持有天數
-- `--position-size`：每次投入資金比例，需符合 `0 < value <= 1`
-
-支援 `sort-by`：
-
-- `Train Total Return %`
-- `Train CAGR %`
-- `Train Sharpe Ratio`
-- `Train Sortino Ratio`
-- `Train Profit Factor`
-- `Train Max Drawdown %`
-
-Excel sheet：
-
-- `Summary`
-- `Detail`
-- `Errors`
-
-限制與提醒：
-
-- Walk Forward 只是歷史驗證，不代表未來績效
-- 仍是收盤價回測
-- 不模擬盤中觸價、滑價、流動性
-- 不提供投資建議
-- 不提供自動下單
-
-
-## 常見使用流程
-
-### 流程 1：快速尋找值得研究的股票
-
-目的：
-
-從大量股票中快速找出值得進一步分析的標的。
-
-Step 1：使用多股票掃描器。
-
-```bash
-python scan_stocks.py --file stocks.txt
-python scan_stocks.py --stocks 2330 2317 2454
-```
-
-如果想直接產生每日候選清單：
-
-```bash
-python daily_report.py --file stocks.txt --output
-```
-
-說明：
-
-- 掃描多檔股票
-- 查看 `Signal`
-- 查看 `Score`
-- 查看 `Volume_Ratio`
-- 查看 `Analysis`
-
-重點：
-
-優先關注：
-
-- `BUY`
-- `WATCH`
-- 高 `Score`
-- 成交量放大
-
-Step 2：挑選感興趣股票後，進行單股分析。
-
-```bash
-python main.py --stock 2330 --period 2y
-```
-
-查看：
-
-- 技術指標
-- 訊號
-- 回測結果
-- 圖表
-
-### 流程 2：比較策略
-
-目的：
-
-比較不同策略在同一檔股票上的表現。
-
-使用：
-
-```bash
-python strategy_compare.py --stock 2330 --period 2y
-```
-
-觀察：
-
-- `Total Return %`
-- `CAGR %`
-- `Sharpe Ratio`
-- `Sortino Ratio`
-- `Max Drawdown %`
-
-比較：
-
-- Score Strategy
-- MA Cross Strategy
-- RSI Strategy
-- MACD Strategy
-
-### 流程 3：尋找最佳參數
-
-目的：
-
-找出歷史回測表現較佳的參數組合。
-
-使用：
-
-```bash
-python parameter_sweep.py --stock 2330 --period 2y
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
-```
-
-流程：
-
-- 自動測試多組參數
-- 排序回測結果
-- 找出較佳參數
-
-注意：
-
-這一步只是在歷史資料上尋找最佳參數。
-
-### 流程 4：驗證是否過度擬合
-
-目的：
-
-避免直接相信 `parameter_sweep.py` 找出的最佳參數。
-
-使用：
-
-```bash
-python walk_forward.py --stock 2330 --period 10y
-```
-
-流程：
-
-- train 區間選參數
-- test 區間驗證
-
-觀察：
-
-- `Avg Test Total Return %`
-- `Avg Test Sharpe Ratio`
-- `Positive Test Windows %`
-
-重點：
-
-如果 train 很好但 test 很差，代表可能過度擬合。
-
-### 流程 5：大量股票效能測試
-
-目的：
-
-評估大量掃描時的速度。
-
-使用：
-
-```bash
-python benchmark.py --file stocks.txt --workers 8 --repeat 3
-```
-
-觀察：
-
-- `Avg Elapsed Seconds`
-- `Avg Stocks Per Second`
-- `Success Rate %`
-
-用途：
-
-- 評估 cache 效果
-- 評估 worker 數量
-- 評估 force-refresh 成本
-
-### 研究流程總結
-
-```text
-掃描股票
-↓
-單股分析
-↓
-策略比較
-↓
-參數掃描
-↓
-Walk Forward 驗證
-↓
-持續追蹤
-```
-
-`parameter_sweep.py` 的結果不應直接視為最佳策略。
-
-`walk_forward.py` 才是檢查策略是否具備穩定性的關鍵步驟。
-
 
 ## 新手第一次使用範例
 
@@ -719,7 +252,467 @@ python benchmark.py --file stocks.txt --workers 8 --repeat 3
 - Walk Forward 比單純 Parameter Sweep 更有參考價值
 - 歷史績效不代表未來績效
 
+## 常見使用流程
 
+### 流程 1：快速尋找值得研究的股票
+
+目的：
+
+從大量股票中快速找出值得進一步分析的標的。
+
+Step 1：使用多股票掃描器。
+
+```bash
+python scan_stocks.py --file stocks.txt
+python scan_stocks.py --stocks 2330 2317 2454
+```
+
+如果想直接產生每日候選清單：
+
+```bash
+python daily_report.py --file stocks.txt --output
+```
+
+說明：
+
+- 掃描多檔股票
+- 查看 `Signal`
+- 查看 `Score`
+- 查看 `Volume_Ratio`
+- 查看 `Analysis`
+
+重點：
+
+優先關注：
+
+- `BUY`
+- `WATCH`
+- 高 `Score`
+- 成交量放大
+
+Step 2：挑選感興趣股票後，進行單股分析。
+
+```bash
+python main.py --stock 2330 --period 2y
+```
+
+查看：
+
+- 技術指標
+- 訊號
+- 回測結果
+- 圖表
+
+### 流程 2：比較策略
+
+目的：
+
+比較不同策略在同一檔股票上的表現。
+
+使用：
+
+```bash
+python strategy_compare.py --stock 2330 --period 2y
+```
+
+觀察：
+
+- `Total Return %`
+- `CAGR %`
+- `Sharpe Ratio`
+- `Sortino Ratio`
+- `Max Drawdown %`
+
+比較：
+
+- Score Strategy
+- MA Cross Strategy
+- RSI Strategy
+- MACD Strategy
+
+### 流程 3：尋找最佳參數
+
+目的：
+
+找出歷史回測表現較佳的參數組合。
+
+使用：
+
+```bash
+python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
+```
+
+流程：
+
+- 自動測試多組參數
+- 排序回測結果
+- 找出較佳參數
+
+注意：
+
+這一步只是在歷史資料上尋找最佳參數。
+
+### 流程 4：驗證是否過度擬合
+
+目的：
+
+避免直接相信 `parameter_sweep.py` 找出的最佳參數。
+
+使用：
+
+```bash
+python walk_forward.py --stock 2330 --period 10y
+```
+
+流程：
+
+- train 區間選參數
+- test 區間驗證
+
+觀察：
+
+- `Avg Test Total Return %`
+- `Avg Test Sharpe Ratio`
+- `Positive Test Windows %`
+
+重點：
+
+如果 train 很好但 test 很差，代表可能過度擬合。
+
+### 流程 5：大量股票效能測試
+
+目的：
+
+評估大量掃描時的速度。
+
+使用：
+
+```bash
+python benchmark.py --file stocks.txt --workers 8 --repeat 3
+```
+
+觀察：
+
+- `Avg Elapsed Seconds`
+- `Avg Stocks Per Second`
+- `Success Rate %`
+
+用途：
+
+- 評估 cache 效果
+- 評估 worker 數量
+- 評估 force-refresh 成本
+
+### 研究流程總結
+
+```text
+掃描股票
+↓
+單股分析
+↓
+策略比較
+↓
+參數掃描
+↓
+Walk Forward 驗證
+↓
+持續追蹤
+```
+
+`parameter_sweep.py` 的結果不應直接視為最佳策略。
+
+`walk_forward.py` 才是檢查策略是否具備穩定性的關鍵步驟。
+
+## 單股票分析
+
+### 互動式模式
+
+不帶任何參數時，會保留原本互動式輸入流程：
+
+```bash
+python main.py
+```
+
+### CLI 模式
+
+帶參數時會進入 CLI 模式：
+
+```bash
+python main.py --stock 2330 --period 1y
+python main.py --stock 2330 --period 2y --stop-loss 8 --take-profit 20 --max-hold-days 30
+python main.py --stock 2330 --period 1y --export-excel --save-chart
+python main.py --stock 2330 --period 1y --force-refresh
+```
+
+常用參數：
+
+- `--stock`: 股票代號，例如 `2330`
+- `--period`: 分析期間，例如 `1y`、`2y`、`5y`、`max`
+- `--interval`: K 線週期，支援 `1d`、`1wk`、`1mo`
+- `--force-refresh`: 忽略今日快取並重新下載
+- `--auto-adjust` / `--no-auto-adjust`: 是否使用 yfinance 除權息調整價
+- `--stop-loss`: 停損百分比，例如 `8`
+- `--take-profit`: 停利百分比，例如 `20`
+- `--max-hold-days`: 最大持有天數
+- `--position-size`: 每次投入資金比例，預設 `1.0`
+- `--export-excel`: 匯出 Excel 報表
+- `--save-chart`: 儲存技術分析圖表
+
+## 多股票掃描
+
+```bash
+python scan_stocks.py --stocks 2330 2317 2454 2308 0050
+python scan_stocks.py --file stocks.txt
+python scan_stocks.py --stocks 2330 2317 2454 --period 1y --signals BUY WATCH --top 10
+python scan_stocks.py --file stocks.txt --min-score 3 --sort-by Volume_Ratio --force-refresh
+python scan_stocks.py --file stocks.txt --errors-only --log-errors
+```
+
+輸出檔案：
+
+- `output/stock_ranking.xlsx`
+- `output/stock_ranking.csv`
+- `output/stock_ranking.html`
+- `output/scan_errors.log`，需使用 `--log-errors`
+
+## Daily Report
+
+`daily_report.py` 用於每天快速產生值得研究的股票候選清單。它會重用既有多股票掃描器，先掃描股票，再依訊號與分數篩選候選股，最後可輸出 Excel 報表。
+
+CLI 範例：
+
+```bash
+python daily_report.py --file stocks.txt
+python daily_report.py --stocks 2330 2317 2454
+python daily_report.py --file stocks.txt --signals BUY WATCH
+python daily_report.py --file stocks.txt --min-score 4
+python daily_report.py --file stocks.txt --top 20
+python daily_report.py --file stocks.txt --output
+python daily_report.py --file stocks.txt --output output/daily_report.xlsx
+python daily_report.py --file stocks.txt --force-refresh
+python daily_report.py --file stocks.txt --no-auto-adjust
+```
+
+常用參數：
+
+- `--stocks`: 股票清單
+- `--file`: 從 txt 載入股票清單
+- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
+- `--interval`: K 線週期，預設 `DEFAULT_INTERVAL`
+- `--signals`: 候選訊號，預設 `BUY WATCH`
+- `--min-score`: 候選最低分數，預設 `4`
+- `--top`: 候選股前 N 名，預設 `20`
+- `--force-refresh`: 忽略快取重新下載
+- `--auto-adjust` / `--no-auto-adjust`: 是否使用 yfinance 除權息調整價
+- `--output`: 輸出 Excel，省略路徑時使用 `output/daily_report.xlsx`
+
+Excel sheets：
+
+- `Summary`: 報告日期、掃描股票數、候選股票數、BUY / WATCH 數量、平均分數與平均量比
+- `Candidates`: 符合條件的候選股票
+- `All`: 全部掃描結果
+- `Errors`: 掃描失敗股票
+
+候選股排序規則：
+
+1. `Score` 由高到低
+2. `Volume_Ratio` 由高到低
+
+Daily Report 只是研究候選清單，不代表買賣建議，也不提供自動下單。
+
+## Benchmark
+
+benchmark 工具檔名維持 `benchmark.py`，輸出分為三段：
+
+- `Summary`: 多次 benchmark 的平均、最快、最慢與成功率
+- `Detail`: 每一次 run 的耗時、成功數、失敗數
+- `Errors`: 每一次 run 的失敗股票與錯誤訊息
+
+```bash
+python benchmark.py --stocks 2330 2317 2454 --period 1y --workers 8
+python benchmark.py --file stocks.txt --period 1y --workers 8 --repeat 3 --warmup 1
+python benchmark.py --stocks 2330 2317 2454 --period 1y --workers 8 --output
+python benchmark.py --stocks 2330 2317 2454 --period 1y --interval 1d --no-auto-adjust
+```
+
+常用參數：
+
+- `--repeat`: 正式 benchmark 次數，預設 `1`
+- `--warmup`: 暖身次數，不納入輸出，預設 `0`
+- `--workers`: 掃描執行緒數，必須大於 `0`
+- `--interval`: K 線週期，預設 `1d`
+- `--auto-adjust` / `--no-auto-adjust`: 是否使用調整價
+- `--output`: 輸出 `benchmark_summary.csv`、`benchmark_detail.csv`、`benchmark_errors.csv`
+
+## 策略比較
+
+```bash
+python strategy_compare.py --stock 2330 --period 2y
+python strategy_compare.py --stock 2330 --period 2y --ma-short 10 --ma-long 30
+python strategy_compare.py --stock 2330 --period 2y --rsi-buy-below 35 --rsi-sell-above 75
+python strategy_compare.py --stock 2330 --period 2y --score-buy 5 --score-sell -3
+python strategy_compare.py --stock 2330 --period 2y --output
+```
+
+目前策略：
+
+- `score_strategy`: 預設使用 `signals.py` 產生的 `Signal`
+- `score_strategy`: 若指定 `--score-buy` 與 `--score-sell`，會用 `Score` 重新產生 BUY / SELL / HOLD
+- `ma_cross_strategy`: MA 短長線交叉
+- `macd_strategy`: MACD 與 MACD Signal 交叉
+- `rsi_strategy`: RSI 門檻策略
+
+`score_strategy` 門檻規則：
+
+- `Score >= score_buy`: `BUY`
+- `Score <= score_sell`: `SELL`
+- 其他：`HOLD`
+- `score_buy` 必須大於 `score_sell`
+- 若指定其中一個門檻，另一個也必須指定
+
+## 策略參數掃描
+
+`parameter_sweep.py` 會自動測試多組策略參數，並用歷史回測結果比較不同參數組合的表現。
+
+```bash
+python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
+python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
+python parameter_sweep.py --stock 2330 --period 2y --strategy score
+python parameter_sweep.py --stock 2330 --period 2y --top 10
+python parameter_sweep.py --stock 2330 --period 2y --output
+python parameter_sweep.py --stock 2330 --period 2y --output-excel
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel output/2330_ma_sweep.xlsx
+```
+
+支援策略：
+
+- `all`: 預設，掃描全部策略
+- `ma_cross`: 掃描 MA 交叉策略
+- `rsi`: 掃描 RSI 策略
+- `score`: 掃描技術分數策略
+
+參數組合：
+
+- `ma_cross`: `short_window` 使用 `5, 10, 20`，`long_window` 使用 `20, 30, 60`，且 `short_window < long_window`
+- `rsi`: `buy_below` 使用 `25, 30, 35`，`sell_above` 使用 `65, 70, 75`，且 `buy_below < sell_above`
+- `score`: `buy_score` 使用 `4, 5, 6`，`sell_score` 使用 `-2, -3, -4`，且 `buy_score > sell_score`
+
+常用參數：
+
+- `--stock`: 股票代號，必填
+- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
+- `--strategy`: `all`、`ma_cross`、`rsi`、`score`，預設 `all`
+- `--sort-by`: 排序欄位，預設 `Total Return %`，僅支援下列數值欄位：
+  - `Total Return %`
+  - `Buy and Hold Return %`
+  - `CAGR %`
+  - `Trade Count`
+  - `Win Rate %`
+  - `Max Drawdown %`
+  - `Profit Factor`
+  - `Sharpe Ratio`
+  - `Sortino Ratio`
+- `--top`: 顯示前 N 筆，預設 `20`
+  - `--top <= 0` 時會顯示全部結果
+- `--force-refresh`: 忽略快取重新下載
+- `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
+- `--output-excel`: 輸出 Excel，省略路徑時使用 `output/{stock}_parameter_sweep.xlsx`
+- `--stop-loss`: 停損百分比
+- `--take-profit`: 停利百分比
+- `--max-hold-days`: 最大持有天數
+- `--position-size`: 每次投入資金比例，需符合 `0 < value <= 1`
+
+輸出欄位：
+
+- `Rank`
+- `Strategy`
+- `Parameters`
+- `Total Return %`
+- `Buy and Hold Return %`
+- `CAGR %`
+- `Trade Count`
+- `Win Rate %`
+- `Max Drawdown %`
+- `Profit Factor`
+- `Sharpe Ratio`
+- `Sortino Ratio`
+- `Error`
+
+CSV / Excel 輸出：
+
+- `--output`: 輸出 CSV，預設路徑為 `output/{stock}_parameter_sweep.csv`。
+- `--output-excel`: 輸出 Excel，預設路徑為 `output/{stock}_parameter_sweep.xlsx`。
+- `--output-excel output/custom.xlsx`: 輸出 Excel 到指定路徑。
+- Excel 會固定建立 `All`、`MA_Cross`、`RSI`、`Score`、`Errors` sheets。
+- 若某個 sheet 沒有資料，仍會保留欄位標題。
+
+注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
+
+## Walk Forward Test
+
+`walk_forward.py` 用於驗證 `parameter_sweep.py` 找到的最佳參數是否可能過度擬合。
+
+流程：
+
+1. 將歷史資料切成 train / test 視窗
+2. 在 train 區間尋找最佳參數
+3. 將最佳參數套用到 test 區間
+4. 比較 train 與 test 表現
+5. 輸出 Summary / Detail / Errors Excel
+
+CLI 範例：
+
+```bash
+python walk_forward.py --stock 2330 --period 5y
+python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
+python walk_forward.py --stock 2330 --period 10y --strategy rsi
+python walk_forward.py --stock 2330 --period 10y --strategy score
+python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
+python walk_forward.py --stock 2330 --period 10y --output
+python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
+```
+
+參數說明：
+
+- `--stock`：股票代號，必填
+- `--period`：分析期間，預設 `DEFAULT_PERIOD`
+- `--strategy`：`all`、`ma_cross`、`rsi`、`score`，預設 `all`
+- `--train-days`：訓練區間交易日數，預設 `504`
+- `--test-days`：驗證區間交易日數，預設 `126`
+- `--step-days`：每次視窗往後移動的交易日數，預設等於 `test-days`
+- `--sort-by`：train 區間選最佳參數用的欄位，預設 `Train Sharpe Ratio`
+- `--force-refresh`：忽略快取重新下載
+- `--output`：輸出 Excel，省略路徑時使用 `output/{stock}_walk_forward.xlsx`
+- `--stop-loss`：停損百分比
+- `--take-profit`：停利百分比
+- `--max-hold-days`：最大持有天數
+- `--position-size`：每次投入資金比例，需符合 `0 < value <= 1`
+
+支援 `sort-by`：
+
+- `Train Total Return %`
+- `Train CAGR %`
+- `Train Sharpe Ratio`
+- `Train Sortino Ratio`
+- `Train Profit Factor`
+- `Train Max Drawdown %`
+
+Excel sheet：
+
+- `Summary`
+- `Detail`
+- `Errors`
+
+限制與提醒：
+
+- Walk Forward 只是歷史驗證，不代表未來績效
+- 仍是收盤價回測
+- 不模擬盤中觸價、滑價、流動性
+- 不提供投資建議
+- 不提供自動下單
 
 ## 輸出檔案位置總覽
 
@@ -766,185 +759,6 @@ output/
 python cache_manager.py --clear
 ```
 
-## 常見問題 FAQ
-
-### Q: 執行 python 指令時出現 `'python' is not recognized...` 怎麼辦？
-
-### A:
-
-這通常代表 Python 尚未加入 PATH，或目前終端機找不到 Python 執行檔。
-
-建議先確認 Python 是否已安裝：
-
-```bash
-python --version
-```
-
-如果仍然找不到 `python`，可以在 Windows PowerShell 使用完整路徑執行，例如：
-
-```powershell
-& "C:\Users\YourName\AppData\Local\Programs\Python\Python312\python.exe" main.py
-```
-
-你也可以把 Python 安裝路徑加入系統 PATH，之後就能直接使用 `python` 指令。
-
-### Q: `pip install -r requirements.txt` 失敗怎麼辦？
-
-### A:
-
-可以先升級 pip，再重新安裝 requirements。
-
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-如果你的環境中 `python` 指令無法使用，請改用 Python 完整路徑搭配 `-m pip` 執行。
-
-### Q: yfinance 下載不到資料怎麼辦？
-
-### A:
-
-可能原因包含：
-
-- 網路問題
-- Yahoo Finance 暫時限流
-- 股票代號錯誤
-
-建議：
-
-- 稍後重試
-- 使用 `--force-refresh` 忽略快取並重新下載
-- 確認股票代號是否正確
-
-部分情況下，若未使用除權息調整價，程式會自動嘗試 TWSE / TPEX 官方 fallback。
-
-### Q: `2330.TW` 和 `6488.TWO` 是什麼意思？
-
-### A:
-
-這是台股資料來源使用的代號格式：
-
-- `.TW` = 上市股票
-- `.TWO` = 上櫃股票
-
-範例：
-
-```text
-2330 -> 2330.TW
-6488 -> 6488.TWO
-```
-
-使用本工具時通常只需要輸入數字股票代號，程式會自動嘗試判斷。
-
-### Q: 什麼是 `auto_adjust`？
-
-### A:
-
-`auto_adjust` 是 yfinance 的除權息調整價設定，適合用於較長期的價格觀察與回測。
-
-提醒：
-
-使用 `auto_adjust` 時，程式不會混用 TWSE / TPEX 官方 fallback，因為官方 fallback 目前提供的是未除權息調整資料。
-
-### Q: 為什麼我明明重新執行，速度卻變很快？
-
-### A:
-
-這通常是因為使用了 cache。
-
-補充：
-
-- cache 位於 `cache/`
-- 當天快取會直接使用
-- 使用 `--force-refresh` 可忽略快取並重新下載
-
-cache 可以減少重複下載資料的時間，也能讓大量掃描更快完成。
-
-### Q: 輸出 Excel 失敗怎麼辦？
-
-### A:
-
-最常見原因是 Excel 檔案仍被開啟，Windows 特別容易遇到這種情況。
-
-建議：
-
-- 關閉正在開啟的 Excel 檔案
-- 重新執行指令
-- 換一個輸出檔名
-
-### Q: 出現資料不足（Data too short）怎麼辦？
-
-### A:
-
-技術指標需要足夠的歷史資料才能計算，例如 MA60、RSI、MACD、KD 等都需要累積資料。
-
-建議：
-
-- 增加 `period`
-- 使用 `1y` 或 `2y`
-
-範例：
-
-```bash
-python main.py --stock 2330 --period 2y
-```
-
-### Q: Walk Forward 顯示資料不足怎麼辦？
-
-### A:
-
-Walk Forward 需要資料量大於 `train_days + test_days`，否則無法建立任何 train / test 視窗。
-
-建議：
-
-- 增加 `period`
-- 降低 `--train-days`
-- 降低 `--test-days`
-
-範例：
-
-```bash
-python walk_forward.py --stock 2330 --period 10y
-```
-
-### Q: Parameter Sweep 很好，為什麼 Walk Forward 很差？
-
-### A:
-
-這可能代表發生過度擬合（Overfitting）。
-
-`parameter_sweep.py` 只是在歷史資料中找出表現較佳的參數；`walk_forward.py` 則會用不同區間驗證參數是否穩定。
-
-提醒：
-
-Walk Forward 結果通常比單純 Parameter Sweep 更有參考價值。
-
-### Q: 本工具能預測未來股價嗎？
-
-### A:
-
-不能。
-
-說明：
-
-- 本工具是技術分析與回測工具
-- 不使用 AI 預測
-- 不保證未來績效
-- 不提供投資建議
-
-### Q: 本工具能自動下單嗎？
-
-### A:
-
-不能。
-
-目前：
-
-- 不串接券商 API
-- 不提供自動交易
-- 僅供研究用途
-
 ## 資料來源與快取
 
 主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
@@ -980,7 +794,6 @@ python cache_manager.py --clear
 - `position_size`: 每次投入資金比例
 
 回測保留手續費與證交稅估算，並輸出交易紀錄與 Equity Curve。
-
 
 ## 輸出欄位說明
 
@@ -1185,6 +998,185 @@ python cache_manager.py --clear
 - Walk Forward 用 train 選參數、用 test 驗證，目的是降低過度擬合風險。
 - Test 結果才是更重要的驗證參考。
 - 仍然只是歷史收盤價回測，不代表未來績效。
+
+## 常見問題 FAQ
+
+### Q: 執行 python 指令時出現 `'python' is not recognized...` 怎麼辦？
+
+### A:
+
+這通常代表 Python 尚未加入 PATH，或目前終端機找不到 Python 執行檔。
+
+建議先確認 Python 是否已安裝：
+
+```bash
+python --version
+```
+
+如果仍然找不到 `python`，可以在 Windows PowerShell 使用完整路徑執行，例如：
+
+```powershell
+& "C:\Users\YourName\AppData\Local\Programs\Python\Python312\python.exe" main.py
+```
+
+你也可以把 Python 安裝路徑加入系統 PATH，之後就能直接使用 `python` 指令。
+
+### Q: `pip install -r requirements.txt` 失敗怎麼辦？
+
+### A:
+
+可以先升級 pip，再重新安裝 requirements。
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+如果你的環境中 `python` 指令無法使用，請改用 Python 完整路徑搭配 `-m pip` 執行。
+
+### Q: yfinance 下載不到資料怎麼辦？
+
+### A:
+
+可能原因包含：
+
+- 網路問題
+- Yahoo Finance 暫時限流
+- 股票代號錯誤
+
+建議：
+
+- 稍後重試
+- 使用 `--force-refresh` 忽略快取並重新下載
+- 確認股票代號是否正確
+
+部分情況下，若未使用除權息調整價，程式會自動嘗試 TWSE / TPEX 官方 fallback。
+
+### Q: `2330.TW` 和 `6488.TWO` 是什麼意思？
+
+### A:
+
+這是台股資料來源使用的代號格式：
+
+- `.TW` = 上市股票
+- `.TWO` = 上櫃股票
+
+範例：
+
+```text
+2330 -> 2330.TW
+6488 -> 6488.TWO
+```
+
+使用本工具時通常只需要輸入數字股票代號，程式會自動嘗試判斷。
+
+### Q: 什麼是 `auto_adjust`？
+
+### A:
+
+`auto_adjust` 是 yfinance 的除權息調整價設定，適合用於較長期的價格觀察與回測。
+
+提醒：
+
+使用 `auto_adjust` 時，程式不會混用 TWSE / TPEX 官方 fallback，因為官方 fallback 目前提供的是未除權息調整資料。
+
+### Q: 為什麼我明明重新執行，速度卻變很快？
+
+### A:
+
+這通常是因為使用了 cache。
+
+補充：
+
+- cache 位於 `cache/`
+- 當天快取會直接使用
+- 使用 `--force-refresh` 可忽略快取並重新下載
+
+cache 可以減少重複下載資料的時間，也能讓大量掃描更快完成。
+
+### Q: 輸出 Excel 失敗怎麼辦？
+
+### A:
+
+最常見原因是 Excel 檔案仍被開啟，Windows 特別容易遇到這種情況。
+
+建議：
+
+- 關閉正在開啟的 Excel 檔案
+- 重新執行指令
+- 換一個輸出檔名
+
+### Q: 出現資料不足（Data too short）怎麼辦？
+
+### A:
+
+技術指標需要足夠的歷史資料才能計算，例如 MA60、RSI、MACD、KD 等都需要累積資料。
+
+建議：
+
+- 增加 `period`
+- 使用 `1y` 或 `2y`
+
+範例：
+
+```bash
+python main.py --stock 2330 --period 2y
+```
+
+### Q: Walk Forward 顯示資料不足怎麼辦？
+
+### A:
+
+Walk Forward 需要資料量大於 `train_days + test_days`，否則無法建立任何 train / test 視窗。
+
+建議：
+
+- 增加 `period`
+- 降低 `--train-days`
+- 降低 `--test-days`
+
+範例：
+
+```bash
+python walk_forward.py --stock 2330 --period 10y
+```
+
+### Q: Parameter Sweep 很好，為什麼 Walk Forward 很差？
+
+### A:
+
+這可能代表發生過度擬合（Overfitting）。
+
+`parameter_sweep.py` 只是在歷史資料中找出表現較佳的參數；`walk_forward.py` 則會用不同區間驗證參數是否穩定。
+
+提醒：
+
+Walk Forward 結果通常比單純 Parameter Sweep 更有參考價值。
+
+### Q: 本工具能預測未來股價嗎？
+
+### A:
+
+不能。
+
+說明：
+
+- 本工具是技術分析與回測工具
+- 不使用 AI 預測
+- 不保證未來績效
+- 不提供投資建議
+
+### Q: 本工具能自動下單嗎？
+
+### A:
+
+不能。
+
+目前：
+
+- 不串接券商 API
+- 不提供自動交易
+- 僅供研究用途
 
 ## 測試
 
