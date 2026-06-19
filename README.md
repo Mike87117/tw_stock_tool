@@ -439,6 +439,184 @@ Walk Forward 驗證
 
 `walk_forward.py` 才是檢查策略是否具備穩定性的關鍵步驟。
 
+
+## 新手第一次使用範例
+
+這個範例適合第一次接觸本專案、還不熟悉技術分析、也不知道該先用哪個功能的使用者。以下使用 `2330` 作為主要範例股票，帶你從安裝到 Walk Forward 驗證完整跑一次。
+
+### Step 1：安裝套件
+
+先安裝需求套件。
+
+```bash
+pip install -r requirements.txt
+```
+
+確認 CLI 能正常顯示說明：
+
+```bash
+python main.py --help
+```
+
+### Step 2：準備股票清單
+
+建立 `stocks.txt`，每行一個股票代號：
+
+```text
+2330
+2317
+2454
+2308
+2882
+```
+
+### Step 3：掃描股票
+
+```bash
+python scan_stocks.py --file stocks.txt
+```
+
+這一步會從多檔股票中找出值得進一步研究的標的。
+
+觀察：
+
+- `Signal`
+- `Score`
+- `Volume_Ratio`
+- `Analysis`
+
+優先關注：
+
+- `BUY`
+- `WATCH`
+- 高 `Score`
+- 成交量放大
+
+### Step 4：單股分析
+
+假設對 `2330` 有興趣，可以執行：
+
+```bash
+python main.py --stock 2330 --period 2y
+```
+
+觀察：
+
+- 技術指標
+- 訊號
+- 回測結果
+
+如果要輸出 Excel：
+
+```bash
+python main.py --stock 2330 --period 2y --export-excel
+```
+
+如果要輸出圖表：
+
+```bash
+python main.py --stock 2330 --period 2y --save-chart
+```
+
+### Step 5：比較策略
+
+```bash
+python strategy_compare.py --stock 2330 --period 2y
+```
+
+比較：
+
+- Score Strategy
+- MA Cross Strategy
+- RSI Strategy
+- MACD Strategy
+
+觀察：
+
+- `Total Return %`
+- `CAGR %`
+- `Sharpe Ratio`
+- `Max Drawdown %`
+
+### Step 6：參數掃描
+
+```bash
+python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
+```
+
+如果要輸出 Excel：
+
+```bash
+python parameter_sweep.py --stock 2330 --period 2y --output-excel
+```
+
+觀察：
+
+- 哪組參數回測較佳
+- `Sharpe Ratio`
+- `Total Return %`
+- `Max Drawdown %`
+
+提醒：
+
+不要直接相信最佳參數。這一步只是在歷史資料上尋找表現較佳的參數組合。
+
+### Step 7：Walk Forward 驗證
+
+```bash
+python walk_forward.py --stock 2330 --period 10y
+```
+
+如果要輸出 Excel：
+
+```bash
+python walk_forward.py --stock 2330 --period 10y --output
+```
+
+觀察：
+
+- `Avg Test Total Return %`
+- `Avg Test Sharpe Ratio`
+- `Positive Test Windows %`
+
+重點：
+
+如果 train 很好但 test 很差，代表可能過度擬合。
+
+### Step 8：效能測試（選擇性）
+
+```bash
+python benchmark.py --file stocks.txt --workers 8 --repeat 3
+```
+
+用途：
+
+- 評估 cache 效果
+- 評估 worker 數量
+- 評估 force-refresh 成本
+
+### 最後成果
+
+執行完成後，使用者通常會得到：
+
+- 股票排行 Excel
+- 單股分析 Excel
+- 單股分析圖表
+- Parameter Sweep Excel
+- Walk Forward Excel
+- Benchmark 統計結果
+
+### 最後提醒
+
+注意事項：
+
+- 本工具僅供研究與技術分析用途
+- 不保證投資績效
+- 不提供投資建議
+- Walk Forward 比單純 Parameter Sweep 更有參考價值
+- 歷史績效不代表未來績效
+
 ## 資料來源與快取
 
 主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
