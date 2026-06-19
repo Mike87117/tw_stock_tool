@@ -138,7 +138,10 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
 python parameter_sweep.py --stock 2330 --period 2y --strategy score
 python parameter_sweep.py --stock 2330 --period 2y --top 10
+python parameter_sweep.py --stock 2330 --period 2y --output
+python parameter_sweep.py --stock 2330 --period 2y --output-excel
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel output/2330_ma_sweep.xlsx
 ```
 
 支援策略：
@@ -173,6 +176,7 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
   - `--top <= 0` 時會顯示全部結果
 - `--force-refresh`: 忽略快取重新下載
 - `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
+- `--output-excel`: Export Excel; omitted path uses `output/{stock}_parameter_sweep.xlsx`
 - `--stop-loss`: 停損百分比
 - `--take-profit`: 停利百分比
 - `--max-hold-days`: 最大持有天數
@@ -193,6 +197,14 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
 - `Sharpe Ratio`
 - `Sortino Ratio`
 - `Error`
+
+CSV / Excel output:
+
+- `--output`: Export CSV. Default path is `output/{stock}_parameter_sweep.csv`.
+- `--output-excel`: Export Excel. Default path is `output/{stock}_parameter_sweep.xlsx`.
+- `--output-excel output/custom.xlsx`: Export Excel to a custom path.
+- Excel sheets are always created: `All`, `MA_Cross`, `RSI`, `Score`, `Errors`.
+- Empty Excel sheets are kept with headers only.
 
 注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
 

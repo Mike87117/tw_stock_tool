@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 from itertools import product
 from pathlib import Path
 from typing import Any
@@ -224,6 +224,45 @@ def export_parameter_sweep(df: pd.DataFrame, stock_id: str, output: str | None) 
     return output_path
 
 
+def export_parameter_sweep_excel(
+    df: pd.DataFrame,
+    stock_id: str,
+    output_excel: str | None,
+) -> Path | None:
+    if output_excel is None:
+        return None
+
+    output_path = (
+        OUTPUT_DIR / f"{stock_id}_parameter_sweep.xlsx"
+        if output_excel == ""
+        else Path(output_excel)
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sheets = {
+        "All": df,
+        "MA_Cross": df[df["Strategy"] == "ma_cross"],
+        "RSI": df[df["Strategy"] == "rsi"],
+        "Score": df[df["Strategy"] == "score"],
+        "Errors": df[df["Error"].astype(str) != ""],
+    }
+    try:
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            for sheet_name, sheet_df in sheets.items():
+                sheet_df.reindex(columns=SWEEP_COLUMNS).to_excel(
+                    writer,
+                    index=False,
+                    sheet_name=sheet_name,
+                )
+    except PermissionError as exc:
+        raise ValueError(
+            f"Failed to write Excel file: {output_path}. "
+            "Please close the file if it is open."
+        ) from exc
+    except Exception as exc:
+        raise ValueError(f"Failed to write Excel file: {output_path}. {exc}") from exc
+    return output_path
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Strategy parameter sweep tool")
     parser.add_argument("--stock", required=True, help="Stock id, for example 2330")
@@ -233,6 +272,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--top", type=int, default=20)
     parser.add_argument("--force-refresh", action="store_true")
     parser.add_argument("--output", nargs="?", const="", help="Export CSV; omit path for default output")
+    parser.add_argument(
+        "--output-excel",
+        nargs="?",
+        const="",
+        help="Export Excel; omit path for default output",
+    )
     parser.add_argument("--stop-loss", type=float, dest="stop_loss_pct")
     parser.add_argument("--take-profit", type=float, dest="take_profit_pct")
     parser.add_argument("--max-hold-days", type=int)
@@ -259,6 +304,9 @@ def main() -> None:
         output_path = export_parameter_sweep(result, args.stock, args.output)
         if output_path:
             print(f"\nParameter sweep exported: {output_path}")
+        excel_path = export_parameter_sweep_excel(result, args.stock, args.output_excel)
+        if excel_path:
+            print(f"\nParameter sweep Excel exported: {excel_path}")
     except Exception as exc:
         print(f"Error: {exc}")
 

@@ -1,7 +1,10 @@
-﻿import unittest
+import tempfile
+import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from openpyxl import load_workbook
 
 import parameter_sweep
 from analysis import StockAnalysis
@@ -20,6 +23,74 @@ def _sample_signal_df() -> pd.DataFrame:
             "RSI": [50.0, 25.0, 35.0, 75.0, 55.0],
         },
         index=pd.date_range("2024-01-01", periods=5, freq="D"),
+    )
+
+
+def _sample_sweep_result() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Rank": 1,
+                "Strategy": "ma_cross",
+                "Parameters": "short_window=5, long_window=20",
+                "Total Return %": 10.0,
+                "Buy and Hold Return %": 8.0,
+                "CAGR %": 4.0,
+                "Trade Count": 2,
+                "Win Rate %": 50.0,
+                "Max Drawdown %": -3.0,
+                "Profit Factor": 1.5,
+                "Sharpe Ratio": 0.8,
+                "Sortino Ratio": 0.9,
+                "Error": "",
+            },
+            {
+                "Rank": 2,
+                "Strategy": "rsi",
+                "Parameters": "buy_below=30, sell_above=70",
+                "Total Return %": 7.0,
+                "Buy and Hold Return %": 8.0,
+                "CAGR %": 3.0,
+                "Trade Count": 1,
+                "Win Rate %": 100.0,
+                "Max Drawdown %": -2.0,
+                "Profit Factor": 2.0,
+                "Sharpe Ratio": 0.7,
+                "Sortino Ratio": 0.8,
+                "Error": "",
+            },
+            {
+                "Rank": 3,
+                "Strategy": "score",
+                "Parameters": "buy_score=4, sell_score=-2",
+                "Total Return %": 5.0,
+                "Buy and Hold Return %": 8.0,
+                "CAGR %": 2.0,
+                "Trade Count": 1,
+                "Win Rate %": 0.0,
+                "Max Drawdown %": -4.0,
+                "Profit Factor": 0.5,
+                "Sharpe Ratio": 0.4,
+                "Sortino Ratio": 0.5,
+                "Error": "",
+            },
+            {
+                "Rank": None,
+                "Strategy": "score",
+                "Parameters": "buy_score=6, sell_score=-4",
+                "Total Return %": None,
+                "Buy and Hold Return %": None,
+                "CAGR %": None,
+                "Trade Count": None,
+                "Win Rate %": None,
+                "Max Drawdown %": None,
+                "Profit Factor": None,
+                "Sharpe Ratio": None,
+                "Sortino Ratio": None,
+                "Error": "bad params",
+            },
+        ],
+        columns=parameter_sweep.SWEEP_COLUMNS,
     )
 
 
@@ -146,6 +217,85 @@ class ParameterSweepTest(unittest.TestCase):
         self.assertEqual(len(result), 9)
         self.assertEqual((result["Error"] == "").sum(), 8)
         self.assertEqual((result["Error"] != "").sum(), 1)
+
+
+    def test_export_parameter_sweep_csv_creates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "sweep.csv"
+            result = parameter_sweep.export_parameter_sweep(
+                _sample_sweep_result(),
+                "2330",
+                str(output_path),
+            )
+
+            self.assertEqual(result, output_path)
+            self.assertTrue(output_path.exists())
+            self.assertIn("Strategy", output_path.read_text(encoding="utf-8-sig"))
+
+    def test_export_parameter_sweep_excel_creates_xlsx(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "sweep.xlsx"
+            result = parameter_sweep.export_parameter_sweep_excel(
+                _sample_sweep_result(),
+                "2330",
+                str(output_path),
+            )
+
+            self.assertEqual(result, output_path)
+            self.assertTrue(output_path.exists())
+
+    def test_excel_contains_all_and_errors_sheets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "sweep.xlsx"
+            parameter_sweep.export_parameter_sweep_excel(
+                _sample_sweep_result(),
+                "2330",
+                str(output_path),
+            )
+            workbook = load_workbook(output_path, read_only=True)
+
+            self.assertIn("All", workbook.sheetnames)
+            self.assertIn("Errors", workbook.sheetnames)
+            workbook.close()
+
+    def test_excel_splits_by_strategy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "sweep.xlsx"
+            parameter_sweep.export_parameter_sweep_excel(
+                _sample_sweep_result(),
+                "2330",
+                str(output_path),
+            )
+            workbook = load_workbook(output_path, read_only=True)
+
+            self.assertIn("MA_Cross", workbook.sheetnames)
+            self.assertIn("RSI", workbook.sheetnames)
+            self.assertIn("Score", workbook.sheetnames)
+            workbook.close()
+
+    def test_output_excel_default_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(parameter_sweep, "OUTPUT_DIR", Path(tmp_dir)):
+                result = parameter_sweep.export_parameter_sweep_excel(
+                    _sample_sweep_result(),
+                    "2330",
+                    "",
+                )
+
+            self.assertEqual(result, Path(tmp_dir) / "2330_parameter_sweep.xlsx")
+            self.assertTrue(result.exists())
+
+    def test_output_excel_custom_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "custom_parameter_sweep.xlsx"
+            result = parameter_sweep.export_parameter_sweep_excel(
+                _sample_sweep_result(),
+                "2330",
+                str(output_path),
+            )
+
+            self.assertEqual(result, output_path)
+            self.assertTrue(output_path.exists())
 
     def test_invalid_position_size_raises(self) -> None:
         with self.assertRaises(ValueError):
