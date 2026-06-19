@@ -308,6 +308,176 @@ python cache_manager.py --clear
 
 回測保留手續費與證交稅估算，並輸出交易紀錄與 Equity Curve。
 
+
+## 輸出欄位說明
+
+### Stock Ranking 欄位說明
+
+適用：`scan_stocks.py`
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Rank` | 排名，只針對成功分析的股票排序。 |
+| `Stock` | 使用者輸入的股票代號。 |
+| `Symbol` | 實際資料代號，例如 `2330.TW` 或 `6488.TWO`。 |
+| `Date` | 最新資料日期。 |
+| `Signal` | 技術訊號，可能為 `BUY` / `WATCH` / `HOLD` / `SELL`。 |
+| `Score` | 技術分數，越高代表多方條件越集中。 |
+| `Close` | 最新收盤價。 |
+| `MA5` / `MA20` / `MA60` | 移動平均線。 |
+| `RSI` | 相對強弱指標。 |
+| `MACD` / `MACD_Signal` | MACD 與訊號線。 |
+| `K` / `D` | KD 指標。 |
+| `BB_Upper` / `BB_Middle` / `BB_Lower` | 布林通道上軌、中線、下軌。 |
+| `ATR` | 平均真實波幅，用於觀察波動程度。 |
+| `OBV` | 能量潮指標。 |
+| `Volume_Ratio` | 成交量與 20 日均量的比例。 |
+| `Analysis` | 文字化技術分析摘要。 |
+| `Status` | `OK` 或 `ERROR`。 |
+| `Error` | 錯誤訊息，成功時為空白。 |
+
+提醒：
+
+- `ERROR` 股票會保留在輸出中，方便追蹤失敗原因。
+- `Rank` 只套用在 `Status=OK` 的股票。
+
+### Benchmark 欄位說明
+
+適用：`benchmark.py`
+
+#### Summary
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Runs` | 正式 benchmark 次數。 |
+| `Warmup Runs` | 暖身次數，不納入統計。 |
+| `Stocks` | 股票數量。 |
+| `Workers` | 執行緒數。 |
+| `Period` | 分析期間。 |
+| `Interval` | K 線週期。 |
+| `Auto Adjust` | 是否使用 yfinance 調整價。 |
+| `Force Refresh` | 是否忽略快取重新下載。 |
+| `Avg OK` | 平均成功數。 |
+| `Avg ERROR` | 平均失敗數。 |
+| `Avg Success Rate %` | 平均成功率。 |
+| `Avg Elapsed Seconds` | 平均總耗時。 |
+| `Min Elapsed Seconds` | 最快總耗時。 |
+| `Max Elapsed Seconds` | 最慢總耗時。 |
+| `Avg Seconds Per Stock` | 平均每檔耗時。 |
+| `Avg Stocks Per Second` | 平均每秒處理檔數。 |
+
+#### Detail
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Run` | 第幾次正式 benchmark。 |
+| `Stocks` | 股票數量。 |
+| `OK` | 成功數。 |
+| `ERROR` | 失敗數。 |
+| `Workers` | 執行緒數。 |
+| `Period` | 分析期間。 |
+| `Interval` | K 線週期。 |
+| `Auto Adjust` | 是否使用調整價。 |
+| `Force Refresh` | 是否忽略快取。 |
+| `Elapsed Seconds` | 該次總耗時。 |
+| `Seconds Per Stock` | 該次平均每檔耗時。 |
+| `Stocks Per Second` | 該次每秒處理檔數。 |
+| `Success Rate %` | 該次成功率。 |
+
+#### Errors
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Run` | 第幾次 benchmark。 |
+| `Stock` | 失敗股票代號。 |
+| `Symbol` | 資料代號，若尚未取得可能為空。 |
+| `Error` | 錯誤訊息。 |
+
+### Parameter Sweep 欄位說明
+
+適用：`parameter_sweep.py`
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Rank` | 依指定 `sort-by` 排序後的排名。 |
+| `Strategy` | 策略名稱，`ma_cross` / `rsi` / `score`。 |
+| `Parameters` | 該次測試的策略參數。 |
+| `Total Return %` | 策略總報酬率。 |
+| `Buy and Hold Return %` | 買進持有報酬率。 |
+| `CAGR %` | 年化報酬率。 |
+| `Trade Count` | 交易次數。 |
+| `Win Rate %` | 勝率。 |
+| `Max Drawdown %` | 最大回撤。 |
+| `Profit Factor` | 獲利因子，總獲利 / 總虧損。 |
+| `Sharpe Ratio` | 夏普比率。 |
+| `Sortino Ratio` | 索提諾比率。 |
+| `Error` | 該參數組合錯誤訊息，成功時為空白。 |
+
+提醒：
+
+- `Rank` 只套用在成功測試的參數組合。
+- `Error` 不為空代表該組參數失敗，但不影響其他參數組合。
+- `--sort-by` 只能使用支援的數值欄位。
+- `--top <= 0` 會顯示全部結果。
+
+### Walk Forward 欄位說明
+
+適用：`walk_forward.py`
+
+#### Detail
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Window` | 第幾個 walk-forward 視窗。 |
+| `Train Start` | 訓練區間開始日期。 |
+| `Train End` | 訓練區間結束日期。 |
+| `Test Start` | 驗證區間開始日期。 |
+| `Test End` | 驗證區間結束日期。 |
+| `Strategy` | 策略名稱。 |
+| `Parameters` | 在 train 區間選出的最佳參數。 |
+| `Train Total Return %` | 訓練區間總報酬率。 |
+| `Test Total Return %` | 驗證區間總報酬率。 |
+| `Train CAGR %` | 訓練區間年化報酬率。 |
+| `Test CAGR %` | 驗證區間年化報酬率。 |
+| `Train Trade Count` | 訓練區間交易次數。 |
+| `Test Trade Count` | 驗證區間交易次數。 |
+| `Train Win Rate %` | 訓練區間勝率。 |
+| `Test Win Rate %` | 驗證區間勝率。 |
+| `Train Max Drawdown %` | 訓練區間最大回撤。 |
+| `Test Max Drawdown %` | 驗證區間最大回撤。 |
+| `Train Profit Factor` | 訓練區間獲利因子。 |
+| `Test Profit Factor` | 驗證區間獲利因子。 |
+| `Train Sharpe Ratio` | 訓練區間夏普比率。 |
+| `Test Sharpe Ratio` | 驗證區間夏普比率。 |
+| `Train Sortino Ratio` | 訓練區間索提諾比率。 |
+| `Test Sortino Ratio` | 驗證區間索提諾比率。 |
+| `Error` | 該視窗錯誤訊息，成功時為空白。 |
+
+#### Summary
+
+| 欄位 | 說明 |
+| --- | --- |
+| `Stock` | 股票代號。 |
+| `Period` | 分析期間。 |
+| `Strategy` | 策略範圍。 |
+| `Train Days` | 訓練區間交易日數。 |
+| `Test Days` | 驗證區間交易日數。 |
+| `Step Days` | 每次視窗往後移動的交易日數。 |
+| `Windows` | 視窗數量。 |
+| `Avg Test Total Return %` | 驗證區間平均總報酬率。 |
+| `Avg Test CAGR %` | 驗證區間平均年化報酬率。 |
+| `Avg Test Sharpe Ratio` | 驗證區間平均夏普比率。 |
+| `Avg Test Max Drawdown %` | 驗證區間平均最大回撤。 |
+| `Positive Test Windows` | 驗證區間報酬率為正的視窗數。 |
+| `Positive Test Windows %` | 驗證區間報酬率為正的比例。 |
+| `Error Windows` | 失敗視窗數。 |
+
+提醒：
+
+- Walk Forward 用 train 選參數、用 test 驗證，目的是降低過度擬合風險。
+- Test 結果才是更重要的驗證參考。
+- 仍然只是歷史收盤價回測，不代表未來績效。
+
 ## 測試
 
 ```bash
