@@ -272,6 +272,173 @@ Excel sheet：
 - 不提供投資建議
 - 不提供自動下單
 
+
+## 常見使用流程
+
+### 流程 1：快速尋找值得研究的股票
+
+目的：
+
+從大量股票中快速找出值得進一步分析的標的。
+
+Step 1：使用多股票掃描器。
+
+```bash
+python scan_stocks.py --file stocks.txt
+python scan_stocks.py --stocks 2330 2317 2454
+```
+
+說明：
+
+- 掃描多檔股票
+- 查看 `Signal`
+- 查看 `Score`
+- 查看 `Volume_Ratio`
+- 查看 `Analysis`
+
+重點：
+
+優先關注：
+
+- `BUY`
+- `WATCH`
+- 高 `Score`
+- 成交量放大
+
+Step 2：挑選感興趣股票後，進行單股分析。
+
+```bash
+python main.py --stock 2330 --period 2y
+```
+
+查看：
+
+- 技術指標
+- 訊號
+- 回測結果
+- 圖表
+
+### 流程 2：比較策略
+
+目的：
+
+比較不同策略在同一檔股票上的表現。
+
+使用：
+
+```bash
+python strategy_compare.py --stock 2330 --period 2y
+```
+
+觀察：
+
+- `Total Return %`
+- `CAGR %`
+- `Sharpe Ratio`
+- `Sortino Ratio`
+- `Max Drawdown %`
+
+比較：
+
+- Score Strategy
+- MA Cross Strategy
+- RSI Strategy
+- MACD Strategy
+
+### 流程 3：尋找最佳參數
+
+目的：
+
+找出歷史回測表現較佳的參數組合。
+
+使用：
+
+```bash
+python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
+```
+
+流程：
+
+- 自動測試多組參數
+- 排序回測結果
+- 找出較佳參數
+
+注意：
+
+這一步只是在歷史資料上尋找最佳參數。
+
+### 流程 4：驗證是否過度擬合
+
+目的：
+
+避免直接相信 `parameter_sweep.py` 找出的最佳參數。
+
+使用：
+
+```bash
+python walk_forward.py --stock 2330 --period 10y
+```
+
+流程：
+
+- train 區間選參數
+- test 區間驗證
+
+觀察：
+
+- `Avg Test Total Return %`
+- `Avg Test Sharpe Ratio`
+- `Positive Test Windows %`
+
+重點：
+
+如果 train 很好但 test 很差，代表可能過度擬合。
+
+### 流程 5：大量股票效能測試
+
+目的：
+
+評估大量掃描時的速度。
+
+使用：
+
+```bash
+python benchmark.py --file stocks.txt --workers 8 --repeat 3
+```
+
+觀察：
+
+- `Avg Elapsed Seconds`
+- `Avg Stocks Per Second`
+- `Success Rate %`
+
+用途：
+
+- 評估 cache 效果
+- 評估 worker 數量
+- 評估 force-refresh 成本
+
+### 研究流程總結
+
+```text
+掃描股票
+↓
+單股分析
+↓
+策略比較
+↓
+參數掃描
+↓
+Walk Forward 驗證
+↓
+持續追蹤
+```
+
+`parameter_sweep.py` 的結果不應直接視為最佳策略。
+
+`walk_forward.py` 才是檢查策略是否具備穩定性的關鍵步驟。
+
 ## 資料來源與快取
 
 主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
