@@ -1,4 +1,4 @@
-﻿"""Daily candidate report for Taiwan stock scans."""
+"""Daily candidate report for Taiwan stock scans."""
 
 from __future__ import annotations
 
@@ -200,7 +200,7 @@ def print_report_summary(
     print("=================================")
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Daily stock candidate report")
     parser.add_argument(
         "--stocks",
@@ -214,14 +214,19 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
     parser.add_argument("--top", type=int, default=DEFAULT_TOP)
     parser.add_argument("--force-refresh", action="store_true")
-    parser.add_argument("--auto-adjust", action="store_true", default=DEFAULT_AUTO_ADJUST)
+    parser.add_argument(
+        "--auto-adjust",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_AUTO_ADJUST,
+        help="是否使用 yfinance 除權息調整價",
+    )
     parser.add_argument(
         "--output",
         nargs="?",
         const="",
         help="Export Excel; omit path for default output",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main() -> None:

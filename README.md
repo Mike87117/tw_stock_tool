@@ -94,6 +94,7 @@ python daily_report.py --file stocks.txt --top 20
 python daily_report.py --file stocks.txt --output
 python daily_report.py --file stocks.txt --output output/daily_report.xlsx
 python daily_report.py --file stocks.txt --force-refresh
+python daily_report.py --file stocks.txt --no-auto-adjust
 ```
 
 常用參數：
@@ -106,7 +107,7 @@ python daily_report.py --file stocks.txt --force-refresh
 - `--min-score`: 候選最低分數，預設 `4`
 - `--top`: 候選股前 N 名，預設 `20`
 - `--force-refresh`: 忽略快取重新下載
-- `--auto-adjust`: 使用專案設定的調整價選項
+- `--auto-adjust` / `--no-auto-adjust`: 是否使用 yfinance 除權息調整價
 - `--output`: 輸出 Excel，省略路徑時使用 `output/daily_report.xlsx`
 
 Excel sheets：

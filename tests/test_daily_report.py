@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -137,6 +137,16 @@ class DailyReportTest(unittest.TestCase):
         self.assertIn("Candidates", sheetnames)
         self.assertIn("All", sheetnames)
         self.assertIn("Errors", sheetnames)
+
+    def test_parse_args_supports_auto_adjust(self) -> None:
+        args = daily_report._parse_args(["--file", "stocks.txt", "--auto-adjust"])
+
+        self.assertTrue(args.auto_adjust)
+
+    def test_parse_args_supports_no_auto_adjust(self) -> None:
+        args = daily_report._parse_args(["--file", "stocks.txt", "--no-auto-adjust"])
+
+        self.assertFalse(args.auto_adjust)
 
 
 if __name__ == "__main__":
