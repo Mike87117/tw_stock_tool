@@ -617,6 +617,186 @@ python benchmark.py --file stocks.txt --workers 8 --repeat 3
 - Walk Forward 比單純 Parameter Sweep 更有參考價值
 - 歷史績效不代表未來績效
 
+
+## 常見問題 FAQ
+
+### Q: 執行 python 指令時出現 `'python' is not recognized...` 怎麼辦？
+
+### A:
+
+這通常代表 Python 尚未加入 PATH，或目前終端機找不到 Python 執行檔。
+
+建議先確認 Python 是否已安裝：
+
+```bash
+python --version
+```
+
+如果仍然找不到 `python`，可以在 Windows PowerShell 使用完整路徑執行，例如：
+
+```powershell
+& "C:\Users\YourName\AppData\Local\Programs\Python\Python312\python.exe" main.py
+```
+
+你也可以把 Python 安裝路徑加入系統 PATH，之後就能直接使用 `python` 指令。
+
+### Q: `pip install -r requirements.txt` 失敗怎麼辦？
+
+### A:
+
+可以先升級 pip，再重新安裝 requirements。
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+如果你的環境中 `python` 指令無法使用，請改用 Python 完整路徑搭配 `-m pip` 執行。
+
+### Q: yfinance 下載不到資料怎麼辦？
+
+### A:
+
+可能原因包含：
+
+- 網路問題
+- Yahoo Finance 暫時限流
+- 股票代號錯誤
+
+建議：
+
+- 稍後重試
+- 使用 `--force-refresh` 忽略快取並重新下載
+- 確認股票代號是否正確
+
+部分情況下，若未使用除權息調整價，程式會自動嘗試 TWSE / TPEX 官方 fallback。
+
+### Q: `2330.TW` 和 `6488.TWO` 是什麼意思？
+
+### A:
+
+這是台股資料來源使用的代號格式：
+
+- `.TW` = 上市股票
+- `.TWO` = 上櫃股票
+
+範例：
+
+```text
+2330 -> 2330.TW
+6488 -> 6488.TWO
+```
+
+使用本工具時通常只需要輸入數字股票代號，程式會自動嘗試判斷。
+
+### Q: 什麼是 `auto_adjust`？
+
+### A:
+
+`auto_adjust` 是 yfinance 的除權息調整價設定，適合用於較長期的價格觀察與回測。
+
+提醒：
+
+使用 `auto_adjust` 時，程式不會混用 TWSE / TPEX 官方 fallback，因為官方 fallback 目前提供的是未除權息調整資料。
+
+### Q: 為什麼我明明重新執行，速度卻變很快？
+
+### A:
+
+這通常是因為使用了 cache。
+
+補充：
+
+- cache 位於 `cache/`
+- 當天快取會直接使用
+- 使用 `--force-refresh` 可忽略快取並重新下載
+
+cache 可以減少重複下載資料的時間，也能讓大量掃描更快完成。
+
+### Q: 輸出 Excel 失敗怎麼辦？
+
+### A:
+
+最常見原因是 Excel 檔案仍被開啟，Windows 特別容易遇到這種情況。
+
+建議：
+
+- 關閉正在開啟的 Excel 檔案
+- 重新執行指令
+- 換一個輸出檔名
+
+### Q: 出現資料不足（Data too short）怎麼辦？
+
+### A:
+
+技術指標需要足夠的歷史資料才能計算，例如 MA60、RSI、MACD、KD 等都需要累積資料。
+
+建議：
+
+- 增加 `period`
+- 使用 `1y` 或 `2y`
+
+範例：
+
+```bash
+python main.py --stock 2330 --period 2y
+```
+
+### Q: Walk Forward 顯示資料不足怎麼辦？
+
+### A:
+
+Walk Forward 需要資料量大於 `train_days + test_days`，否則無法建立任何 train / test 視窗。
+
+建議：
+
+- 增加 `period`
+- 降低 `--train-days`
+- 降低 `--test-days`
+
+範例：
+
+```bash
+python walk_forward.py --stock 2330 --period 10y
+```
+
+### Q: Parameter Sweep 很好，為什麼 Walk Forward 很差？
+
+### A:
+
+這可能代表發生過度擬合（Overfitting）。
+
+`parameter_sweep.py` 只是在歷史資料中找出表現較佳的參數；`walk_forward.py` 則會用不同區間驗證參數是否穩定。
+
+提醒：
+
+Walk Forward 結果通常比單純 Parameter Sweep 更有參考價值。
+
+### Q: 本工具能預測未來股價嗎？
+
+### A:
+
+不能。
+
+說明：
+
+- 本工具是技術分析與回測工具
+- 不使用 AI 預測
+- 不保證未來績效
+- 不提供投資建議
+
+### Q: 本工具能自動下單嗎？
+
+### A:
+
+不能。
+
+目前：
+
+- 不串接券商 API
+- 不提供自動交易
+- 僅供研究用途
+
 ## 資料來源與快取
 
 主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
