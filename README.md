@@ -1,5 +1,7 @@
 ﻿# 台股技術分析工具
 
+![Python Tests](https://github.com/Mike87117/tw_stock_tool/actions/workflows/python-tests.yml/badge.svg)
+
 本工具用於台股技術分析、回測、多股票掃描、策略比較與 benchmark 研究。它不提供自動下單，不串接券商 API，也不保證投資績效。
 
 ## CI
@@ -214,3 +216,4 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
+
