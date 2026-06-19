@@ -176,7 +176,7 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-
   - `--top <= 0` 時會顯示全部結果
 - `--force-refresh`: 忽略快取重新下載
 - `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
-- `--output-excel`: Export Excel; omitted path uses `output/{stock}_parameter_sweep.xlsx`
+- `--output-excel`: 輸出 Excel，省略路徑時使用 `output/{stock}_parameter_sweep.xlsx`
 - `--stop-loss`: 停損百分比
 - `--take-profit`: 停利百分比
 - `--max-hold-days`: 最大持有天數
@@ -198,15 +198,79 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-
 - `Sortino Ratio`
 - `Error`
 
-CSV / Excel output:
+CSV / Excel 輸出：
 
-- `--output`: Export CSV. Default path is `output/{stock}_parameter_sweep.csv`.
-- `--output-excel`: Export Excel. Default path is `output/{stock}_parameter_sweep.xlsx`.
-- `--output-excel output/custom.xlsx`: Export Excel to a custom path.
-- Excel sheets are always created: `All`, `MA_Cross`, `RSI`, `Score`, `Errors`.
-- Empty Excel sheets are kept with headers only.
+- `--output`: 輸出 CSV，預設路徑為 `output/{stock}_parameter_sweep.csv`。
+- `--output-excel`: 輸出 Excel，預設路徑為 `output/{stock}_parameter_sweep.xlsx`。
+- `--output-excel output/custom.xlsx`: 輸出 Excel 到指定路徑。
+- Excel 會固定建立 `All`、`MA_Cross`、`RSI`、`Score`、`Errors` sheets。
+- 若某個 sheet 沒有資料，仍會保留欄位標題。
 
 注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
+
+
+## Walk Forward Test
+
+`walk_forward.py` 用於驗證 `parameter_sweep.py` 找到的最佳參數是否可能過度擬合。
+
+流程：
+
+1. 將歷史資料切成 train / test 視窗
+2. 在 train 區間尋找最佳參數
+3. 將最佳參數套用到 test 區間
+4. 比較 train 與 test 表現
+5. 輸出 Summary / Detail / Errors Excel
+
+CLI 範例：
+
+```bash
+python walk_forward.py --stock 2330 --period 5y
+python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
+python walk_forward.py --stock 2330 --period 10y --strategy rsi
+python walk_forward.py --stock 2330 --period 10y --strategy score
+python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
+python walk_forward.py --stock 2330 --period 10y --output
+python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
+```
+
+參數說明：
+
+- `--stock`：股票代號，必填
+- `--period`：分析期間，預設 `DEFAULT_PERIOD`
+- `--strategy`：`all`、`ma_cross`、`rsi`、`score`，預設 `all`
+- `--train-days`：訓練區間交易日數，預設 `504`
+- `--test-days`：驗證區間交易日數，預設 `126`
+- `--step-days`：每次視窗往後移動的交易日數，預設等於 `test-days`
+- `--sort-by`：train 區間選最佳參數用的欄位，預設 `Train Sharpe Ratio`
+- `--force-refresh`：忽略快取重新下載
+- `--output`：輸出 Excel，省略路徑時使用 `output/{stock}_walk_forward.xlsx`
+- `--stop-loss`：停損百分比
+- `--take-profit`：停利百分比
+- `--max-hold-days`：最大持有天數
+- `--position-size`：每次投入資金比例，需符合 `0 < value <= 1`
+
+支援 `sort-by`：
+
+- `Train Total Return %`
+- `Train CAGR %`
+- `Train Sharpe Ratio`
+- `Train Sortino Ratio`
+- `Train Profit Factor`
+- `Train Max Drawdown %`
+
+Excel sheet：
+
+- `Summary`
+- `Detail`
+- `Errors`
+
+限制與提醒：
+
+- Walk Forward 只是歷史驗證，不代表未來績效
+- 仍是收盤價回測
+- 不模擬盤中觸價、滑價、流動性
+- 不提供投資建議
+- 不提供自動下單
 
 ## 資料來源與快取
 
@@ -263,6 +327,7 @@ python -m unittest discover -s tests
 - `score_strategy` 分數門檻
 - `strategy_compare.py` 分數門檻 CLI 傳遞
 - `parameter_sweep.py` 參數組合、排序、錯誤處理
+- `walk_forward.py` 視窗切分、策略驗證、錯誤處理與 Excel 輸出
 
 ## 專案結構
 
@@ -273,6 +338,7 @@ tw_stock_tool/
   scan_stocks.py
   strategy_compare.py
   parameter_sweep.py
+  walk_forward.py
   benchmark.py
   cache_manager.py
   analysis.py
@@ -298,60 +364,3 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
-
-
-## Walk Forward Test
-
-`walk_forward.py` helps validate whether the best parameters found by `parameter_sweep.py` may be overfit to one historical period. It uses rolling train/test windows:
-
-- Train window: run a parameter sweep and select the best parameter set by a train metric.
-- Test window: apply that same parameter set to unseen later data.
-- Next window: move forward by `--step-days` and repeat.
-
-Examples:
-
-```bash
-python walk_forward.py --stock 2330 --period 5y
-python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
-python walk_forward.py --stock 2330 --period 10y --strategy rsi
-python walk_forward.py --stock 2330 --period 10y --strategy score
-python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
-python walk_forward.py --stock 2330 --period 10y --sort-by "Train Sharpe Ratio"
-python walk_forward.py --stock 2330 --period 10y --output
-python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
-```
-
-Options:
-
-- `--stock`: required stock id, for example `2330`.
-- `--period`: data period, default uses `DEFAULT_PERIOD`.
-- `--strategy`: `all`, `ma_cross`, `rsi`, or `score`; default is `all`.
-- `--train-days`: train window size in trading rows, default `504`.
-- `--test-days`: test window size in trading rows, default `126`.
-- `--step-days`: window step size, default equals `--test-days`.
-- `--sort-by`: train metric used to select parameters, default `Train Sharpe Ratio`.
-- `--force-refresh`: bypass cache and download fresh data.
-- `--output`: export Excel; omit the path to use `output/{stock}_walk_forward.xlsx`.
-- `--stop-loss`, `--take-profit`, `--max-hold-days`, `--position-size`: forwarded to backtesting.
-
-Supported `--sort-by` columns:
-
-- `Train Total Return %`
-- `Train CAGR %`
-- `Train Sharpe Ratio`
-- `Train Sortino Ratio`
-- `Train Profit Factor`
-- `Train Max Drawdown %`
-
-Excel output contains:
-
-- `Summary`: stock, period, strategy, window settings, average test metrics, positive test windows, and error count.
-- `Detail`: full train/test result for each window and strategy.
-- `Errors`: rows where a window or strategy failed.
-
-Limitations:
-
-- Walk Forward Test is still historical close-price backtesting.
-- It does not simulate slippage or intraday execution.
-- It does not represent future performance.
-- It is not investment advice.
