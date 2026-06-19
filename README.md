@@ -170,6 +170,7 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
   - `Sharpe Ratio`
   - `Sortino Ratio`
 - `--top`: 顯示前 N 筆，預設 `20`
+  - `--top <= 0` ????????
 - `--force-refresh`: 忽略快取重新下載
 - `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
 - `--stop-loss`: 停損百分比

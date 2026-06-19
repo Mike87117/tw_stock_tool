@@ -206,6 +206,7 @@ def run_parameter_sweep(
     ok["_SortValue"] = pd.to_numeric(ok[sort_by], errors="coerce").fillna(float("-inf"))
     ok = ok.sort_values(by="_SortValue", ascending=False, kind="mergesort")
     ok = ok.drop(columns=["_SortValue"])
+    # top <= 0 means show all rows.
     if top > 0:
         ok = ok.head(top)
     ok = ok.reset_index(drop=True)
