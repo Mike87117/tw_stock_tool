@@ -72,6 +72,42 @@ class DataLoaderTest(unittest.TestCase):
         self.assertEqual(symbol, "2330.TW")
         self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
 
+    def test_tpex_fallback_when_twse_has_no_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(
+                        data_loader,
+                        "_download_twse_stock",
+                        side_effect=data_loader.DataLoaderError("no twse data"),
+                    ):
+                        with patch.object(
+                            data_loader,
+                            "_download_tpex_stock",
+                            return_value=_download_df(),
+                        ) as tpex:
+                            df, symbol = data_loader.download_tw_stock("6488", period="1y")
+
+        self.assertEqual(symbol, "6488.TWO")
+        self.assertEqual(tpex.call_count, 1)
+        self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+
+    def test_auto_adjust_skips_official_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(data_loader, "_download_twse_stock") as twse:
+                        with patch.object(data_loader, "_download_tpex_stock") as tpex:
+                            with self.assertRaises(data_loader.DataLoaderError):
+                                data_loader.download_tw_stock(
+                                    "2330",
+                                    period="1y",
+                                    auto_adjust=True,
+                                )
+
+        twse.assert_not_called()
+        tpex.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
