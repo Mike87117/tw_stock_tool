@@ -26,6 +26,50 @@ pip install -r requirements.txt
 & "C:\Users\Mike\AppData\Local\Programs\Python\Python312\python.exe" -m unittest discover -s tests
 ```
 
+
+## 常用指令速查表
+
+以下列出最常使用的指令，方便快速查找。
+
+| 目的 | 指令 |
+| --- | --- |
+| 單股分析 | `python main.py --stock 2330 --period 2y` |
+| 匯出單股分析 Excel | `python main.py --stock 2330 --period 2y --export-excel` |
+| 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
+| 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
+| 每日候選股票報告 | `python daily_report.py --file stocks.txt --output` |
+| 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
+| Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
+| Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
+| Benchmark | `python benchmark.py --file stocks.txt --workers 8 --repeat 3` |
+| 查看快取摘要 | `python cache_manager.py --summary` |
+| 清除快取 | `python cache_manager.py --clear` |
+| 執行全部測試 | `python -m unittest discover -s tests` |
+
+### 建議研究流程
+
+```text
+掃描股票
+↓
+Daily Report
+↓
+單股分析
+↓
+策略比較
+↓
+Parameter Sweep
+↓
+Walk Forward
+↓
+持續追蹤
+```
+
+補充說明：
+
+- Parameter Sweep 用來找歷史最佳參數。
+- Walk Forward 用來驗證參數穩定性。
+- Walk Forward 結果比單純 Parameter Sweep 更具參考價值。
+
 ## 單股票分析
 
 ### 互動式模式
