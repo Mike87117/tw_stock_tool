@@ -1,5 +1,6 @@
-from datetime import date
+﻿from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import requests
@@ -20,11 +21,11 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
     if not stock_id or not stock_id.strip():
-        raise DataLoaderError("股票代號不可空白。")
+        raise DataLoaderError("Stock id cannot be blank.")
     if period not in VALID_PERIODS:
-        raise DataLoaderError(f"分析期間不合法: {period}。")
+        raise DataLoaderError(f"Invalid period: {period}.")
     if interval not in VALID_INTERVALS:
-        raise DataLoaderError(f"K 線週期不合法: {interval}。")
+        raise DataLoaderError(f"Invalid interval: {interval}.")
 
 
 def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool) -> Path:
@@ -55,10 +56,10 @@ def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     required = ["Open", "High", "Low", "Close", "Volume"]
     missing = [c for c in required if c not in df.columns]
     if missing:
-        raise DataLoaderError(f"資料欄位缺失: {missing}")
+        raise DataLoaderError(f"Missing data columns: {missing}")
     out = df[required].dropna(subset=["Open", "High", "Low", "Close"])
     if out.empty:
-        raise DataLoaderError(f"{symbol} 下載後無可用 OHLC 資料。")
+        raise DataLoaderError(f"{symbol} has no usable OHLC data.")
     out.index.name = "Date"
     return out
 
@@ -92,12 +93,66 @@ def _month_starts(start: pd.Timestamp, end: pd.Timestamp) -> list[pd.Timestamp]:
     return months
 
 
+def _parse_roc_date(value: str) -> pd.Timestamp:
+    parts = value.strip().split("/")
+    if len(parts) != 3:
+        raise ValueError(f"Invalid ROC date: {value}")
+    year, month, day = (int(part.strip()) for part in parts)
+    return pd.Timestamp(year + 1911, month, day)
+
+
+def _parse_tpex_date(value: str, month: pd.Timestamp | None = None) -> pd.Timestamp:
+    text = str(value).strip()
+    if "/" in text:
+        parts = text.split("/")
+        if len(parts) == 3:
+            return _parse_roc_date(text)
+        if len(parts) == 2 and month is not None:
+            return pd.Timestamp(month.year, int(parts[0]), int(parts[1]))
+    if text.isdigit() and len(text) == 7:
+        return pd.Timestamp(int(text[:3]) + 1911, int(text[3:5]), int(text[5:7]))
+    if text.isdigit() and len(text) == 8:
+        return pd.Timestamp(int(text[:4]), int(text[4:6]), int(text[6:8]))
+    raise ValueError(f"Invalid TPEX date: {value}")
+
+
+def _to_float(value: Any) -> float:
+    text = str(value).replace(",", "").replace("--", "").strip()
+    if not text:
+        return float("nan")
+    return float(text)
+
+
+def _to_int(value: Any) -> int:
+    return int(_to_float(value))
+
+
+def _finalize_official_rows(
+    rows: list[dict[str, Any]],
+    stock_id: str,
+    suffix: str,
+    start: pd.Timestamp,
+    period: str,
+) -> pd.DataFrame:
+    if not rows:
+        raise DataLoaderError(f"Official fallback has no data: {stock_id}{suffix}")
+
+    df = pd.DataFrame(rows).drop_duplicates(subset=["Date"])
+    df = df.set_index("Date").sort_index()
+    df = df[df.index >= start]
+    if period == "1d":
+        df = df.tail(1)
+    elif period == "5d":
+        df = df.tail(5)
+    return _prepare_ohlcv(df, f"{stock_id}{suffix}")
+
+
 def _download_twse_stock(stock_id: str, period: str, interval: str) -> pd.DataFrame:
     if interval != "1d":
-        raise DataLoaderError("TWSE fallback 僅支援 1d。")
+        raise DataLoaderError("TWSE fallback only supports 1d interval.")
 
     start = _period_start(period)
-    rows = []
+    rows: list[dict[str, Any]] = []
     for month in _month_starts(start, pd.Timestamp.today().normalize()):
         params = {
             "response": "json",
@@ -109,35 +164,106 @@ def _download_twse_stock(stock_id: str, period: str, interval: str) -> pd.DataFr
             params=params,
             timeout=20,
         )
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
         data = response.json()
         if data.get("stat") != "OK":
             continue
-        rows.extend(data.get("data", []))
+        for row in data.get("data", []):
+            rows.append(
+                {
+                    "Date": _parse_roc_date(row[0]),
+                    "Open": _to_float(row[3]),
+                    "High": _to_float(row[4]),
+                    "Low": _to_float(row[5]),
+                    "Close": _to_float(row[6]),
+                    "Volume": _to_int(row[1]),
+                }
+            )
 
-    if not rows:
-        raise DataLoaderError(f"TWSE fallback 無資料: {stock_id}")
+    return _finalize_official_rows(rows, stock_id, ".TW", start, period)
 
-    parsed = []
-    for row in rows:
-        roc_year, month, day = row[0].split("/")
-        parsed.append(
-            {
-                "Date": pd.Timestamp(int(roc_year) + 1911, int(month), int(day)),
-                "Open": float(row[3].replace(",", "")),
-                "High": float(row[4].replace(",", "")),
-                "Low": float(row[5].replace(",", "")),
-                "Close": float(row[6].replace(",", "")),
-                "Volume": int(row[1].replace(",", "")),
-            }
+
+def _download_tpex_stock(stock_id: str, period: str, interval: str) -> pd.DataFrame:
+    if interval != "1d":
+        raise DataLoaderError("TPEX fallback only supports 1d interval.")
+
+    start = _period_start(period)
+    rows: list[dict[str, Any]] = []
+    for month in _month_starts(start, pd.Timestamp.today().normalize()):
+        params = {
+            "response": "json",
+            "date": month.strftime("%Y/%m/01"),
+            "id": stock_id,
+        }
+        response = requests.get(
+            "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock",
+            params=params,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
         )
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
+        data = response.json()
+        if str(data.get("stat", "")).lower() != "ok":
+            continue
+        tables = data.get("tables", [])
+        month_rows = tables[0].get("data", []) if tables else []
+        for row in month_rows:
+            if len(row) < 7:
+                continue
+            rows.append(
+                {
+                    "Date": _parse_tpex_date(row[0], month),
+                    "Open": _to_float(row[3]),
+                    "High": _to_float(row[4]),
+                    "Low": _to_float(row[5]),
+                    "Close": _to_float(row[6]),
+                    "Volume": _to_int(row[1]),
+                }
+            )
 
-    df = pd.DataFrame(parsed).drop_duplicates(subset=["Date"]).set_index("Date").sort_index()
-    df = df[df.index >= start]
-    if period == "1d":
-        df = df.tail(1)
-    elif period == "5d":
-        df = df.tail(5)
-    return _prepare_ohlcv(df, f"{stock_id}.TW")
+    if rows:
+        return _finalize_official_rows(rows, stock_id, ".TWO", start, period)
+    return _download_tpex_latest_quote(stock_id, period, start)
+
+
+def _download_tpex_latest_quote(
+    stock_id: str,
+    period: str,
+    start: pd.Timestamp,
+) -> pd.DataFrame:
+    response = requests.get(
+        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=20,
+    )
+    if hasattr(response, "raise_for_status"):
+        response.raise_for_status()
+    data = response.json()
+    for row in data:
+        if str(row.get("SecuritiesCompanyCode", "")).strip() != stock_id:
+            continue
+        rows = [
+            {
+                "Date": _parse_tpex_date(str(row["Date"])),
+                "Open": _to_float(row["Open"]),
+                "High": _to_float(row["High"]),
+                "Low": _to_float(row["Low"]),
+                "Close": _to_float(row["Close"]),
+                "Volume": _to_int(row["TradingShares"]),
+            }
+        ]
+        return _finalize_official_rows(rows, stock_id, ".TWO", start, period)
+    raise DataLoaderError(f"TPEX fallback has no data: {stock_id}.TWO")
+
+
+def _download_official_stock(stock_id: str, suffix: str, period: str, interval: str) -> pd.DataFrame:
+    if suffix == ".TW":
+        return _download_twse_stock(stock_id, period, interval)
+    if suffix == ".TWO":
+        return _download_tpex_stock(stock_id, period, interval)
+    raise DataLoaderError(f"Unsupported official fallback suffix: {suffix}")
 
 
 def download_tw_stock(
@@ -165,8 +291,8 @@ def download_tw_stock(
                     if verbose:
                         print(f"{symbol}: From cache")
                     return _prepare_ohlcv(cached_df, symbol), symbol
-                except Exception:
-                    pass
+                except Exception as exc:
+                    errors.append(f"{symbol} cache read failed: {exc}")
 
             df = yf.download(
                 symbol,
@@ -180,28 +306,32 @@ def download_tw_stock(
                 df = _prepare_ohlcv(df, symbol)
                 try:
                     _write_cache(df, cache_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    errors.append(f"{symbol} cache write failed: {exc}")
                 if verbose:
                     print(f"{symbol}: Downloaded")
                 return df, symbol
-            errors.append(f"{symbol} 無資料")
+            errors.append(f"{symbol} has no data")
         except Exception as exc:
-            errors.append(f"{symbol} 下載失敗: {exc}")
+            errors.append(f"{symbol} yfinance failed: {exc}")
 
-        if suffix == ".TW" and not auto_adjust:
+        if not auto_adjust:
             try:
-                df = _download_twse_stock(stock_id, period, interval)
+                df = _download_official_stock(stock_id, suffix, period, interval)
                 try:
                     _write_cache(df, cache_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    errors.append(f"{symbol} cache write failed: {exc}")
                 if verbose:
-                    print(f"{symbol}: Downloaded from TWSE fallback")
+                    source = "TWSE" if suffix == ".TW" else "TPEX"
+                    print(f"{symbol}: Downloaded from {source} fallback")
                 return df, symbol
             except Exception as exc:
-                errors.append(f"{symbol} TWSE fallback 失敗: {exc}")
+                source = "TWSE" if suffix == ".TW" else "TPEX"
+                errors.append(f"{symbol} {source} fallback failed: {exc}")
 
     raise DataLoaderError(
-        "找不到股票資料，請確認代號是否正確或稍後再試。\n嘗試紀錄: " + " | ".join(errors)
+        "Cannot find stock data. Please check the symbol or retry later. Attempts: "
+        + " | ".join(errors)
     )
+
