@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 
 
 def _with_signal(df: pd.DataFrame, signal: pd.Series) -> pd.DataFrame:
@@ -7,10 +7,31 @@ def _with_signal(df: pd.DataFrame, signal: pd.Series) -> pd.DataFrame:
     return out[["Close", "Signal"]]
 
 
-def score_strategy(df: pd.DataFrame) -> pd.DataFrame:
-    if "Signal" not in df.columns:
-        raise ValueError("score_strategy 需要 Signal 欄位。")
-    return df[["Close", "Signal"]].copy()
+def score_strategy(
+    df: pd.DataFrame,
+    buy_score: float | None = None,
+    sell_score: float | None = None,
+) -> pd.DataFrame:
+    if "Close" not in df.columns:
+        raise ValueError("score_strategy requires Close column.")
+
+    if buy_score is None and sell_score is None:
+        if "Signal" not in df.columns:
+            raise ValueError("score_strategy requires Signal column when score thresholds are not set.")
+        return df[["Close", "Signal"]].copy()
+
+    if buy_score is None or sell_score is None:
+        raise ValueError("buy_score and sell_score must be set together.")
+    if buy_score <= sell_score:
+        raise ValueError("buy_score must be greater than sell_score.")
+    if "Score" not in df.columns:
+        raise ValueError("score_strategy requires Score column when score thresholds are set.")
+
+    score = pd.to_numeric(df["Score"], errors="coerce")
+    signal = pd.Series("HOLD", index=df.index, dtype=object)
+    signal[score >= buy_score] = "BUY"
+    signal[score <= sell_score] = "SELL"
+    return _with_signal(df, signal)
 
 
 def ma_cross_strategy(
@@ -19,9 +40,9 @@ def ma_cross_strategy(
     long_window: int = 20,
 ) -> pd.DataFrame:
     if short_window <= 0 or long_window <= 0:
-        raise ValueError("MA 週期必須大於 0。")
+        raise ValueError("MA windows must be greater than 0.")
     if short_window >= long_window:
-        raise ValueError("短期 MA 週期必須小於長期 MA 週期。")
+        raise ValueError("short_window must be less than long_window.")
 
     short_ma = df["Close"].rolling(short_window).mean()
     long_ma = df["Close"].rolling(long_window).mean()
@@ -48,7 +69,7 @@ def rsi_strategy(
     sell_above: float = 70,
 ) -> pd.DataFrame:
     if not 0 <= buy_below < sell_above <= 100:
-        raise ValueError("RSI 參數需符合 0 <= buy_below < sell_above <= 100。")
+        raise ValueError("RSI parameters must satisfy 0 <= buy_below < sell_above <= 100.")
 
     signal = pd.Series("HOLD", index=df.index, dtype=object)
     signal[df["RSI"] < buy_below] = "BUY"

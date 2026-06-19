@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -35,6 +35,8 @@ def compare_strategies(
     ma_long: int = 20,
     rsi_buy_below: float = 30,
     rsi_sell_above: float = 70,
+    score_buy: float | None = None,
+    score_sell: float | None = None,
 ) -> pd.DataFrame:
     analysis = analyze_stock(
         stock_id=stock_id,
@@ -45,7 +47,13 @@ def compare_strategies(
 
     rows = []
     for strategy_name, strategy_func in STRATEGIES.items():
-        if strategy_name == "ma_cross_strategy":
+        if strategy_name == "score_strategy":
+            strategy_df = strategy_func(
+                analysis.signal_df,
+                buy_score=score_buy,
+                sell_score=score_sell,
+            )
+        elif strategy_name == "ma_cross_strategy":
             strategy_df = strategy_func(
                 analysis.signal_df,
                 short_window=ma_short,
@@ -82,15 +90,15 @@ def export_strategy_compare(df: pd.DataFrame, output_path: Path) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_excel(output_path, index=False, sheet_name="Strategy_Compare")
     except PermissionError as exc:
-        raise ReportError("策略比較檔案可能正在使用中，請先關閉後再試。") from exc
+        raise ReportError("Strategy compare file may be open. Please close it and retry.") from exc
     except Exception as exc:
-        raise ReportError(f"匯出策略比較失敗: {exc}") from exc
+        raise ReportError(f"Failed to export strategy compare: {exc}") from exc
     return output_path
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="策略比較器")
-    parser.add_argument("--stock", required=True, help="股票代號，例如 2330")
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Strategy comparison tool")
+    parser.add_argument("--stock", required=True, help="Stock id, for example 2330")
     parser.add_argument("--period", default=DEFAULT_PERIOD)
     parser.add_argument("--stop-loss", type=float, dest="stop_loss")
     parser.add_argument("--take-profit", type=float, dest="take_profit")
@@ -100,9 +108,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--ma-long", type=int, default=20)
     parser.add_argument("--rsi-buy-below", type=float, default=30)
     parser.add_argument("--rsi-sell-above", type=float, default=70)
+    parser.add_argument("--score-buy", type=float, help="BUY threshold for score_strategy")
+    parser.add_argument("--score-sell", type=float, help="SELL threshold for score_strategy")
     parser.add_argument("--force-refresh", action="store_true")
-    parser.add_argument("--output", nargs="?", const="", help="輸出 Excel，可省略路徑使用預設位置")
-    return parser.parse_args()
+    parser.add_argument("--output", nargs="?", const="", help="Export Excel; omit path for default output")
+    return parser.parse_args(argv)
 
 
 def main() -> None:
@@ -120,6 +130,8 @@ def main() -> None:
             ma_long=args.ma_long,
             rsi_buy_below=args.rsi_buy_below,
             rsi_sell_above=args.rsi_sell_above,
+            score_buy=args.score_buy,
+            score_sell=args.score_sell,
         )
         print(result.to_string(index=False))
 
@@ -130,11 +142,11 @@ def main() -> None:
                 else Path(args.output)
             )
             path = export_strategy_compare(result, output_path)
-            print(f"\n策略比較已輸出：{path}")
+            print(f"\nStrategy comparison exported: {path}")
     except (ValueError, ReportError) as exc:
-        print(f"錯誤：{exc}")
+        print(f"Error: {exc}")
     except Exception as exc:
-        print(f"未預期錯誤：{exc}")
+        print(f"Unexpected error: {exc}")
 
 
 if __name__ == "__main__":

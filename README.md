@@ -1,6 +1,15 @@
 ﻿# 台股技術分析工具
 
-本工具用於台股技術分析、回測與多股票掃描研究。它不提供自動下單，不串接券商 API，也不保證投資績效。
+本工具用於台股技術分析、回測、多股票掃描、策略比較與 benchmark 研究。它不提供自動下單，不串接券商 API，也不保證投資績效。
+
+## CI
+
+本專案已加入 GitHub Actions：
+
+- workflow: `.github/workflows/python-tests.yml`
+- trigger: `push`、`pull_request`
+- Python: `3.11`、`3.12`
+- command: `python -m unittest discover -s tests`
 
 ## 安裝
 
@@ -69,14 +78,27 @@ python scan_stocks.py --file stocks.txt --errors-only --log-errors
 
 ## Benchmark
 
-benchmark 工具檔名維持 `benchmark.py`：
+benchmark 工具檔名維持 `benchmark.py`，輸出分為三段：
+
+- `Summary`: 多次 benchmark 的平均、最快、最慢與成功率
+- `Detail`: 每一次 run 的耗時、成功數、失敗數
+- `Errors`: 每一次 run 的失敗股票與錯誤訊息
 
 ```bash
 python benchmark.py --stocks 2330 2317 2454 --period 1y --workers 8
-python benchmark.py --file stocks.txt --period 1y --workers 8 --output
+python benchmark.py --file stocks.txt --period 1y --workers 8 --repeat 3 --warmup 1
+python benchmark.py --stocks 2330 2317 2454 --period 1y --workers 8 --output
+python benchmark.py --stocks 2330 2317 2454 --period 1y --interval 1d --no-auto-adjust
 ```
 
-輸出內容包含股票數、成功數、失敗數、worker 數、耗時與平均每檔耗時。
+常用參數：
+
+- `--repeat`: 正式 benchmark 次數，預設 `1`
+- `--warmup`: 暖身次數，不納入輸出，預設 `0`
+- `--workers`: 掃描執行緒數，必須大於 `0`
+- `--interval`: K 線週期，預設 `1d`
+- `--auto-adjust` / `--no-auto-adjust`: 是否使用調整價
+- `--output`: 輸出 `benchmark_summary.csv`、`benchmark_detail.csv`、`benchmark_errors.csv`
 
 ## 策略比較
 
@@ -84,15 +106,25 @@ python benchmark.py --file stocks.txt --period 1y --workers 8 --output
 python strategy_compare.py --stock 2330 --period 2y
 python strategy_compare.py --stock 2330 --period 2y --ma-short 10 --ma-long 30
 python strategy_compare.py --stock 2330 --period 2y --rsi-buy-below 35 --rsi-sell-above 75
+python strategy_compare.py --stock 2330 --period 2y --score-buy 5 --score-sell -3
 python strategy_compare.py --stock 2330 --period 2y --output
 ```
 
 目前策略：
 
-- `score_strategy`: 使用 `signals.py` 產生的 Signal
+- `score_strategy`: 預設使用 `signals.py` 產生的 `Signal`
+- `score_strategy`: 若指定 `--score-buy` 與 `--score-sell`，會用 `Score` 重新產生 BUY / SELL / HOLD
 - `ma_cross_strategy`: MA 短長線交叉
 - `macd_strategy`: MACD 與 MACD Signal 交叉
 - `rsi_strategy`: RSI 門檻策略
+
+`score_strategy` 門檻規則：
+
+- `Score >= score_buy`: `BUY`
+- `Score <= score_sell`: `SELL`
+- 其他：`HOLD`
+- `score_buy` 必須大於 `score_sell`
+- 若指定其中一個門檻，另一個也必須指定
 
 ## 資料來源與快取
 
@@ -145,12 +177,15 @@ python -m unittest discover -s tests
 - 快取工具
 - data loader 快取、TWSE/TPEX fallback 路由
 - `main.py` CLI / 互動式入口
-- `benchmark.py`
+- `benchmark.py` Summary / Detail / Errors
+- `score_strategy` 分數門檻
+- `strategy_compare.py` 分數門檻 CLI 傳遞
 
 ## 專案結構
 
 ```text
 tw_stock_tool/
+  .github/workflows/python-tests.yml
   main.py
   scan_stocks.py
   strategy_compare.py
