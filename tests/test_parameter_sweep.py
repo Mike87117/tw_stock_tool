@@ -108,9 +108,65 @@ class ParameterSweepTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     parameter_sweep.run_parameter_sweep("2330", sort_by="Missing")
 
+    def test_sort_by_supports_all_sortable_columns(self) -> None:
+        with patch.object(parameter_sweep, "analyze_stock", return_value=_fake_analysis()):
+            with patch.object(parameter_sweep, "run_backtest", side_effect=_fake_backtest):
+                for column in parameter_sweep.SORTABLE_COLUMNS:
+                    with self.subTest(column=column):
+                        result = parameter_sweep.run_parameter_sweep(
+                            "2330",
+                            strategy="score",
+                            sort_by=column,
+                            top=3,
+                        )
+                        self.assertFalse(result.empty)
+
+    def test_sort_by_rejects_text_columns(self) -> None:
+        with patch.object(parameter_sweep, "analyze_stock", return_value=_fake_analysis()):
+            with patch.object(parameter_sweep, "run_backtest", side_effect=_fake_backtest):
+                for column in ["Parameters", "Strategy", "Error"]:
+                    with self.subTest(column=column):
+                        with self.assertRaisesRegex(ValueError, "Supported columns"):
+                            parameter_sweep.run_parameter_sweep(
+                                "2330",
+                                strategy="score",
+                                sort_by=column,
+                            )
+
+    def test_top_zero_returns_all_success_and_error_rows(self) -> None:
+        result = self._run_sweep_with_one_error(top=0)
+
+        self.assertEqual(len(result), 9)
+        self.assertEqual((result["Error"] == "").sum(), 8)
+        self.assertEqual((result["Error"] != "").sum(), 1)
+
+    def test_top_negative_returns_all_success_and_error_rows(self) -> None:
+        result = self._run_sweep_with_one_error(top=-1)
+
+        self.assertEqual(len(result), 9)
+        self.assertEqual((result["Error"] == "").sum(), 8)
+        self.assertEqual((result["Error"] != "").sum(), 1)
+
     def test_invalid_position_size_raises(self) -> None:
         with self.assertRaises(ValueError):
             parameter_sweep.run_parameter_sweep("2330", position_size=0)
+
+    def _run_sweep_with_one_error(self, top: int) -> pd.DataFrame:
+        original_score_strategy = parameter_sweep.score_strategy
+
+        def flaky_score_strategy(df: pd.DataFrame, **params: int) -> pd.DataFrame:
+            if params["buy_score"] == 4 and params["sell_score"] == -2:
+                raise ValueError("bad params")
+            return original_score_strategy(df, **params)
+
+        with patch.object(parameter_sweep, "analyze_stock", return_value=_fake_analysis()):
+            with patch.object(parameter_sweep, "run_backtest", side_effect=_fake_backtest):
+                with patch.object(parameter_sweep, "score_strategy", side_effect=flaky_score_strategy):
+                    return parameter_sweep.run_parameter_sweep(
+                        "2330",
+                        strategy="score",
+                        top=top,
+                    )
 
 
 if __name__ == "__main__":
