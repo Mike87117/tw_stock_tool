@@ -1,0 +1,219 @@
+﻿import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
+from openpyxl import load_workbook
+
+import walk_forward
+from analysis import StockAnalysis
+
+
+class WalkForwardTest(unittest.TestCase):
+    def _sample_df(self, rows: int = 80) -> pd.DataFrame:
+        index = pd.date_range("2024-01-01", periods=rows, freq="B")
+        close = pd.Series([100 + (i % 17) + i * 0.2 for i in range(rows)], index=index)
+        df = pd.DataFrame(
+            {
+                "Close": close,
+                "Signal": ["BUY" if i % 11 == 0 else "SELL" if i % 17 == 0 else "HOLD" for i in range(rows)],
+                "Score": [6 if i % 9 == 0 else -3 if i % 13 == 0 else 1 for i in range(rows)],
+                "RSI": [20 if i % 10 == 0 else 80 if i % 14 == 0 else 50 for i in range(rows)],
+                "MACD": [i * 0.01 for i in range(rows)],
+                "MACD_Signal": [i * 0.008 for i in range(rows)],
+            },
+            index=index,
+        )
+        return df
+
+    def _analysis(self, rows: int = 80) -> StockAnalysis:
+        df = self._sample_df(rows)
+        return StockAnalysis(
+            stock_id="2330",
+            symbol="2330.TW",
+            raw_df=df,
+            indicator_df=df,
+            signal_df=df,
+            latest=df.iloc[-1],
+            summary={},
+        )
+
+    def _fake_backtest(self, df: pd.DataFrame, **_: object) -> dict[str, object]:
+        buys = int((df["Signal"] == "BUY").sum())
+        sells = int((df["Signal"] == "SELL").sum())
+        total_return = float(buys - sells)
+        return {
+            "Total Return %": total_return,
+            "Buy and Hold Return %": 1.0,
+            "CAGR %": total_return / 2,
+            "Trade Count": buys,
+            "Win Rate %": 50.0 if buys else 0.0,
+            "Max Drawdown %": -float(sells),
+            "Profit Factor": 1.5 + buys,
+            "Sharpe Ratio": total_return + 0.5,
+            "Sortino Ratio": total_return + 0.25,
+            "Trades": pd.DataFrame(),
+            "Equity Curve": pd.Series(dtype=float),
+        }
+
+    def test_window_splitting(self) -> None:
+        df = self._sample_df(10)
+        windows = walk_forward.split_windows(df, train_days=4, test_days=2, step_days=2)
+
+        self.assertEqual(len(windows), 3)
+        self.assertEqual(windows[0][0], 1)
+        self.assertEqual(windows[0][1].index[0], df.index[0])
+        self.assertEqual(windows[0][2].index[0], df.index[4])
+
+    def test_window_splitting_requires_enough_data(self) -> None:
+        df = self._sample_df(5)
+
+        with self.assertRaises(ValueError):
+            walk_forward.split_windows(df, train_days=4, test_days=2, step_days=1)
+
+    def test_ma_cross_walk_forward(self) -> None:
+        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "walk_forward.run_backtest",
+            side_effect=self._fake_backtest,
+        ):
+            result = walk_forward.run_walk_forward(
+                "2330",
+                strategy="ma_cross",
+                train_days=20,
+                test_days=10,
+                step_days=10,
+            )
+
+        self.assertFalse(result.empty)
+        self.assertEqual(set(result["Strategy"]), {"ma_cross"})
+
+    def test_rsi_walk_forward(self) -> None:
+        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "walk_forward.run_backtest",
+            side_effect=self._fake_backtest,
+        ):
+            result = walk_forward.run_walk_forward(
+                "2330",
+                strategy="rsi",
+                train_days=20,
+                test_days=10,
+                step_days=10,
+            )
+
+        self.assertFalse(result.empty)
+        self.assertEqual(set(result["Strategy"]), {"rsi"})
+
+    def test_score_walk_forward(self) -> None:
+        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "walk_forward.run_backtest",
+            side_effect=self._fake_backtest,
+        ):
+            result = walk_forward.run_walk_forward(
+                "2330",
+                strategy="score",
+                train_days=20,
+                test_days=10,
+                step_days=10,
+            )
+
+        self.assertFalse(result.empty)
+        self.assertEqual(set(result["Strategy"]), {"score"})
+
+    def test_window_failure_does_not_stop_all_results(self) -> None:
+        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "walk_forward.run_backtest",
+            side_effect=self._fake_backtest,
+        ), patch("walk_forward.ma_cross_strategy", side_effect=ValueError("strategy failed")):
+            result = walk_forward.run_walk_forward(
+                "2330",
+                strategy="all",
+                train_days=20,
+                test_days=10,
+                step_days=10,
+            )
+
+        self.assertGreater((result["Error"].astype(str) != "").sum(), 0)
+        self.assertGreater((result["Error"].astype(str) == "").sum(), 0)
+
+    def test_export_excel_contains_required_sheets(self) -> None:
+        detail = pd.DataFrame(
+            [
+                {
+                    "Window": 1,
+                    "Train Start": pd.Timestamp("2024-01-01"),
+                    "Train End": pd.Timestamp("2024-01-31"),
+                    "Test Start": pd.Timestamp("2024-02-01"),
+                    "Test End": pd.Timestamp("2024-02-15"),
+                    "Strategy": "score",
+                    "Parameters": "buy_score=4, sell_score=-2",
+                    "Train Total Return %": 5.0,
+                    "Test Total Return %": 1.0,
+                    "Train CAGR %": 8.0,
+                    "Test CAGR %": 2.0,
+                    "Train Trade Count": 2,
+                    "Test Trade Count": 1,
+                    "Train Win Rate %": 50.0,
+                    "Test Win Rate %": 100.0,
+                    "Train Max Drawdown %": -3.0,
+                    "Test Max Drawdown %": -1.0,
+                    "Train Profit Factor": 2.0,
+                    "Test Profit Factor": 1.2,
+                    "Train Sharpe Ratio": 1.1,
+                    "Test Sharpe Ratio": 0.8,
+                    "Train Sortino Ratio": 1.3,
+                    "Test Sortino Ratio": 0.9,
+                    "Error": "",
+                },
+                {
+                    "Window": 2,
+                    "Train Start": pd.Timestamp("2024-02-01"),
+                    "Train End": pd.Timestamp("2024-02-28"),
+                    "Test Start": pd.Timestamp("2024-03-01"),
+                    "Test End": pd.Timestamp("2024-03-15"),
+                    "Strategy": "score",
+                    "Parameters": "",
+                    "Error": "failed",
+                },
+            ],
+            columns=walk_forward.WALK_FORWARD_COLUMNS,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "walk_forward.xlsx"
+            output = walk_forward.export_walk_forward_excel(
+                detail,
+                stock_id="2330",
+                period="1y",
+                strategy="score",
+                train_days=20,
+                test_days=10,
+                step_days=10,
+                output=str(path),
+            )
+            workbook = load_workbook(output)
+
+        self.assertIn("Summary", workbook.sheetnames)
+        self.assertIn("Detail", workbook.sheetnames)
+        self.assertIn("Errors", workbook.sheetnames)
+
+    def test_unsupported_sort_by_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            walk_forward.run_walk_forward(
+                "2330",
+                sort_by="Test Sharpe Ratio",
+                train_days=20,
+                test_days=10,
+            )
+
+    def test_invalid_position_size_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            walk_forward.run_walk_forward(
+                "2330",
+                position_size=0,
+                train_days=20,
+                test_days=10,
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

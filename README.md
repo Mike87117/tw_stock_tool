@@ -299,3 +299,59 @@ tw_stock_tool/
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
 
+
+## Walk Forward Test
+
+`walk_forward.py` helps validate whether the best parameters found by `parameter_sweep.py` may be overfit to one historical period. It uses rolling train/test windows:
+
+- Train window: run a parameter sweep and select the best parameter set by a train metric.
+- Test window: apply that same parameter set to unseen later data.
+- Next window: move forward by `--step-days` and repeat.
+
+Examples:
+
+```bash
+python walk_forward.py --stock 2330 --period 5y
+python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
+python walk_forward.py --stock 2330 --period 10y --strategy rsi
+python walk_forward.py --stock 2330 --period 10y --strategy score
+python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
+python walk_forward.py --stock 2330 --period 10y --sort-by "Train Sharpe Ratio"
+python walk_forward.py --stock 2330 --period 10y --output
+python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
+```
+
+Options:
+
+- `--stock`: required stock id, for example `2330`.
+- `--period`: data period, default uses `DEFAULT_PERIOD`.
+- `--strategy`: `all`, `ma_cross`, `rsi`, or `score`; default is `all`.
+- `--train-days`: train window size in trading rows, default `504`.
+- `--test-days`: test window size in trading rows, default `126`.
+- `--step-days`: window step size, default equals `--test-days`.
+- `--sort-by`: train metric used to select parameters, default `Train Sharpe Ratio`.
+- `--force-refresh`: bypass cache and download fresh data.
+- `--output`: export Excel; omit the path to use `output/{stock}_walk_forward.xlsx`.
+- `--stop-loss`, `--take-profit`, `--max-hold-days`, `--position-size`: forwarded to backtesting.
+
+Supported `--sort-by` columns:
+
+- `Train Total Return %`
+- `Train CAGR %`
+- `Train Sharpe Ratio`
+- `Train Sortino Ratio`
+- `Train Profit Factor`
+- `Train Max Drawdown %`
+
+Excel output contains:
+
+- `Summary`: stock, period, strategy, window settings, average test metrics, positive test windows, and error count.
+- `Detail`: full train/test result for each window and strategy.
+- `Errors`: rows where a window or strategy failed.
+
+Limitations:
+
+- Walk Forward Test is still historical close-price backtesting.
+- It does not simulate slippage or intraday execution.
+- It does not represent future performance.
+- It is not investment advice.
