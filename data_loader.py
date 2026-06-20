@@ -3,6 +3,7 @@ from datetime import date
 from io import StringIO
 import logging
 from pathlib import Path
+import threading
 from typing import Any
 
 import pandas as pd
@@ -10,6 +11,9 @@ import requests
 import yfinance as yf
 
 from config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS
+
+
+_YFINANCE_DOWNLOAD_LOCK = threading.Lock()
 
 
 class DataLoaderError(Exception):
@@ -289,28 +293,29 @@ def _download_yfinance_quiet(
     interval: str,
     auto_adjust: bool,
 ) -> pd.DataFrame:
-    # yfinance can emit noisy per-symbol errors through stdout, stderr, or logging.
-    yf_logger = logging.getLogger("yfinance")
-    previous_disabled = yf_logger.disabled
-    previous_level = yf_logger.level
-    previous_propagate = yf_logger.propagate
-    try:
-        yf_logger.disabled = True
-        yf_logger.setLevel(logging.CRITICAL + 1)
-        yf_logger.propagate = False
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            return yf.download(
-                symbol,
-                period=period,
-                interval=interval,
-                auto_adjust=auto_adjust,
-                progress=False,
-                threads=False,
-            )
-    finally:
-        yf_logger.disabled = previous_disabled
-        yf_logger.setLevel(previous_level)
-        yf_logger.propagate = previous_propagate
+    # redirect_stdout/stderr are process-global, so serialize yfinance calls.
+    with _YFINANCE_DOWNLOAD_LOCK:
+        yf_logger = logging.getLogger("yfinance")
+        previous_disabled = yf_logger.disabled
+        previous_level = yf_logger.level
+        previous_propagate = yf_logger.propagate
+        try:
+            yf_logger.disabled = True
+            yf_logger.setLevel(logging.CRITICAL + 1)
+            yf_logger.propagate = False
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                return yf.download(
+                    symbol,
+                    period=period,
+                    interval=interval,
+                    auto_adjust=auto_adjust,
+                    progress=False,
+                    threads=False,
+                )
+        finally:
+            yf_logger.disabled = previous_disabled
+            yf_logger.setLevel(previous_level)
+            yf_logger.propagate = previous_propagate
 
 
 def _format_no_data_error(

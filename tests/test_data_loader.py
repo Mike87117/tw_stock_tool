@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -114,6 +115,79 @@ class DataLoaderTest(unittest.TestCase):
         called_symbols = [args.args[0] for args in download.call_args_list]
         self.assertEqual(called_symbols, ["6510.TW", "6510.TWO"])
 
+
+
+    def test_download_yfinance_quiet_calls_yfinance_download(self) -> None:
+        with patch.object(
+            data_loader.yf,
+            "download",
+            return_value=_download_df(),
+        ) as download:
+            df = data_loader._download_yfinance_quiet(
+                "2330.TW",
+                "1y",
+                "1d",
+                True,
+            )
+
+        self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+        download.assert_called_once_with(
+            "2330.TW",
+            period="1y",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
+
+    def test_download_yfinance_quiet_suppresses_output(self) -> None:
+        def noisy_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            print(f"HTTP Error 404: {symbol}")
+            print(f"1 Failed download: {symbol}", file=sys.stderr)
+            return _download_df()
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(data_loader.yf, "download", side_effect=noisy_download):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                df = data_loader._download_yfinance_quiet(
+                    "8069.TW",
+                    "1y",
+                    "1d",
+                    True,
+                )
+
+        self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_download_yfinance_quiet_is_thread_safe(self) -> None:
+        def noisy_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            print(f"HTTP Error 404: {symbol}")
+            print(f"possibly delisted: {symbol}", file=sys.stderr)
+            return _download_df()
+
+        symbols = [f"800{i}.TW" for i in range(8)]
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(data_loader.yf, "download", side_effect=noisy_download):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    results = list(
+                        executor.map(
+                            lambda symbol: data_loader._download_yfinance_quiet(
+                                symbol,
+                                "1y",
+                                "1d",
+                                True,
+                            ),
+                            symbols,
+                        )
+                    )
+
+        self.assertEqual(len(results), len(symbols))
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "")
 
     def test_numeric_tw_failure_two_success_is_quiet(self) -> None:
         def noisy_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
