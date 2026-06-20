@@ -6,3 +6,4 @@ mplfinance
 openpyxl
 requests
 # backtesting
+scikit-learn
