@@ -1,3 +1,5 @@
+import contextlib
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -158,6 +160,35 @@ class CleanStocksTest(unittest.TestCase):
             content = path.read_text(encoding="utf-8").splitlines()
 
         self.assertEqual(content, ["2330.TW", "8069.TWO"])
+
+
+    def test_print_summary_uses_clear_english_output(self) -> None:
+        result = pd.DataFrame(
+            [
+                {"Normalized Stock": "2330", "Status": "OK", "Error": ""},
+                {"Normalized Stock": "9999", "Status": "ERROR", "Error": "bad stock"},
+            ]
+        )
+        duplicates = pd.DataFrame([{"Row": 3, "Stock": "2330"}])
+        summary = clean_stocks.build_summary("stocks.txt", 3, result, duplicates, "clean.txt")
+        stream = io.StringIO()
+
+        with contextlib.redirect_stdout(stream):
+            clean_stocks.print_summary(
+                summary,
+                result,
+                report_path=Path("output/clean_stocks_report.xlsx"),
+                clean_path=Path("output/stocks_clean.txt"),
+            )
+
+        output = stream.getvalue()
+        self.assertNotIn("???", output)
+        self.assertIn("File:", output)
+        self.assertIn("Total input lines:", output)
+        self.assertIn("Unique stocks:", output)
+        self.assertIn("Valid stocks:", output)
+        self.assertIn("Invalid stocks:", output)
+        self.assertIn("Duplicate rows:", output)
 
     def test_run_clean_stocks_uses_mocked_download_and_outputs(self) -> None:
         temp_dir, stock_file = self._write_stock_file("# comment\n2330\n8069\n9999\n2330\n")

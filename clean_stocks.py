@@ -271,12 +271,12 @@ def print_summary(
     print("\n=================================")
     print("Clean Stocks")
     print("=================================")
-    print(f"???{summary['File']}")
-    print(f"?????{summary['Total Input Lines']}")
-    print(f"??????{summary['Unique Stocks']}")
-    print(f"?????{summary['Valid Stocks']}")
-    print(f"?????{summary['Invalid Stocks']}")
-    print(f"????{summary['Duplicate Rows']}")
+    print(f"File: {summary['File']}")
+    print(f"Total input lines: {summary['Total Input Lines']}")
+    print(f"Unique stocks: {summary['Unique Stocks']}")
+    print(f"Valid stocks: {summary['Valid Stocks']}")
+    print(f"Invalid stocks: {summary['Invalid Stocks']}")
+    print(f"Duplicate rows: {summary['Duplicate Rows']}")
     if invalid_df.empty:
         print("\nInvalid: none")
     else:
