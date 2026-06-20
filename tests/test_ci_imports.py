@@ -1,4 +1,4 @@
-﻿import importlib
+import importlib
 import unittest
 
 
@@ -13,6 +13,7 @@ class CiImportsTest(unittest.TestCase):
             "parameter_sweep",
             "walk_forward",
             "daily_report",
+            "clean_stocks",
         ]:
             with self.subTest(module=module_name):
                 self.assertIsNotNone(importlib.import_module(module_name))

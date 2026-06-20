@@ -36,6 +36,7 @@ pip install -r requirements.txt
 | 匯出單股分析 Excel | `python main.py --stock 2330 --period 2y --export-excel` |
 | 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
+| 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
 | 每日候選股票報告 | `python daily_report.py --file stocks.txt --output` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
 | Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
@@ -262,7 +263,10 @@ python benchmark.py --file stocks.txt --workers 8 --repeat 3
 
 Step 1：使用多股票掃描器。
 
+掃描前可以先用 `clean_stocks.py` 檢查並清理 `stocks.txt`，避免下市或錯誤代號拖慢後續流程。
+
 ```bash
+python clean_stocks.py --file stocks.txt --output --write-clean-file
 python scan_stocks.py --file stocks.txt
 python scan_stocks.py --stocks 2330 2317 2454
 ```
@@ -475,6 +479,42 @@ python scan_stocks.py --file stocks.txt --errors-only --log-errors
 - `output/stock_ranking.csv`
 - `output/stock_ranking.html`
 - `output/scan_errors.log`，需使用 `--log-errors`
+
+## 股票清單檢查
+
+`clean_stocks.py` 用於檢查 `stocks.txt` 內股票代號是否有效，適合在 `daily_report.py` 或 `scan_stocks.py` 前先執行。它會重用 `data_loader.download_tw_stock()`，保留 `.TW` / `.TWO` fallback、快取與 yfinance quiet download 行為。
+
+CLI 範例：
+
+```bash
+python clean_stocks.py --file stocks.txt
+python clean_stocks.py --file stocks.txt --output
+python clean_stocks.py --file stocks.txt --write-clean-file
+python clean_stocks.py --file stocks.txt --output output/clean_stocks_report.xlsx --write-clean-file output/stocks_clean.txt
+python clean_stocks.py --file stocks.txt --period 1y
+python clean_stocks.py --file stocks.txt --force-refresh
+python clean_stocks.py --file stocks.txt --no-auto-adjust
+```
+
+常用參數：
+
+- `--file`: 股票清單檔案，必填
+- `--period`: 分析期間，預設 `DEFAULT_PERIOD`
+- `--interval`: K 線週期，預設 `DEFAULT_INTERVAL`
+- `--auto-adjust` / `--no-auto-adjust`: 是否使用 yfinance 除權息調整價
+- `--force-refresh`: 忽略快取重新下載
+- `--output`: 輸出 Excel，省略路徑時使用 `output/clean_stocks_report.xlsx`
+- `--write-clean-file`: 輸出有效股票清單，省略路徑時使用 `output/stocks_clean.txt`
+
+Excel sheets：
+
+- `Summary`: 檔案、輸入行數、唯一股票數、有效/無效股票數、重複列數與 clean file 路徑
+- `Valid`: 可正常取得資料的股票
+- `Invalid`: 無法取得資料的股票與錯誤訊息
+- `Duplicates`: 重複股票代號與第一次出現的行號
+- `All`: 全部唯一股票檢查結果
+
+Clean file 只輸出有效股票的 `Normalized Stock`，例如純數字輸入會保留為 `2330`、`8069`；若原始輸入已明確帶 `.TW` / `.TWO`，則會保留完整市場別。
 
 ## Daily Report
 
@@ -722,6 +762,8 @@ Excel sheet：
 | `main.py` | 單股分析圖表 | `output/{stock}_chart.png` | 需搭配 `--save-chart`。 |
 | `scan_stocks.py` | 股票排行報表 | `output/stock_ranking.xlsx`<br>`output/stock_ranking.csv`<br>`output/stock_ranking.html` | 執行掃描後輸出；可用 `--output-dir` 指定資料夾。 |
 | `scan_stocks.py` | 錯誤紀錄 | `output/scan_errors.log` | 需使用 `--log-errors`。 |
+| `clean_stocks.py` | 股票清單檢查 Excel | `output/clean_stocks_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
+| `clean_stocks.py` | 有效股票清單 | `output/stocks_clean.txt` | 使用 `--write-clean-file`；只包含可正常取得資料的股票。 |
 | `daily_report.py` | 每日候選清單 Excel | `output/daily_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
 | `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 需搭配 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
@@ -1201,6 +1243,7 @@ python -m unittest discover -s tests
 - 訊號分數與 BUY / WATCH / HOLD / SELL 門檻
 - 回測交易、停損、停利、最大持有天數
 - 多股票掃描篩選與排序
+- `clean_stocks.py` 股票清單讀取、重複偵測、Excel 與 clean txt 輸出
 - 快取工具
 - data loader 快取、TWSE/TPEX fallback 路由
 - `main.py` CLI / 互動式入口
@@ -1218,6 +1261,7 @@ tw_stock_tool/
   .github/workflows/python-tests.yml
   main.py
   scan_stocks.py
+  clean_stocks.py
   daily_report.py
   strategy_compare.py
   parameter_sweep.py
