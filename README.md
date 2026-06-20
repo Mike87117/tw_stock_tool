@@ -45,6 +45,7 @@ pip install -r requirements.txt
 | AI Walk Forward skeleton | `python ai_walk_forward.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | Baseline ML model | `python baseline_ml_model.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | AI Prediction Report | `python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output` |
+| 多股票 AI 掃描 | `python ai_stock_scanner.py --file stocks.txt --period 5y --horizon 5 --output` |
 | Benchmark | `python benchmark.py --file stocks.txt --workers 8 --repeat 3` |
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |
@@ -81,6 +82,8 @@ Baseline ML Model
 ↓
 AI Prediction Report
 ↓
+AI Stock Scanner
+↓
 持續追蹤
 ```
 
@@ -93,6 +96,8 @@ AI Prediction Report
 - `ai_walk_forward.py` 只做時間切分，不訓練模型。
 - `baseline_ml_model.py` 使用 `RandomForestClassifier` 作為 baseline。
 - `ai_prediction_report.py` 整理 baseline model 結果成 `Summary` / `Detail` / `Errors`。
+- `ai_stock_scanner.py` 會批次執行多檔股票的 baseline AI validation，並輸出 ranking。
+- 這仍然只是研究工具，不是投資建議。
 - 所有 AI / ML 功能僅供研究，不保證預測績效，也不是投資建議。
 
 ## 新手第一次使用範例
