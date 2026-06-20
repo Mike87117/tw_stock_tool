@@ -1,0 +1,111 @@
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pandas as pd
+
+import stock_list_updater
+
+
+class StockListUpdaterTest(unittest.TestCase):
+    def _mock_response(self, payload: list[dict[str, object]]) -> Mock:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = payload
+        return response
+
+    def test_twse_parsing(self) -> None:
+        payload = [
+            {"Code": "2330", "Name": "TSMC", "Type": "semiconductor"},
+            {"Code": "1101", "Name": "TCC", "Type": "cement"},
+        ]
+        with patch.object(stock_list_updater.requests, "get", return_value=self._mock_response(payload)):
+            result = stock_list_updater.fetch_twse_stock_list()
+
+        self.assertEqual(result["Stock"].tolist(), ["2330", "1101"])
+        self.assertEqual(result["Market"].tolist(), ["TWSE", "TWSE"])
+
+    def test_tpex_parsing(self) -> None:
+        payload = [
+            {"Code": "8069", "Name": "E Ink", "Type": "optoelectronics"},
+            {"Code": "8299", "Name": "Phison", "Type": "semiconductor"},
+        ]
+        with patch.object(stock_list_updater.requests, "get", return_value=self._mock_response(payload)):
+            result = stock_list_updater.fetch_tpex_stock_list()
+
+        self.assertEqual(result["Stock"].tolist(), ["8069", "8299"])
+        self.assertEqual(result["Market"].tolist(), ["TPEX", "TPEX"])
+
+    def test_all_merges_and_deduplicates(self) -> None:
+        twse = pd.DataFrame(
+            [
+                {"Stock": "2330", "Name": "TSMC", "Market": "TWSE", "Type": "stock"},
+                {"Stock": "1101", "Name": "TCC", "Market": "TWSE", "Type": "stock"},
+            ]
+        )
+        tpex = pd.DataFrame(
+            [
+                {"Stock": "2330", "Name": "duplicate", "Market": "TPEX", "Type": "stock"},
+                {"Stock": "8069", "Name": "E Ink", "Market": "TPEX", "Type": "stock"},
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "stocks.txt"
+            with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse):
+                with patch.object(stock_list_updater, "fetch_tpex_stock_list", return_value=tpex):
+                    result, path = stock_list_updater.update_stock_list("all", output)
+
+        self.assertEqual(result["Stock"].tolist(), ["1101", "2330", "8069"])
+        self.assertEqual(path, output)
+
+    def test_filter_excludes_etf_warrants_and_non_stock_codes(self) -> None:
+        data = pd.DataFrame(
+            [
+                {"Stock": "2330", "Name": "TSMC", "Market": "TWSE", "Type": "stock"},
+                {"Stock": "0050", "Name": "????50 ETF", "Market": "TWSE", "Type": "ETF"},
+                {"Stock": "12345", "Name": "bad", "Market": "TWSE", "Type": "stock"},
+                {"Stock": "0301", "Name": "???????", "Market": "TWSE", "Type": "??"},
+                {"Stock": "ABCD", "Name": "bad", "Market": "TWSE", "Type": "stock"},
+            ]
+        )
+
+        result = stock_list_updater.normalize_stock_list(data)
+
+        self.assertEqual(result["Stock"].tolist(), ["2330"])
+
+    def test_write_stock_list_outputs_txt(self) -> None:
+        data = pd.DataFrame([{"Stock": "1101"}, {"Stock": "2330"}])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "stocks.txt"
+            path = stock_list_updater.write_stock_list(data, output)
+            content = path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(content, ["1101", "2330"])
+
+    def test_invalid_market_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            stock_list_updater.update_stock_list("bad", "stocks.txt")
+
+    def test_all_failure_does_not_write_partial_without_allow_partial(self) -> None:
+        twse = pd.DataFrame([{"Stock": "2330", "Name": "TSMC", "Market": "TWSE", "Type": "stock"}])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "stocks.txt"
+            with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse):
+                with patch.object(stock_list_updater, "fetch_tpex_stock_list", side_effect=RuntimeError("down")):
+                    with self.assertRaises(stock_list_updater.StockListUpdaterError):
+                        stock_list_updater.update_stock_list("all", output)
+            self.assertFalse(output.exists())
+
+    def test_parse_args(self) -> None:
+        args = stock_list_updater._parse_args(
+            ["--market", "all", "--output", "stocks.txt", "--allow-partial"]
+        )
+
+        self.assertEqual(args.market, "all")
+        self.assertEqual(args.output, "stocks.txt")
+        self.assertTrue(args.allow_partial)
+
+
+if __name__ == "__main__":
+    unittest.main()

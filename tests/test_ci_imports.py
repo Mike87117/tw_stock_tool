@@ -20,6 +20,7 @@ class CiImportsTest(unittest.TestCase):
             "ai_prediction_report",
             "ai_stock_scanner",
             "app_services",
+            "stock_list_updater",
         ]:
             with self.subTest(module=module_name):
                 self.assertIsNotNone(importlib.import_module(module_name))
