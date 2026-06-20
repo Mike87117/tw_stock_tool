@@ -35,6 +35,7 @@ pip install -r requirements.txt
 | 單股分析 | `python main.py --stock 2330 --period 2y` |
 | 匯出單股分析 Excel | `python main.py --stock 2330 --period 2y --export-excel` |
 | 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
+| 更新股票清單 | `python stock_list_updater.py --market all --output stocks.txt` |
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
 | 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
 | 每日候選股票報告 | `python daily_report.py --file stocks.txt --output` |
@@ -54,6 +55,8 @@ pip install -r requirements.txt
 ### 建議研究流程
 
 ```text
+更新股票清單
+↓
 掃描股票
 ↓
 Daily Report

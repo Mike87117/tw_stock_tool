@@ -16,22 +16,50 @@ import requests
 TWSE_STOCK_LIST_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_STOCK_LIST_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 VALID_MARKETS = {"twse", "tpex", "all"}
+MIN_COMMON_STOCKS = 100
 
-CODE_KEYS = ("????", "Code", "????", "??????", "????", "stock_id")
-NAME_KEYS = ("????", "Name", "????", "??????", "????", "name")
-TYPE_KEYS = ("?????", "???", "Type", "???", "??", "security_type")
+CODE_KEYS = (
+    "\u516c\u53f8\u4ee3\u865f",  # TWSE: company code
+    "SecuritiesCompanyCode",  # TPEx OpenAPI
+    "Code",
+    "\u8b49\u5238\u4ee3\u865f",
+    "\u6709\u50f9\u8b49\u5238\u4ee3\u865f",
+    "\u80a1\u7968\u4ee3\u865f",
+    "stock_id",
+)
+NAME_KEYS = (
+    "\u516c\u53f8\u540d\u7a31",  # TWSE: company name
+    "CompanyName",  # TPEx OpenAPI
+    "Name",
+    "\u8b49\u5238\u540d\u7a31",
+    "\u6709\u50f9\u8b49\u5238\u540d\u7a31",
+    "\u80a1\u7968\u540d\u7a31",
+    "name",
+)
+TYPE_KEYS = (
+    "\u6709\u50f9\u8b49\u5238\u5225",
+    "\u7522\u696d\u5225",  # TWSE: industry type
+    "SecuritiesIndustryCode",  # TPEx OpenAPI
+    "Type",
+    "\u5e02\u5834\u5225",
+    "\u985e\u5225",
+    "security_type",
+)
 EXCLUDE_KEYWORDS = (
     "ETF",
     "ETN",
-    "??",
-    "??",
-    "??",
-    "??",
-    "??",
-    "??",
-    "??????",
-    "????",
-    "????",
+    "WARRANT",
+    "CALL",
+    "PUT",
+    "\u6b0a\u8b49",
+    "\u8a8d\u8cfc",
+    "\u8a8d\u552e",
+    "\u725b\u8b49",
+    "\u718a\u8b49",
+    "\u725b\u718a",
+    "\u6307\u6578\u6295\u8cc7\u8b49\u5238",
+    "\u53d7\u76ca\u8b49\u5238",
+    "\u5b58\u8a17\u6191\u8b49",
 )
 
 
@@ -73,7 +101,15 @@ def _records_to_frame(records: list[dict[str, Any]], market: str) -> pd.DataFram
                 "Type": _field(record, TYPE_KEYS),
             }
         )
-    return pd.DataFrame(rows, columns=["Stock", "Name", "Market", "Type"])
+    frame = pd.DataFrame(rows, columns=["Stock", "Name", "Market", "Type"])
+    if records and not frame["Stock"].astype(str).str.strip().any():
+        sample_keys = sorted({key for record in records[:3] for key in record.keys()})
+        raise StockListUpdaterError(
+            f"Cannot find stock code field for {market.upper()} data. "
+            f"Supported keys: {', '.join(CODE_KEYS)}. "
+            f"Sample keys: {sample_keys}"
+        )
+    return frame
 
 
 def fetch_twse_stock_list() -> pd.DataFrame:
@@ -141,6 +177,7 @@ def update_stock_list(
     market: str = "all",
     output: str | Path = "stocks.txt",
     allow_partial: bool = False,
+    min_common_stocks: int = MIN_COMMON_STOCKS,
 ) -> tuple[pd.DataFrame, Path]:
     """Fetch, normalize, and write a stock list for the selected market."""
     selected = market.lower().strip()
@@ -162,6 +199,12 @@ def update_stock_list(
 
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     normalized = normalize_stock_list(combined)
+    if len(normalized) < min_common_stocks:
+        raise StockListUpdaterError(
+            "Abnormally few common stocks parsed: "
+            f"{len(normalized)} < {min_common_stocks}. "
+            "Official data format may have changed."
+        )
     path = write_stock_list(normalized, output)
     return normalized, path
 
