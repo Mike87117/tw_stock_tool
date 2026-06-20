@@ -72,6 +72,7 @@ def run_backtest(
     trades: list[dict[str, Any]] = []
     equity_curve = []
     invested_days = 0
+    pending_order: str | None = None
 
     def close_position(exit_pos: int, exit_reason: str) -> None:
         nonlocal cash, shares, entry_cost, entry_date, entry_price, entry_pos
@@ -110,40 +111,54 @@ def run_backtest(
         entry_date = None
         entry_pos = None
 
+    def open_position(entry_execution_pos: int) -> None:
+        nonlocal cash, shares, entry_cost, entry_date, entry_price, entry_pos
+
+        if shares > 0:
+            return
+
+        price = float(df.iloc[entry_execution_pos]["Close"])
+        invest_cash = cash * position_size
+        affordable = int(invest_cash // (price * (1 + fee_rate)))
+        if affordable <= 0:
+            return
+
+        gross = affordable * price
+        fee = gross * fee_rate
+        total_cost = gross + fee
+        cash -= total_cost
+        shares = affordable
+        entry_cost = total_cost
+        entry_price = price
+        entry_date = df.index[entry_execution_pos]
+        entry_pos = entry_execution_pos
+
     for pos, (_, row) in enumerate(df.iterrows()):
         price = float(row["Close"])
         signal = row["Signal"]
+
+        # Execute yesterday's signal at today's close to avoid look-ahead bias.
+        if pending_order:
+            if pending_order == "BUY" and shares == 0:
+                open_position(pos)
+            elif pending_order.startswith("SELL") and shares > 0:
+                close_position(pos, pending_order)
+            pending_order = None
 
         if shares > 0 and entry_pos is not None:
             invested_days += 1
             change_pct = _ratio(price - entry_price, entry_price) * 100
             current_hold_days = _hold_days(df.index, entry_pos, pos)
-            exit_reason = None
             if stop_loss_pct is not None and change_pct <= -abs(stop_loss_pct):
-                exit_reason = "SELL_STOP_LOSS"
+                pending_order = "SELL_STOP_LOSS"
             elif take_profit_pct is not None and change_pct >= abs(take_profit_pct):
-                exit_reason = "SELL_TAKE_PROFIT"
+                pending_order = "SELL_TAKE_PROFIT"
             elif max_hold_days is not None and current_hold_days >= max_hold_days:
-                exit_reason = "SELL_MAX_HOLD"
+                pending_order = "SELL_MAX_HOLD"
             elif signal == "SELL":
-                exit_reason = "SELL"
-
-            if exit_reason:
-                close_position(pos, exit_reason)
-
-        if signal == "BUY" and shares == 0:
-            invest_cash = cash * position_size
-            affordable = int(invest_cash // (price * (1 + fee_rate)))
-            if affordable > 0:
-                gross = affordable * price
-                fee = gross * fee_rate
-                total_cost = gross + fee
-                cash -= total_cost
-                shares = affordable
-                entry_cost = total_cost
-                entry_price = price
-                entry_date = df.index[pos]
-                entry_pos = pos
+                pending_order = "SELL"
+        elif signal == "BUY":
+            pending_order = "BUY"
 
         equity_curve.append(cash + shares * price)
 
