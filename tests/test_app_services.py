@@ -95,6 +95,57 @@ class AppServicesTest(unittest.TestCase):
         self.assertEqual(kwargs["config"].top, 5)
         self.assertIs(result, expected)
 
+    def test_stock_list_updater_service_calls_update_stock_list(self) -> None:
+        stocks = pd.DataFrame([{"Stock": "2330"}, {"Stock": "8069"}])
+        with patch.object(
+            app_services.stock_list_updater_module,
+            "update_stock_list",
+            return_value=(stocks, Path("stocks.txt")),
+        ) as mocked:
+            result = app_services.stock_list_updater_service(
+                market="all",
+                output="stocks.txt",
+                allow_partial=True,
+                min_common_stocks=10,
+            )
+
+        mocked.assert_called_once_with(
+            market="all",
+            output="stocks.txt",
+            allow_partial=True,
+            min_common_stocks=10,
+        )
+        self.assertIs(result["stocks"], stocks)
+        self.assertEqual(result["output_path"], Path("stocks.txt"))
+        self.assertEqual(result["count"], 2)
+
+    def test_stock_list_updater_service_omits_none_min_common_stocks(self) -> None:
+        stocks = pd.DataFrame([{"Stock": "2330"}])
+        with patch.object(
+            app_services.stock_list_updater_module,
+            "update_stock_list",
+            return_value=(stocks, Path("stocks.txt")),
+        ) as mocked:
+            app_services.stock_list_updater_service()
+
+        mocked.assert_called_once_with(
+            market="all",
+            output="stocks.txt",
+            allow_partial=False,
+        )
+
+    def test_stock_list_updater_service_wraps_errors(self) -> None:
+        with patch.object(
+            app_services.stock_list_updater_module,
+            "update_stock_list",
+            side_effect=RuntimeError("official API down"),
+        ):
+            with self.assertRaisesRegex(
+                app_services.AppServiceError,
+                "Stock list updater failed: official API down",
+            ):
+                app_services.stock_list_updater_service()
+
     def test_ai_stock_scanner_service_calls_scan_and_export(self) -> None:
         ranking = pd.DataFrame([{"Stock": "2330"}])
         with patch.object(app_services.ai_stock_scanner_module, "scan_ai_stocks", return_value=ranking) as scan_mock:

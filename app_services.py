@@ -17,6 +17,7 @@ import ai_stock_scanner as ai_stock_scanner_module
 import clean_stocks as clean_stocks_module
 import daily_report as daily_report_module
 import scanner as scanner_module
+import stock_list_updater as stock_list_updater_module
 from config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD
 from daily_report import DEFAULT_MIN_SCORE, DEFAULT_SIGNALS, DEFAULT_TOP
 from scanner import ProgressCallback, ScanConfig
@@ -149,6 +150,31 @@ def scan_stocks_with_options_service(
         errors_only=errors_only,
     )
     return scan_stocks_service(stock_ids, config=config, progress_callback=progress_callback)
+
+
+def stock_list_updater_service(
+    market: str = "all",
+    output: str | Path = "stocks.txt",
+    allow_partial: bool = False,
+    min_common_stocks: int | None = None,
+) -> dict[str, Any]:
+    """Update the Taiwan stock list through the service layer."""
+    try:
+        kwargs: dict[str, Any] = {
+            "market": market,
+            "output": output,
+            "allow_partial": allow_partial,
+        }
+        if min_common_stocks is not None:
+            kwargs["min_common_stocks"] = min_common_stocks
+        stocks_df, output_path = stock_list_updater_module.update_stock_list(**kwargs)
+        return {
+            "stocks": stocks_df,
+            "output_path": output_path,
+            "count": len(stocks_df),
+        }
+    except Exception as exc:
+        raise _wrap_error("Stock list updater", exc) from exc
 
 
 def ai_stock_scanner_service(
