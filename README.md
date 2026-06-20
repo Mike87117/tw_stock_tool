@@ -761,12 +761,21 @@ python cache_manager.py --clear
 
 ## 資料來源與快取
 
-主要資料來源為 yfinance。若 yfinance 無資料且 `auto_adjust=False`，會嘗試官方 fallback：
+主要資料來源為 yfinance。輸入純數字股票代號時，程式會先嘗試 `{stock}.TW`，若 yfinance 無資料，再嘗試 `{stock}.TWO`。若已知市場別，也可以直接輸入完整代號，例如 `2330.TW` 或 `8069.TWO`。
+
+台股 Yahoo Finance 常見代號規則：
+
+- `.TW`: 通常代表上市股票
+- `.TWO`: 通常代表上櫃股票
+
+若 yfinance 的 `.TW` 與 `.TWO` 都無資料且 `auto_adjust=False`，會嘗試官方 fallback：
 
 - `.TW`: TWSE 官方日成交資訊
 - `.TWO`: TPEX 官方個股月成交資訊；若月資料端點回空，會退到 TPEX openapi 最近一日收盤行情
 
 注意：官方 fallback 目前提供未除權息調整的日資料，只支援 `1d` interval。TPEX openapi 備援只保證最近一日資料可用，長週期指標仍可能因資料筆數不足而失敗。若你需要除權息調整價，請使用 yfinance 的 `--auto-adjust`，此時不會混用官方 fallback。
+
+若 `.TW` 與 `.TWO` 都查無資料，可能是股票已下市、代號錯誤、Yahoo Finance 暫時無資料，或資料源暫時限流。例如 `2888` 這類歷史代號或下市合併類型，工具可能無法取得正常價格資料，建議從 `stocks.txt` 移除，或保留在輸出錯誤清單中追蹤。
 
 快取規則：
 
@@ -1058,8 +1067,8 @@ pip install -r requirements.txt
 
 這是台股資料來源使用的代號格式：
 
-- `.TW` = 上市股票
-- `.TWO` = 上櫃股票
+- `.TW` = 通常代表上市股票
+- `.TWO` = 通常代表上櫃股票
 
 範例：
 
@@ -1068,7 +1077,9 @@ pip install -r requirements.txt
 6488 -> 6488.TWO
 ```
 
-使用本工具時通常只需要輸入數字股票代號，程式會自動嘗試判斷。
+使用本工具時通常只需要輸入數字股票代號。程式會先嘗試 `.TW`，如果 yfinance 查無資料，再嘗試 `.TWO`。若你已知市場別，可以直接輸入完整代號，例如 `2330.TW` 或 `8069.TWO`。
+
+如果 `.TW` 與 `.TWO` 都失敗，可能原因包含股票已下市、股票代號錯誤、Yahoo Finance 暫時無資料，或資料源暫時限流。例如 `2888` 這類歷史代號或下市合併類型，工具可能無法取得正常價格資料，建議從 `stocks.txt` 移除，或保留在輸出錯誤清單中追蹤。
 
 ### Q: 什麼是 `auto_adjust`？
 

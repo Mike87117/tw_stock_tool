@@ -1,4 +1,6 @@
-﻿from datetime import date
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import date
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -266,6 +268,55 @@ def _download_official_stock(stock_id: str, suffix: str, period: str, interval: 
     raise DataLoaderError(f"Unsupported official fallback suffix: {suffix}")
 
 
+def _symbol_candidates(stock_id: str) -> list[tuple[str, str, str]]:
+    normalized = stock_id.strip().upper()
+    if normalized.endswith(".TWO"):
+        base = normalized[:-4]
+        return [(normalized, base, ".TWO")]
+    if normalized.endswith(".TW"):
+        base = normalized[:-3]
+        return [(normalized, base, ".TW")]
+    return [
+        (f"{normalized}.TW", normalized, ".TW"),
+        (f"{normalized}.TWO", normalized, ".TWO"),
+    ]
+
+
+def _download_yfinance_symbol(
+    symbol: str,
+    period: str,
+    interval: str,
+    auto_adjust: bool,
+) -> pd.DataFrame:
+    # yfinance may print noisy per-symbol errors; collect them and report once.
+    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+        return yf.download(
+            symbol,
+            period=period,
+            interval=interval,
+            auto_adjust=auto_adjust,
+            progress=False,
+            threads=False,
+        )
+
+
+def _format_no_data_error(
+    original_stock_id: str,
+    tried_symbols: list[str],
+    errors: list[str],
+) -> DataLoaderError:
+    details = " | ".join(errors)
+    message = (
+        f"No price data found for {original_stock_id}. "
+        f"Tried: {', '.join(tried_symbols)}. "
+        "The stock may be delisted, the symbol may be wrong, "
+        "or the data source may be temporarily unavailable or rate-limited."
+    )
+    if details:
+        message = f"{message} Attempts: {details}"
+    return DataLoaderError(message)
+
+
 def download_tw_stock(
     stock_id: str,
     period: str = "1y",
@@ -275,33 +326,27 @@ def download_tw_stock(
     verbose: bool = False,
 ) -> tuple[pd.DataFrame, str]:
     _validate_inputs(stock_id, period, interval)
-    stock_id = stock_id.strip()
+    original_stock_id = stock_id.strip()
     if auto_adjust is None:
         auto_adjust = DEFAULT_AUTO_ADJUST
-    suffixes = [".TW", ".TWO"]
-    errors = []
 
-    for suffix in suffixes:
-        symbol = f"{stock_id}{suffix}"
+    candidates = _symbol_candidates(original_stock_id)
+    tried_symbols = [symbol for symbol, _, _ in candidates]
+    errors: list[str] = []
+
+    for symbol, _, _ in candidates:
         cache_path = _cache_path(symbol, period, interval, auto_adjust)
-        try:
-            if not force_refresh and _is_cache_fresh(cache_path):
-                try:
-                    cached_df = _read_cache(cache_path)
-                    if verbose:
-                        print(f"{symbol}: From cache")
-                    return _prepare_ohlcv(cached_df, symbol), symbol
-                except Exception as exc:
-                    errors.append(f"{symbol} cache read failed: {exc}")
+        if not force_refresh and _is_cache_fresh(cache_path):
+            try:
+                cached_df = _read_cache(cache_path)
+                if verbose:
+                    print(f"{symbol}: From cache")
+                return _prepare_ohlcv(cached_df, symbol), symbol
+            except Exception as exc:
+                errors.append(f"{symbol} cache read failed: {exc}")
 
-            df = yf.download(
-                symbol,
-                period=period,
-                interval=interval,
-                auto_adjust=auto_adjust,
-                progress=False,
-                threads=False,
-            )
+        try:
+            df = _download_yfinance_symbol(symbol, period, interval, auto_adjust)
             if not df.empty:
                 df = _prepare_ohlcv(df, symbol)
                 try:
@@ -315,9 +360,11 @@ def download_tw_stock(
         except Exception as exc:
             errors.append(f"{symbol} yfinance failed: {exc}")
 
-        if not auto_adjust:
+    if not auto_adjust:
+        for symbol, base_stock_id, suffix in candidates:
+            cache_path = _cache_path(symbol, period, interval, auto_adjust)
             try:
-                df = _download_official_stock(stock_id, suffix, period, interval)
+                df = _download_official_stock(base_stock_id, suffix, period, interval)
                 try:
                     _write_cache(df, cache_path)
                 except Exception as exc:
@@ -330,8 +377,5 @@ def download_tw_stock(
                 source = "TWSE" if suffix == ".TW" else "TPEX"
                 errors.append(f"{symbol} {source} fallback failed: {exc}")
 
-    raise DataLoaderError(
-        "Cannot find stock data. Please check the symbol or retry later. Attempts: "
-        + " | ".join(errors)
-    )
+    raise _format_no_data_error(original_stock_id, tried_symbols, errors)
 

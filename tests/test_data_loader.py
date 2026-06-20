@@ -92,6 +92,117 @@ class DataLoaderTest(unittest.TestCase):
         self.assertEqual(tpex.call_count, 1)
         self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
 
+    def test_numeric_symbol_tries_two_after_tw_yfinance_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(
+                    data_loader.yf,
+                    "download",
+                    side_effect=[pd.DataFrame(), _download_df()],
+                ) as download:
+                    df, symbol = data_loader.download_tw_stock(
+                        "6510",
+                        period="1y",
+                        auto_adjust=True,
+                    )
+
+        self.assertEqual(symbol, "6510.TWO")
+        self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+        called_symbols = [args.args[0] for args in download.call_args_list]
+        self.assertEqual(called_symbols, ["6510.TW", "6510.TWO"])
+
+    def test_numeric_symbol_returns_two_when_two_yfinance_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(
+                    data_loader.yf,
+                    "download",
+                    side_effect=[pd.DataFrame(), _download_df()],
+                ):
+                    _, symbol = data_loader.download_tw_stock(
+                        "8069",
+                        period="1y",
+                        auto_adjust=True,
+                    )
+
+        self.assertEqual(symbol, "8069.TWO")
+
+    def test_explicit_tw_does_not_try_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(
+                    data_loader.yf,
+                    "download",
+                    return_value=pd.DataFrame(),
+                ) as download:
+                    with self.assertRaises(data_loader.DataLoaderError):
+                        data_loader.download_tw_stock(
+                            "6510.TW",
+                            period="1y",
+                            auto_adjust=True,
+                        )
+
+        self.assertEqual(download.call_count, 1)
+        self.assertEqual(download.call_args.args[0], "6510.TW")
+
+    def test_explicit_two_does_not_try_tw(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(
+                    data_loader.yf,
+                    "download",
+                    return_value=pd.DataFrame(),
+                ) as download:
+                    with self.assertRaises(data_loader.DataLoaderError):
+                        data_loader.download_tw_stock(
+                            "6510.TWO",
+                            period="1y",
+                            auto_adjust=True,
+                        )
+
+        self.assertEqual(download.call_count, 1)
+        self.assertEqual(download.call_args.args[0], "6510.TWO")
+
+    def test_no_data_error_lists_tried_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with self.assertRaises(data_loader.DataLoaderError) as context:
+                        data_loader.download_tw_stock(
+                            "8299",
+                            period="1y",
+                            auto_adjust=True,
+                        )
+
+        message = str(context.exception)
+        self.assertIn("No price data found for 8299", message)
+        self.assertIn("Tried: 8299.TW, 8299.TWO", message)
+        self.assertIn("delisted", message)
+        self.assertIn("rate-limited", message)
+
+    def test_auto_adjust_false_calls_official_after_yfinance_candidates_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(
+                    data_loader.yf,
+                    "download",
+                    return_value=pd.DataFrame(),
+                ) as download:
+                    with patch.object(
+                        data_loader,
+                        "_download_official_stock",
+                        return_value=_download_df(),
+                    ) as official:
+                        _, symbol = data_loader.download_tw_stock(
+                            "2888",
+                            period="1y",
+                            auto_adjust=False,
+                        )
+
+        self.assertEqual(symbol, "2888.TW")
+        self.assertEqual(download.call_count, 2)
+        official.assert_called_once_with("2888", ".TW", "1y", "1d")
+
     def test_auto_adjust_skips_official_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
