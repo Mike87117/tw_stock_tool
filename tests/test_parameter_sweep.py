@@ -297,6 +297,41 @@ class ParameterSweepTest(unittest.TestCase):
             self.assertEqual(result, output_path)
             self.assertTrue(output_path.exists())
 
+
+    def test_parameter_sweep_uses_next_day_backtest_execution(self) -> None:
+        signal_df = pd.DataFrame(
+            {
+                "Close": [100.0, 110.0, 120.0, 130.0],
+                "Signal": ["HOLD", "HOLD", "HOLD", "HOLD"],
+                "Score": [5.0, 0.0, -3.0, 0.0],
+            },
+            index=pd.date_range("2024-01-01", periods=4, freq="D"),
+        )
+        analysis = StockAnalysis(
+            stock_id="2330",
+            symbol="2330.TW",
+            raw_df=pd.DataFrame(),
+            indicator_df=pd.DataFrame(),
+            signal_df=signal_df,
+            latest=signal_df.iloc[-1],
+            summary={},
+        )
+
+        with patch.object(parameter_sweep, "analyze_stock", return_value=analysis):
+            with patch.object(parameter_sweep, "INITIAL_CAPITAL", 10000):
+                with patch.object(parameter_sweep, "FEE_RATE", 0):
+                    with patch.object(parameter_sweep, "TAX_RATE", 0):
+                        result = parameter_sweep.run_parameter_sweep(
+                            "2330",
+                            strategy="score",
+                            top=20,
+                        )
+
+        target = result[result["Parameters"] == "buy_score=4, sell_score=-2"].iloc[0]
+        # Score creates BUY on day 1 and SELL on day 3. run_backtest must
+        # execute those orders at day 2 and day 4 closes, yielding 18%.
+        self.assertEqual(target["Total Return %"], 18.0)
+
     def test_invalid_position_size_raises(self) -> None:
         with self.assertRaises(ValueError):
             parameter_sweep.run_parameter_sweep("2330", position_size=0)

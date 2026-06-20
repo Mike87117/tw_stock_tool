@@ -78,6 +78,38 @@ class StrategyCompareTest(unittest.TestCase):
         self.assertEqual(args.score_buy, 4)
         self.assertEqual(args.score_sell, -2)
 
+    def test_compare_strategies_uses_next_day_backtest_execution(self) -> None:
+        signal_df = pd.DataFrame(
+            {
+                "Close": [100.0, 110.0, 120.0, 130.0],
+                "Signal": ["BUY", "HOLD", "SELL", "HOLD"],
+            },
+            index=pd.date_range("2024-01-01", periods=4, freq="D"),
+        )
+        analysis = StockAnalysis(
+            stock_id="2330",
+            symbol="2330.TW",
+            raw_df=pd.DataFrame(),
+            indicator_df=pd.DataFrame(),
+            signal_df=signal_df,
+            latest=signal_df.iloc[-1],
+            summary={},
+        )
+
+        def passthrough_strategy(df: pd.DataFrame, **_: object) -> pd.DataFrame:
+            return df[["Close", "Signal"]].copy()
+
+        with patch.object(strategy_compare, "STRATEGIES", {"score_strategy": passthrough_strategy}):
+            with patch.object(strategy_compare, "analyze_stock", return_value=analysis):
+                with patch.object(strategy_compare, "INITIAL_CAPITAL", 10000):
+                    with patch.object(strategy_compare, "FEE_RATE", 0):
+                        with patch.object(strategy_compare, "TAX_RATE", 0):
+                            result = strategy_compare.compare_strategies("2330")
+
+        # BUY at day 1 executes at day 2 close (110), then SELL at day 3
+        # executes at day 4 close (130). Same-day execution would return 20%.
+        self.assertEqual(result.loc[0, "Total Return %"], 18.0)
+
 
 if __name__ == "__main__":
     unittest.main()

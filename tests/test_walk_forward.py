@@ -66,6 +66,15 @@ class WalkForwardTest(unittest.TestCase):
         self.assertEqual(windows[0][1].index[0], df.index[0])
         self.assertEqual(windows[0][2].index[0], df.index[4])
 
+
+    def test_train_test_windows_do_not_overlap(self) -> None:
+        df = self._sample_df(12)
+        windows = walk_forward.split_windows(df, train_days=4, test_days=3, step_days=2)
+
+        for _, train, test in windows:
+            self.assertTrue(set(train.index).isdisjoint(set(test.index)))
+            self.assertLess(train.index[-1], test.index[0])
+
     def test_window_splitting_requires_enough_data(self) -> None:
         df = self._sample_df(5)
 
@@ -135,6 +144,55 @@ class WalkForwardTest(unittest.TestCase):
 
         self.assertGreater((result["Error"].astype(str) != "").sum(), 0)
         self.assertGreater((result["Error"].astype(str) == "").sum(), 0)
+
+
+    def test_parameter_selection_uses_train_metrics_only(self) -> None:
+        df = self._sample_df(8)
+        train = df.iloc[:4].copy()
+        test = df.iloc[4:].copy()
+        params_a = {"buy_score": 4, "sell_score": -2}
+        params_b = {"buy_score": 6, "sell_score": -4}
+        test_calls: list[dict[str, int]] = []
+
+        def fake_backtest(
+            data: pd.DataFrame,
+            strategy: str,
+            params: dict[str, int],
+            *_: object,
+        ) -> dict[str, object]:
+            is_train = data.index[0] == train.index[0]
+            if not is_train:
+                test_calls.append(params.copy())
+            sharpe = 10.0 if is_train and params == params_a else 1.0
+            if not is_train and params == params_b:
+                sharpe = 999.0
+            return {
+                "Total Return %": sharpe,
+                "CAGR %": sharpe,
+                "Trade Count": 1,
+                "Win Rate %": 50.0,
+                "Max Drawdown %": -1.0,
+                "Profit Factor": sharpe,
+                "Sharpe Ratio": sharpe,
+                "Sortino Ratio": sharpe,
+            }
+
+        with patch.object(walk_forward, "_parameter_grid", return_value=[params_a, params_b]):
+            with patch.object(walk_forward, "_run_strategy_backtest", side_effect=fake_backtest):
+                result = walk_forward._evaluate_window_strategy(
+                    window_number=1,
+                    train=train,
+                    test=test,
+                    strategy="score",
+                    sort_by="Train Sharpe Ratio",
+                    stop_loss_pct=None,
+                    take_profit_pct=None,
+                    max_hold_days=None,
+                    position_size=1.0,
+                )
+
+        self.assertEqual(result["Parameters"], "buy_score=4, sell_score=-2")
+        self.assertEqual(test_calls, [params_a])
 
     def test_export_excel_contains_required_sheets(self) -> None:
         detail = pd.DataFrame(
