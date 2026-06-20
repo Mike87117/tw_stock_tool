@@ -17,6 +17,7 @@ class CiImportsTest(unittest.TestCase):
             "ml_dataset",
             "ai_walk_forward",
             "baseline_ml_model",
+            "ai_prediction_report",
         ]:
             with self.subTest(module=module_name):
                 self.assertIsNotNone(importlib.import_module(module_name))
