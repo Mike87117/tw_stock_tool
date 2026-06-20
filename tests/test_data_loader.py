@@ -1,4 +1,7 @@
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -110,6 +113,56 @@ class DataLoaderTest(unittest.TestCase):
         self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
         called_symbols = [args.args[0] for args in download.call_args_list]
         self.assertEqual(called_symbols, ["6510.TW", "6510.TWO"])
+
+
+    def test_numeric_tw_failure_two_success_is_quiet(self) -> None:
+        def noisy_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            if symbol.endswith(".TW"):
+                print("HTTP Error 404")
+                print("possibly delisted", file=sys.stderr)
+                return pd.DataFrame()
+            return _download_df()
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", side_effect=noisy_download):
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        _, symbol = data_loader.download_tw_stock(
+                            "8069",
+                            period="1y",
+                            auto_adjust=True,
+                        )
+
+        self.assertEqual(symbol, "8069.TWO")
+        self.assertNotIn("HTTP Error 404", stdout.getvalue())
+        self.assertNotIn("possibly delisted", stderr.getvalue())
+
+    def test_all_yfinance_failures_are_quiet_until_unified_error(self) -> None:
+        def noisy_empty_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            print(f"1 Failed download: {symbol}")
+            print("possibly delisted", file=sys.stderr)
+            return pd.DataFrame()
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", side_effect=noisy_empty_download):
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        with self.assertRaises(data_loader.DataLoaderError) as context:
+                            data_loader.download_tw_stock(
+                                "8299",
+                                period="1y",
+                                auto_adjust=True,
+                            )
+
+        message = str(context.exception)
+        self.assertIn("No price data found for 8299", message)
+        self.assertIn("Tried: 8299.TW, 8299.TWO", message)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "")
 
     def test_numeric_symbol_returns_two_when_two_yfinance_succeeds(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

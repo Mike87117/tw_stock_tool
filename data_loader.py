@@ -1,6 +1,7 @@
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
 from io import StringIO
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -282,22 +283,34 @@ def _symbol_candidates(stock_id: str) -> list[tuple[str, str, str]]:
     ]
 
 
-def _download_yfinance_symbol(
+def _download_yfinance_quiet(
     symbol: str,
     period: str,
     interval: str,
     auto_adjust: bool,
 ) -> pd.DataFrame:
-    # yfinance may print noisy per-symbol errors; collect them and report once.
-    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-        return yf.download(
-            symbol,
-            period=period,
-            interval=interval,
-            auto_adjust=auto_adjust,
-            progress=False,
-            threads=False,
-        )
+    # yfinance can emit noisy per-symbol errors through stdout, stderr, or logging.
+    yf_logger = logging.getLogger("yfinance")
+    previous_disabled = yf_logger.disabled
+    previous_level = yf_logger.level
+    previous_propagate = yf_logger.propagate
+    try:
+        yf_logger.disabled = True
+        yf_logger.setLevel(logging.CRITICAL + 1)
+        yf_logger.propagate = False
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            return yf.download(
+                symbol,
+                period=period,
+                interval=interval,
+                auto_adjust=auto_adjust,
+                progress=False,
+                threads=False,
+            )
+    finally:
+        yf_logger.disabled = previous_disabled
+        yf_logger.setLevel(previous_level)
+        yf_logger.propagate = previous_propagate
 
 
 def _format_no_data_error(
@@ -346,7 +359,7 @@ def download_tw_stock(
                 errors.append(f"{symbol} cache read failed: {exc}")
 
         try:
-            df = _download_yfinance_symbol(symbol, period, interval, auto_adjust)
+            df = _download_yfinance_quiet(symbol, period, interval, auto_adjust)
             if not df.empty:
                 df = _prepare_ohlcv(df, symbol)
                 try:
