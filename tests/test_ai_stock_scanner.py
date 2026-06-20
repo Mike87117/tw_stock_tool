@@ -1,0 +1,143 @@
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
+from openpyxl import load_workbook
+
+import ai_stock_scanner
+
+
+def _summary(stock: str, f1: float, accuracy: float, errors: int = 0) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Stock": stock,
+                "Period": "5y",
+                "Horizon": 5,
+                "Train Size": 252,
+                "Test Size": 63,
+                "Step Size": 63,
+                "Windows": 3,
+                "Avg Accuracy": accuracy,
+                "Avg Precision": 0.5,
+                "Avg Recall": 0.6,
+                "Avg F1": f1,
+                "Avg Test Positive Rate %": 52.0,
+                "Avg Predicted Positive Rate %": 48.0,
+                "Error Windows": errors,
+            }
+        ]
+    )
+
+
+def _frames(stock: str, f1: float, accuracy: float, errors: int = 0) -> dict[str, pd.DataFrame]:
+    return {
+        "Summary": _summary(stock, f1, accuracy, errors),
+        "Detail": pd.DataFrame(),
+        "Errors": pd.DataFrame(),
+    }
+
+
+class AIStockScannerTest(unittest.TestCase):
+    def test_collect_stock_ids_from_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "stocks.txt"
+            path.write_text("2330\n# comment\n\n2317\n2330\n", encoding="utf-8")
+            result = ai_stock_scanner.collect_stock_ids(file_path=path)
+
+        self.assertEqual(result, ["2330", "2317"])
+
+    def test_collect_stock_ids_from_stocks(self) -> None:
+        result = ai_stock_scanner.collect_stock_ids(stocks=["2330", "", "2317", "2330"])
+
+        self.assertEqual(result, ["2330", "2317"])
+
+    def test_scan_uses_mocked_report_without_network(self) -> None:
+        def fake_report(stock_id: str, **_: object) -> dict[str, pd.DataFrame]:
+            return _frames(stock_id, f1=0.5, accuracy=0.6)
+
+        with patch.object(ai_stock_scanner, "run_ai_prediction_report", side_effect=fake_report) as mocked:
+            result = ai_stock_scanner.scan_ai_stocks(
+                ["2330", "2317"],
+                period="5y",
+                horizon=5,
+                workers=1,
+            )
+
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(set(result["Status"]), {"OK"})
+        self.assertEqual(len(result), 2)
+
+    def test_single_stock_failure_does_not_stop_batch(self) -> None:
+        def fake_report(stock_id: str, **_: object) -> dict[str, pd.DataFrame]:
+            if stock_id == "9999":
+                raise ValueError("bad stock")
+            return _frames(stock_id, f1=0.5, accuracy=0.6)
+
+        with patch.object(ai_stock_scanner, "run_ai_prediction_report", side_effect=fake_report):
+            result = ai_stock_scanner.scan_ai_stocks(["2330", "9999"], workers=1)
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result.iloc[0]["Status"], "OK")
+        self.assertEqual(result.iloc[1]["Status"], "ERROR")
+        self.assertIn("bad stock", result.iloc[1]["Error"])
+
+    def test_ranking_sorts_by_f1_accuracy_and_error_windows(self) -> None:
+        rows = [
+            ai_stock_scanner._summary_to_row("low", _summary("low", f1=0.4, accuracy=0.9, errors=0)),
+            ai_stock_scanner._summary_to_row("best", _summary("best", f1=0.8, accuracy=0.7, errors=1)),
+            ai_stock_scanner._summary_to_row("tie", _summary("tie", f1=0.8, accuracy=0.8, errors=2)),
+            ai_stock_scanner._summary_to_row("clean", _summary("clean", f1=0.8, accuracy=0.8, errors=0)),
+        ]
+
+        result = ai_stock_scanner.rank_ai_stock_results(rows)
+
+        self.assertEqual(result["Stock"].tolist(), ["clean", "tie", "best", "low"])
+        self.assertEqual(result["Rank"].tolist(), [1, 2, 3, 4])
+
+    def test_excel_output_can_be_created(self) -> None:
+        ranking = ai_stock_scanner.rank_ai_stock_results(
+            [ai_stock_scanner._summary_to_row("2330", _summary("2330", 0.7, 0.8))]
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "ranking.xlsx"
+            result = ai_stock_scanner.export_ai_stock_ranking(ranking, str(output_path))
+            workbook = load_workbook(result, read_only=True)
+
+            self.assertEqual(result, output_path)
+            self.assertIn("Ranking", workbook.sheetnames)
+            workbook.close()
+
+    def test_parse_args(self) -> None:
+        args = ai_stock_scanner._parse_args(
+            [
+                "--stocks",
+                "2330",
+                "2317",
+                "--period",
+                "5y",
+                "--horizon",
+                "5",
+                "--train-size",
+                "252",
+                "--test-size",
+                "63",
+                "--workers",
+                "2",
+                "--output",
+            ]
+        )
+
+        self.assertEqual(args.stocks, ["2330", "2317"])
+        self.assertEqual(args.period, "5y")
+        self.assertEqual(args.horizon, 5)
+        self.assertEqual(args.train_size, 252)
+        self.assertEqual(args.test_size, 63)
+        self.assertEqual(args.workers, 2)
+        self.assertEqual(args.output, "")
+
+
+if __name__ == "__main__":
+    unittest.main()
