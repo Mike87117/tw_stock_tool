@@ -1,7 +1,13 @@
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+import sys
+import time
+
 import pandas as pd
 import unittest
 from unittest.mock import patch
 
+import data_loader
 import scanner
 from analysis import StockAnalysis
 from scanner import ScanConfig, _filter_ok_rows, _sort_ok_rows, normalize_stock_ids, scan_stocks
@@ -39,6 +45,48 @@ def _fake_analysis(stock_id: str, score: float, signal: str) -> StockAnalysis:
         latest=latest,
         summary={"Analysis": f"{stock_id} analysis"},
     )
+
+
+def _download_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Open": [10.0, 11.0],
+            "High": [12.0, 13.0],
+            "Low": [9.0, 10.0],
+            "Close": [11.0, 12.0],
+            "Volume": [1000, 1100],
+        },
+        index=pd.date_range("2024-01-01", periods=2, freq="D"),
+    )
+
+
+def _fake_scan_row(stock_id: str, status: str = "OK") -> dict[str, object]:
+    return {
+        "Rank": None,
+        "Stock": stock_id,
+        "Symbol": f"{stock_id}.TW" if status == "OK" else "",
+        "Date": "2026-06-18" if status == "OK" else "",
+        "Signal": "HOLD" if status == "OK" else "",
+        "Score": 1.0 if status == "OK" else float("-inf"),
+        "Close": 100.0 if status == "OK" else None,
+        "MA5": 101.0 if status == "OK" else None,
+        "MA20": 102.0 if status == "OK" else None,
+        "MA60": 103.0 if status == "OK" else None,
+        "RSI": 55.0 if status == "OK" else None,
+        "MACD": 1.23 if status == "OK" else None,
+        "MACD_Signal": 1.11 if status == "OK" else None,
+        "K": 66.0 if status == "OK" else None,
+        "D": 60.0 if status == "OK" else None,
+        "BB_Upper": 120.0 if status == "OK" else None,
+        "BB_Middle": 100.0 if status == "OK" else None,
+        "BB_Lower": 80.0 if status == "OK" else None,
+        "ATR": 3.5 if status == "OK" else None,
+        "OBV": 123456.0 if status == "OK" else None,
+        "Volume_Ratio": 1.25 if status == "OK" else None,
+        "Analysis": f"{stock_id} analysis" if status == "OK" else "",
+        "Status": status,
+        "Error": "" if status == "OK" else "bad stock",
+    }
 
 
 class ScannerTest(unittest.TestCase):
@@ -82,6 +130,65 @@ class ScannerTest(unittest.TestCase):
             )
 
         self.assertEqual(progress, [(1, 2, "2330", "OK"), (2, 2, "2317", "OK")])
+
+
+    def test_scan_stocks_progress_completed_sequence_has_no_gaps(self) -> None:
+        progress: list[tuple[int, int, str, str]] = []
+        stocks = ["2330", "2317", "2454", "2308"]
+
+        with patch.object(
+            scanner,
+            "scan_one_stock",
+            side_effect=lambda stock_id, config: _fake_scan_row(stock_id),
+        ):
+            scan_stocks(
+                stocks,
+                config=ScanConfig(max_workers=4),
+                progress_callback=lambda current, total, stock_id, status: progress.append(
+                    (current, total, stock_id, status)
+                ),
+            )
+
+        self.assertEqual(len(progress), len(stocks))
+        self.assertEqual([item[0] for item in progress], [1, 2, 3, 4])
+        self.assertTrue(all(item[1] == len(stocks) for item in progress))
+
+    def test_scan_stocks_progress_print_not_swallowed_by_quiet_download(self) -> None:
+        def noisy_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            print(f"HTTP Error 404: {symbol}")
+            print(f"possibly delisted: {symbol}", file=sys.stderr)
+            time.sleep(0.01)
+            return _download_df()
+
+        def fake_scan_one_stock(stock_id: str, config: ScanConfig) -> dict[str, object]:
+            data_loader._download_yfinance_quiet(
+                f"{stock_id}.TW",
+                "1y",
+                "1d",
+                True,
+            )
+            return _fake_scan_row(stock_id)
+
+        stocks = ["2330", "2317", "2454", "2308", "8069", "8299"]
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(data_loader.yf, "download", side_effect=noisy_download):
+            with patch.object(scanner, "scan_one_stock", side_effect=fake_scan_one_stock):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    scan_stocks(
+                        stocks,
+                        config=ScanConfig(max_workers=4),
+                        progress_callback=lambda current, total, stock_id, status: print(
+                            f"[{current}/{total}] {stock_id} {status}"
+                        ),
+                    )
+
+        output = stdout.getvalue()
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertNotIn("HTTP Error 404", output)
+        self.assertNotIn("possibly delisted", stderr.getvalue())
+        for current in range(1, len(stocks) + 1):
+            self.assertIn(f"[{current}/{len(stocks)}]", output)
 
     def test_scan_stocks_filters_and_sorts(self) -> None:
         def fake_analyze_stock(stock_id: str, **_: object) -> StockAnalysis:

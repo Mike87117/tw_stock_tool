@@ -162,7 +162,7 @@ def run_daily_report(
 
     def _progress(current: int, total: int, stock_id: str, status: str) -> None:
         if progress:
-            print(f"[{current}/{total}] {stock_id} {status}")
+            print(f"[{current}/{total}] {stock_id} {status}", flush=True)
 
     ranking_df = scan_stocks(stock_ids, config=config, progress_callback=_progress)
     candidates_df = filter_candidates(ranking_df, signals=signals, min_score=min_score, top=top)

@@ -7,6 +7,7 @@ import pandas as pd
 
 from analysis import StockAnalysis, analyze_stock
 from config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD
+from console_lock import console_io_lock
 
 ProgressCallback = Callable[[int, int, str, str], None]
 
@@ -179,7 +180,8 @@ def scan_stocks(
             row = future.result()
             rows.append(row)
             if progress_callback:
-                progress_callback(completed, total, stock_id, str(row["Status"]))
+                with console_io_lock():
+                    progress_callback(completed, total, stock_id, str(row["Status"]))
 
     result = pd.DataFrame(rows)
     failed = result[result["Status"] != "OK"].sort_values(by="Stock", kind="mergesort")

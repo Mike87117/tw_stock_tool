@@ -70,7 +70,7 @@ def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
 
 
 def _print_progress(current: int, total: int, stock_id: str, status: str) -> None:
-    print(f"[{current}/{total}] {stock_id} {status}")
+    print(f"[{current}/{total}] {stock_id} {status}", flush=True)
 
 
 def _write_error_log(ranking_df, output_dir: Path) -> Path | None:

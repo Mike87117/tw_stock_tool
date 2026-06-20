@@ -3,7 +3,6 @@ from datetime import date
 from io import StringIO
 import logging
 from pathlib import Path
-import threading
 from typing import Any
 
 import pandas as pd
@@ -11,9 +10,7 @@ import requests
 import yfinance as yf
 
 from config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS
-
-
-_YFINANCE_DOWNLOAD_LOCK = threading.Lock()
+from console_lock import console_io_lock
 
 
 class DataLoaderError(Exception):
@@ -294,7 +291,7 @@ def _download_yfinance_quiet(
     auto_adjust: bool,
 ) -> pd.DataFrame:
     # redirect_stdout/stderr are process-global, so serialize yfinance calls.
-    with _YFINANCE_DOWNLOAD_LOCK:
+    with console_io_lock():
         yf_logger = logging.getLogger("yfinance")
         previous_disabled = yf_logger.disabled
         previous_level = yf_logger.level
