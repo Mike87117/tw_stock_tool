@@ -41,6 +41,10 @@ pip install -r requirements.txt
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
 | Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
 | Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
+| 建立 ML Dataset | `python ml_dataset.py --stock 2330 --period 5y --horizon 5 --output` |
+| AI Walk Forward skeleton | `python ai_walk_forward.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
+| Baseline ML model | `python baseline_ml_model.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
+| AI Prediction Report | `python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output` |
 | Benchmark | `python benchmark.py --file stocks.txt --workers 8 --repeat 3` |
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |
@@ -64,11 +68,32 @@ Walk Forward
 持續追蹤
 ```
 
+AI / ML 延伸流程：
+
+```text
+Walk Forward
+↓
+ML Dataset
+↓
+AI Walk Forward
+↓
+Baseline ML Model
+↓
+AI Prediction Report
+↓
+持續追蹤
+```
+
 補充說明：
 
 - Parameter Sweep 用來找歷史最佳參數。
 - Walk Forward 用來驗證參數穩定性。
 - Walk Forward 結果比單純 Parameter Sweep 更具參考價值。
+- `ml_dataset.py` 只建立 feature / target，不訓練模型。
+- `ai_walk_forward.py` 只做時間切分，不訓練模型。
+- `baseline_ml_model.py` 使用 `RandomForestClassifier` 作為 baseline。
+- `ai_prediction_report.py` 整理 baseline model 結果成 `Summary` / `Detail` / `Errors`。
+- 所有 AI / ML 功能僅供研究，不保證預測績效，也不是投資建議。
 
 ## 新手第一次使用範例
 
