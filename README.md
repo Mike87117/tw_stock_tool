@@ -37,6 +37,7 @@ pip install -r requirements.txt
 | 匯出單股分析 Excel | `python main.py --stock 2330 --period 2y --export-excel` |
 | 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
 | 更新股票清單 | `python stock_list_updater.py --market all --output stocks.txt` |
+| 官方資料來源檢查 | `python stock_list_smoke_check.py` |
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
 | 自動更新後多股票掃描 | `python scan_stocks.py --auto-stock-list` |
 | 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
@@ -79,6 +80,28 @@ python scan_stocks.py --auto-stock-list --stock-sample 50 --random-state 42
 - `--stock-sample N`：從股票清單隨機抽 N 檔。
 - `--random-state`：固定抽樣結果，方便重複測試。
 - `--stock-limit` 與 `--stock-sample` 不可同時使用。
+
+### 官方資料來源檢查
+
+如果懷疑 TWSE / TPEx 官方資料來源格式改變、網路連線異常，或 `--auto-stock-list` 抓不到合理股票數量，可以手動執行：
+
+```bash
+python stock_list_smoke_check.py
+```
+
+這個工具會直接連線到 TWSE / TPEx 官方公開資料來源，檢查：
+
+- TWSE 股票數量
+- TPEx 股票數量
+- 合併後股票數量
+- 常見股票代號，例如 `2330`、`2317`、`8069`
+
+注意：
+
+- 這是 live API smoke check。
+- 不會放進一般 unittest / CI 預設流程。
+- 如果官方服務暫時不穩，可能會失敗，失敗不一定代表程式邏輯錯誤。
+
 
 ### 建議研究流程
 
@@ -1352,12 +1375,3 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
-
-## 官方資料來源檢查
-
-`stock_list_smoke_check.py` 用於手動檢查 TWSE / TPEx 官方股票清單來源在目前網路環境中是否仍可用。這個指令會連線到官方 API，因此不會在 CI 預設流程中強制執行，避免外部服務不穩造成假失敗。
-
-```bash
-python stock_list_smoke_check.py
-```
-
