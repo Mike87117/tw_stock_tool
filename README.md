@@ -77,7 +77,20 @@ python doctor.py --live
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |
 | 環境檢查 | `python doctor.py` |
+| 統一 CLI：環境檢查 | `python twstock_cli.py doctor` |
+| 統一 CLI：多股票掃描 | `python twstock_cli.py scan --auto-stock-list --stock-limit 50` |
+| 統一 CLI：每日候選報告 | `python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
+
+### 統一 CLI 入口
+
+原本的 `main.py`、`scan_stocks.py`、`daily_report.py` 等檔案仍可直接使用。如果想用統一入口，可以改用 `twstock_cli.py`。
+
+```bash
+python twstock_cli.py doctor
+python twstock_cli.py scan --auto-stock-list --stock-limit 50
+python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output
+```
 
 ### Auto Stock List 安全使用建議
 
