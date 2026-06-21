@@ -32,6 +32,13 @@ class TwStockToolGUI:
         self.market_var: tk.StringVar | None = None
         self.output_var: tk.StringVar | None = None
         self.allow_partial_var: tk.BooleanVar | None = None
+        self.scan_stock_ids_var: tk.StringVar | None = None
+        self.scan_period_var: tk.StringVar | None = None
+        self.scan_interval_var: tk.StringVar | None = None
+        self.scan_max_workers_var: tk.StringVar | None = None
+        self.scan_min_score_var: tk.StringVar | None = None
+        self.scan_top_var: tk.StringVar | None = None
+        self.scan_errors_only_var: tk.BooleanVar | None = None
         self.task_tree: ttk.Treeview | None = None
         self.result_text: tk.Text | None = None
         if build_ui:
@@ -48,15 +55,18 @@ class TwStockToolGUI:
         environment_frame = ttk.Frame(notebook)
         data_sources_frame = ttk.Frame(notebook)
         stock_list_frame = ttk.Frame(notebook)
+        scan_frame = ttk.Frame(notebook)
         task_log_frame = ttk.Frame(notebook)
         notebook.add(environment_frame, text="Environment")
         notebook.add(data_sources_frame, text="Data Sources")
         notebook.add(stock_list_frame, text="Stock List")
+        notebook.add(scan_frame, text="Scan")
         notebook.add(task_log_frame, text="Task Log")
 
         self._build_environment_tab(environment_frame)
         self._build_data_sources_tab(data_sources_frame)
         self._build_stock_list_tab(stock_list_frame)
+        self._build_scan_tab(scan_frame)
         self._build_task_log_tab(task_log_frame)
         self.refresh_tasks()
 
@@ -139,6 +149,63 @@ class TwStockToolGUI:
             command=self.submit_stock_list_update,
         ).pack(anchor="w", padx=12, pady=(8, 4))
 
+    def _build_scan_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="Run multi-stock scan", font=("TkDefaultFont", 12, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 8)
+        )
+
+        form = ttk.Frame(parent)
+        form.pack(anchor="w", fill="x", padx=12, pady=4)
+
+        ttk.Label(form, text="Stock IDs").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.scan_stock_ids_var = tk.StringVar(value="2330,2317,2454")
+        ttk.Entry(form, textvariable=self.scan_stock_ids_var, width=42).grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Period").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.scan_period_var = tk.StringVar(value="1y")
+        ttk.Combobox(
+            form,
+            textvariable=self.scan_period_var,
+            values=("1y", "2y", "5y"),
+            state="readonly",
+            width=12,
+        ).grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Interval").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.scan_interval_var = tk.StringVar(value="1d")
+        ttk.Combobox(
+            form,
+            textvariable=self.scan_interval_var,
+            values=("1d", "1wk", "1mo"),
+            state="readonly",
+            width=12,
+        ).grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Max workers").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.scan_max_workers_var = tk.StringVar(value="4")
+        ttk.Entry(form, textvariable=self.scan_max_workers_var, width=12).grid(row=3, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Min score").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.scan_min_score_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.scan_min_score_var, width=12).grid(row=4, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Top").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.scan_top_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.scan_top_var, width=12).grid(row=5, column=1, sticky="w", pady=4)
+
+        self.scan_errors_only_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            form,
+            text="Errors only",
+            variable=self.scan_errors_only_var,
+        ).grid(row=6, column=1, sticky="w", pady=4)
+
+        ttk.Button(
+            parent,
+            text="Run Scan",
+            command=self.submit_scan,
+        ).pack(anchor="w", padx=12, pady=(8, 4))
+
     def _build_task_log_tab(self, parent: ttk.Frame) -> None:
         columns = (
             "task_id",
@@ -163,6 +230,74 @@ class TwStockToolGUI:
 
         self.result_text = tk.Text(parent, height=12, wrap="word")
         self.result_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+    def parse_stock_ids(self, value: str) -> list[str]:
+        """Parse comma/space separated stock ids from GUI input."""
+        return [stock_id for stock_id in value.replace(",", " ").split() if stock_id.strip()]
+
+    def _parse_positive_int(self, value: str, error_message: str) -> int:
+        try:
+            number = int(value.strip())
+        except ValueError as exc:
+            raise ValueError(error_message) from exc
+        if number <= 0:
+            raise ValueError(error_message)
+        return number
+
+    def _parse_optional_float(self, value: str, error_message: str) -> float | None:
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError as exc:
+            raise ValueError(error_message) from exc
+
+    def _parse_optional_positive_int(self, value: str, error_message: str) -> int | None:
+        text = value.strip()
+        if not text:
+            return None
+        return self._parse_positive_int(text, error_message)
+
+    def submit_scan(self) -> str | None:
+        """Submit multi-stock scanner using current form values."""
+        raw_stock_ids = self.scan_stock_ids_var.get() if self.scan_stock_ids_var is not None else ""
+        stock_ids = self.parse_stock_ids(raw_stock_ids)
+        if not stock_ids:
+            self._append_result("Stock IDs cannot be blank.")
+            return None
+
+        try:
+            max_workers = self._parse_positive_int(
+                self.scan_max_workers_var.get() if self.scan_max_workers_var is not None else "4",
+                "Max workers must be a positive integer.",
+            )
+            min_score = self._parse_optional_float(
+                self.scan_min_score_var.get() if self.scan_min_score_var is not None else "",
+                "Min score must be a number.",
+            )
+            top = self._parse_optional_positive_int(
+                self.scan_top_var.get() if self.scan_top_var is not None else "",
+                "Top must be a positive integer.",
+            )
+        except ValueError as exc:
+            self._append_result(str(exc))
+            return None
+
+        period = self.scan_period_var.get() if self.scan_period_var is not None else "1y"
+        interval = self.scan_interval_var.get() if self.scan_interval_var is not None else "1d"
+        errors_only = self.scan_errors_only_var.get() if self.scan_errors_only_var is not None else False
+        return self.submit_task(
+            "Run Scan",
+            app_services.scan_stocks_with_options_service,
+            stock_ids=stock_ids,
+            period=period,
+            interval=interval,
+            max_workers=max_workers,
+            min_score=min_score,
+            top=top,
+            errors_only=errors_only,
+        )
 
     def submit_stock_list_update(self) -> str | None:
         """Submit official stock-list update using current form values."""

@@ -84,6 +84,122 @@ class GuiAppTest(unittest.TestCase):
         inserted_text = app.result_text.insert.call_args.args[1]
         self.assertIn("Output path cannot be blank.", inserted_text)
 
+    def _configure_scan_vars(
+        self,
+        app,
+        stock_ids="2330, 2317 2454",
+        period="2y",
+        interval="1d",
+        max_workers="4",
+        min_score="3.5",
+        top="10",
+        errors_only=True,
+    ) -> None:
+        app.scan_stock_ids_var = self._Var(stock_ids)
+        app.scan_period_var = self._Var(period)
+        app.scan_interval_var = self._Var(interval)
+        app.scan_max_workers_var = self._Var(max_workers)
+        app.scan_min_score_var = self._Var(min_score)
+        app.scan_top_var = self._Var(top)
+        app.scan_errors_only_var = self._Var(errors_only)
+
+    def test_scan_variables_exist_on_gui_instance(self) -> None:
+        root = self._root()
+        runner = self._runner()
+
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        self.assertTrue(hasattr(app, "scan_stock_ids_var"))
+        self.assertTrue(hasattr(app, "scan_period_var"))
+        self.assertTrue(hasattr(app, "scan_interval_var"))
+        self.assertTrue(hasattr(app, "scan_max_workers_var"))
+        self.assertTrue(hasattr(app, "scan_min_score_var"))
+        self.assertTrue(hasattr(app, "scan_top_var"))
+        self.assertTrue(hasattr(app, "scan_errors_only_var"))
+
+    def test_parse_stock_ids_handles_commas_and_spaces(self) -> None:
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=self._runner(), build_ui=False)
+
+        result = app.parse_stock_ids("2330, 2317 2454")
+
+        self.assertEqual(result, ["2330", "2317", "2454"])
+
+    def test_submit_scan_calls_runner_submit_with_options(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+        self._configure_scan_vars(app)
+
+        task_id = app.submit_scan()
+
+        self.assertEqual(task_id, "task-1")
+        runner.submit.assert_called_once_with(
+            "Run Scan",
+            gui_app.app_services.scan_stocks_with_options_service,
+            stock_ids=["2330", "2317", "2454"],
+            period="2y",
+            interval="1d",
+            max_workers=4,
+            min_score=3.5,
+            top=10,
+            errors_only=True,
+        )
+
+    def test_submit_scan_allows_blank_optional_fields(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_scan_vars(app, min_score="", top="", errors_only=False)
+
+        app.submit_scan()
+
+        kwargs = runner.submit.call_args.kwargs
+        self.assertIsNone(kwargs["min_score"])
+        self.assertIsNone(kwargs["top"])
+        self.assertFalse(kwargs["errors_only"])
+
+    def test_submit_scan_rejects_blank_stock_ids(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_scan_vars(app, stock_ids="   ")
+        app.result_text = Mock()
+
+        task_id = app.submit_scan()
+
+        self.assertIsNone(task_id)
+        runner.submit.assert_not_called()
+        inserted_text = app.result_text.insert.call_args.args[1]
+        self.assertIn("Stock IDs cannot be blank.", inserted_text)
+
+    def test_submit_scan_rejects_invalid_max_workers(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_scan_vars(app, max_workers="0")
+        app.result_text = Mock()
+
+        self.assertIsNone(app.submit_scan())
+        runner.submit.assert_not_called()
+        self.assertIn("Max workers must be a positive integer.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_scan_rejects_invalid_min_score(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_scan_vars(app, min_score="abc")
+        app.result_text = Mock()
+
+        self.assertIsNone(app.submit_scan())
+        runner.submit.assert_not_called()
+        self.assertIn("Min score must be a number.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_scan_rejects_invalid_top(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_scan_vars(app, top="0")
+        app.result_text = Mock()
+
+        self.assertIsNone(app.submit_scan())
+        runner.submit.assert_not_called()
+        self.assertIn("Top must be a positive integer.", app.result_text.insert.call_args.args[1])
+
     def test_submit_task_calls_task_runner_submit(self) -> None:
         root = self._root()
         runner = self._runner()
