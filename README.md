@@ -56,15 +56,29 @@ pip install -r requirements.txt
 | 清除快取 | `python cache_manager.py --clear` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
-### Auto Stock List ????
+### Auto Stock List 安全使用建議
 
-????? `--auto-stock-list` ???????????????????????????????? yfinance rate limit?
+`--auto-stock-list` 會先從 TWSE / TPEx 官方公開資料更新股票清單，再進行掃描。  
+第一次使用時，建議先用 `--stock-limit` 限制掃描數量，避免一次掃描全市場導致執行時間過長，或遇到 yfinance rate limit。
 
 ```bash
 python scan_stocks.py --auto-stock-list --stock-limit 50
 python daily_report.py --auto-stock-list --stock-limit 50 --output
 python ai_stock_scanner.py --auto-stock-list --stock-limit 20 --output
 ```
+
+如果想隨機抽樣，可以使用：
+
+```bash
+python scan_stocks.py --auto-stock-list --stock-sample 50 --random-state 42
+```
+
+補充說明：
+
+- `--stock-limit N`：只取股票清單前 N 檔。
+- `--stock-sample N`：從股票清單隨機抽 N 檔。
+- `--random-state`：固定抽樣結果，方便重複測試。
+- `--stock-limit` 與 `--stock-sample` 不可同時使用。
 
 ### 建議研究流程
 
