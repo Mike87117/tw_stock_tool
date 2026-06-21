@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
@@ -9,6 +10,154 @@ from scanner import ScanConfig
 
 
 class AppServicesTest(unittest.TestCase):
+    def test_doctor_service_returns_rows_summary_and_failure_flag(self) -> None:
+        rows = [{"Check": "Python", "Status": "PASS", "Message": "ok"}]
+        summary = {"PASS": 1, "WARNING": 0, "FAIL": 0}
+        with patch.object(app_services.doctor_module, "run_doctor", return_value=rows) as run_mock:
+            with patch.object(app_services.doctor_module, "summarize", return_value=summary) as summary_mock:
+                with patch.object(app_services.doctor_module, "has_failures", return_value=False) as fail_mock:
+                    result = app_services.doctor_service(live=True)
+
+        run_mock.assert_called_once_with(live=True)
+        summary_mock.assert_called_once_with(rows)
+        fail_mock.assert_called_once_with(rows)
+        self.assertEqual(result["rows"], rows)
+        self.assertEqual(result["summary"], summary)
+        self.assertFalse(result["has_failures"])
+
+    def test_stock_list_smoke_check_service_returns_result(self) -> None:
+        expected = {"status": "PASS", "twse_count": 900}
+        with patch.object(app_services.stock_list_smoke_check_module, "run_smoke_check", return_value=expected) as mocked:
+            result = app_services.stock_list_smoke_check_service(min_twse=10, min_tpex=20, min_all=30)
+
+        mocked.assert_called_once_with(min_twse=10, min_tpex=20, min_all=30)
+        self.assertIs(result, expected)
+
+    def test_price_data_smoke_check_service_returns_results(self) -> None:
+        rows = [{"Check": "yfinance TWSE", "Status": "PASS"}]
+        with patch.object(app_services.price_data_smoke_check_module, "run_smoke_check", return_value=rows) as mocked:
+            result = app_services.price_data_smoke_check_service(
+                twse_stock="2330",
+                tpex_stock="8069",
+                period="1mo",
+                interval="1d",
+            )
+
+        mocked.assert_called_once_with(
+            twse_stock="2330",
+            tpex_stock="8069",
+            period="1mo",
+            interval="1d",
+        )
+        self.assertEqual(result["results"], rows)
+        self.assertFalse(result["failed"])
+
+    def test_single_stock_analysis_service_calls_analysis_and_backtest(self) -> None:
+        signal_df = pd.DataFrame({"Close": [100, 101], "Signal": ["HOLD", "BUY"]})
+        summary = {"Latest Close": 101, "Signal": "BUY"}
+        analysis_result = SimpleNamespace(signal_df=signal_df, summary=summary, symbol="2330.TW")
+        backtest_result = {"Total Return %": 1.2}
+        with patch.object(app_services.analysis_module, "analyze_stock", return_value=analysis_result) as analysis_mock:
+            with patch.object(app_services.backtest_module, "run_backtest", return_value=backtest_result) as backtest_mock:
+                result = app_services.single_stock_analysis_service(
+                    "2330",
+                    period="2y",
+                    interval="1d",
+                    auto_adjust=True,
+                    force_refresh=True,
+                    stop_loss_pct=8,
+                    take_profit_pct=20,
+                    max_hold_days=30,
+                    position_size=0.5,
+                )
+
+        analysis_mock.assert_called_once_with(
+            "2330",
+            period="2y",
+            interval="1d",
+            auto_adjust=True,
+            force_refresh=True,
+        )
+        backtest_mock.assert_called_once()
+        backtest_kwargs = backtest_mock.call_args.kwargs
+        self.assertEqual(backtest_kwargs["stop_loss_pct"], 8)
+        self.assertEqual(backtest_kwargs["take_profit_pct"], 20)
+        self.assertEqual(backtest_kwargs["max_hold_days"], 30)
+        self.assertEqual(backtest_kwargs["position_size"], 0.5)
+        self.assertIs(result["analysis"], analysis_result)
+        self.assertIs(result["signal"], signal_df)
+        self.assertEqual(result["summary"], summary)
+        self.assertEqual(result["backtest"], backtest_result)
+        self.assertEqual(result["symbol"], "2330.TW")
+        self.assertIsNone(result["excel_path"])
+        self.assertIsNone(result["chart_path"])
+
+    def test_single_stock_analysis_service_exports_excel_and_chart(self) -> None:
+        signal_df = pd.DataFrame({"Close": [100]})
+        summary = {"Latest Close": 100}
+        analysis_result = SimpleNamespace(signal_df=signal_df, summary=summary, symbol="2330.TW")
+        with patch.object(app_services.analysis_module, "analyze_stock", return_value=analysis_result):
+            with patch.object(app_services.backtest_module, "run_backtest", return_value={"Total Return %": 0}):
+                with patch.object(app_services.plotter_module, "plot_stock_chart") as chart_mock:
+                    with patch.object(app_services.report_module, "export_excel_report", return_value=Path("output/report.xlsx")) as report_mock:
+                        result = app_services.single_stock_analysis_service(
+                            "2330",
+                            export_excel=True,
+                            save_chart=True,
+                        )
+
+        chart_mock.assert_called_once()
+        report_mock.assert_called_once()
+        self.assertEqual(result["chart_path"], app_services.OUTPUT_DIR / "2330_chart.png")
+        self.assertEqual(result["excel_path"], Path("output/report.xlsx"))
+
+    def test_cache_summary_service_returns_summary(self) -> None:
+        summary = pd.DataFrame([{"File": "cache.csv"}])
+        with patch.object(app_services.cache_manager_module, "cache_summary", return_value=summary) as mocked:
+            result = app_services.cache_summary_service()
+
+        mocked.assert_called_once_with()
+        self.assertIs(result["summary"], summary)
+        self.assertEqual(result["count"], 1)
+        self.assertFalse(result["empty"])
+
+    def test_cache_clear_service_returns_count(self) -> None:
+        with patch.object(app_services.cache_manager_module, "clear_cache", return_value=3) as mocked:
+            result = app_services.cache_clear_service()
+
+        mocked.assert_called_once_with()
+        self.assertEqual(result["cleared"], 3)
+
+    def test_new_service_errors_are_wrapped_with_clear_messages(self) -> None:
+        error_cases = [
+            ("Doctor", lambda: app_services.doctor_service(), app_services.doctor_module, "run_doctor"),
+            (
+                "Stock list smoke check",
+                lambda: app_services.stock_list_smoke_check_service(),
+                app_services.stock_list_smoke_check_module,
+                "run_smoke_check",
+            ),
+            (
+                "Price data smoke check",
+                lambda: app_services.price_data_smoke_check_service(),
+                app_services.price_data_smoke_check_module,
+                "run_smoke_check",
+            ),
+            (
+                "Single stock analysis",
+                lambda: app_services.single_stock_analysis_service("2330"),
+                app_services.analysis_module,
+                "analyze_stock",
+            ),
+            ("Cache summary", lambda: app_services.cache_summary_service(), app_services.cache_manager_module, "cache_summary"),
+            ("Cache clear", lambda: app_services.cache_clear_service(), app_services.cache_manager_module, "clear_cache"),
+        ]
+        for action, caller, module, function_name in error_cases:
+            with self.subTest(action=action):
+                with patch.object(module, function_name, side_effect=RuntimeError("boom")):
+                    with self.assertRaisesRegex(app_services.AppServiceError, f"{action} failed: boom"):
+                        caller()
+
     def test_clean_stocks_service_calls_run_clean_stocks(self) -> None:
         frames = (pd.DataFrame([{"File": "stocks.txt"}]), pd.DataFrame(), pd.DataFrame(), Path("report.xlsx"), Path("clean.txt"))
         with patch.object(app_services.clean_stocks_module, "run_clean_stocks", return_value=frames) as mocked:

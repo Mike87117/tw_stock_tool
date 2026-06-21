@@ -13,12 +13,29 @@ from typing import Any
 import pandas as pd
 
 import ai_prediction_report as ai_prediction_report_module
+import analysis as analysis_module
+import backtest as backtest_module
+import cache_manager as cache_manager_module
+import doctor as doctor_module
 import ai_stock_scanner as ai_stock_scanner_module
 import clean_stocks as clean_stocks_module
 import daily_report as daily_report_module
+import main as main_module
+import plotter as plotter_module
+import report as report_module
 import scanner as scanner_module
+import price_data_smoke_check as price_data_smoke_check_module
+import stock_list_smoke_check as stock_list_smoke_check_module
 import stock_list_updater as stock_list_updater_module
-from config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD
+from config import (
+    DEFAULT_AUTO_ADJUST,
+    DEFAULT_INTERVAL,
+    DEFAULT_PERIOD,
+    FEE_RATE,
+    INITIAL_CAPITAL,
+    OUTPUT_DIR,
+    TAX_RATE,
+)
 from daily_report import DEFAULT_MIN_SCORE, DEFAULT_SIGNALS, DEFAULT_TOP
 from scanner import ProgressCallback, ScanConfig
 
@@ -29,6 +46,159 @@ class AppServiceError(Exception):
 
 def _wrap_error(action: str, exc: Exception) -> AppServiceError:
     return AppServiceError(f"{action} failed: {exc}")
+
+
+def doctor_service(live: bool = False) -> dict[str, Any]:
+    """Run environment checks for GUI/Web integrations."""
+    try:
+        rows = doctor_module.run_doctor(live=live)
+        summary = doctor_module.summarize(rows)
+        return {
+            "rows": rows,
+            "summary": summary,
+            "has_failures": doctor_module.has_failures(rows),
+        }
+    except Exception as exc:
+        raise _wrap_error("Doctor", exc) from exc
+
+
+def stock_list_smoke_check_service(
+    min_twse: int = stock_list_smoke_check_module.DEFAULT_MIN_TWSE,
+    min_tpex: int = stock_list_smoke_check_module.DEFAULT_MIN_TPEX,
+    min_all: int = stock_list_smoke_check_module.DEFAULT_MIN_ALL,
+) -> dict[str, Any]:
+    """Run the official stock-list smoke check."""
+    try:
+        return stock_list_smoke_check_module.run_smoke_check(
+            min_twse=min_twse,
+            min_tpex=min_tpex,
+            min_all=min_all,
+        )
+    except Exception as exc:
+        raise _wrap_error("Stock list smoke check", exc) from exc
+
+
+def price_data_smoke_check_service(
+    twse_stock: str = "2330",
+    tpex_stock: str = "8069",
+    period: str = "1mo",
+    interval: str = "1d",
+) -> dict[str, Any]:
+    """Run the live price-data smoke check."""
+    try:
+        results = price_data_smoke_check_module.run_smoke_check(
+            twse_stock=twse_stock,
+            tpex_stock=tpex_stock,
+            period=period,
+            interval=interval,
+        )
+        return {"results": results, "failed": False}
+    except Exception as exc:
+        raise _wrap_error("Price data smoke check", exc) from exc
+
+
+def single_stock_analysis_service(
+    stock_id: str,
+    period: str = DEFAULT_PERIOD,
+    interval: str = DEFAULT_INTERVAL,
+    auto_adjust: bool = DEFAULT_AUTO_ADJUST,
+    force_refresh: bool = False,
+    stop_loss_pct: float | None = None,
+    take_profit_pct: float | None = None,
+    max_hold_days: int | None = None,
+    position_size: float = 1.0,
+    export_excel: bool = False,
+    save_chart: bool = False,
+) -> dict[str, Any]:
+    """Run one-stock analysis without relying on CLI printing."""
+    try:
+        options = main_module.MainOptions(
+            stock_id=stock_id,
+            period=period,
+            interval=interval,
+            auto_adjust=auto_adjust,
+            force_refresh=force_refresh,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            max_hold_days=max_hold_days,
+            position_size=position_size,
+            export_excel=export_excel,
+            save_chart=save_chart,
+        )
+        main_module._validate_options(options)
+        analysis = analysis_module.analyze_stock(
+            options.stock_id,
+            period=options.period,
+            interval=options.interval,
+            auto_adjust=options.auto_adjust,
+            force_refresh=options.force_refresh,
+        )
+        signal_df = analysis.signal_df
+        backtest_result = backtest_module.run_backtest(
+            signal_df,
+            initial_capital=INITIAL_CAPITAL,
+            fee_rate=FEE_RATE,
+            tax_rate=TAX_RATE,
+            stop_loss_pct=options.stop_loss_pct,
+            take_profit_pct=options.take_profit_pct,
+            max_hold_days=options.max_hold_days,
+            position_size=options.position_size,
+        )
+
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        chart_path = None
+        if options.save_chart:
+            chart_path = OUTPUT_DIR / f"{options.stock_id}_chart.png"
+            plotter_module.plot_stock_chart(
+                signal_df,
+                stock_id=options.stock_id,
+                symbol=analysis.symbol,
+                save_path=chart_path,
+            )
+
+        report_path = None
+        if options.export_excel:
+            report_path = report_module.export_excel_report(
+                stock_id=options.stock_id,
+                df=signal_df,
+                backtest_result=backtest_result,
+                summary=analysis.summary,
+                output_dir=OUTPUT_DIR,
+            )
+
+        return {
+            "analysis": analysis,
+            "signal": signal_df,
+            "summary": analysis.summary,
+            "backtest": backtest_result,
+            "symbol": analysis.symbol,
+            "excel_path": report_path,
+            "chart_path": chart_path,
+        }
+    except Exception as exc:
+        raise _wrap_error("Single stock analysis", exc) from exc
+
+
+def cache_summary_service() -> dict[str, Any]:
+    """Return cache summary data for GUI/Web integrations."""
+    try:
+        summary = cache_manager_module.cache_summary()
+        return {
+            "summary": summary,
+            "count": len(summary),
+            "empty": summary.empty,
+        }
+    except Exception as exc:
+        raise _wrap_error("Cache summary", exc) from exc
+
+
+def cache_clear_service() -> dict[str, Any]:
+    """Clear cache files and return the number removed."""
+    try:
+        count = cache_manager_module.clear_cache()
+        return {"cleared": count}
+    except Exception as exc:
+        raise _wrap_error("Cache clear", exc) from exc
 
 
 def clean_stocks_service(

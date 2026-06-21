@@ -161,9 +161,13 @@ def _cli_options(argv: list[str] | None = None) -> MainOptions:
     )
 
 
-def run_analysis(options: MainOptions) -> None:
+def run_analysis_result(options: MainOptions) -> dict[str, object]:
+    """Run analysis and return structured results without printing.
+
+    GUI/Web integrations can use this function directly while the existing CLI
+    keeps using run_analysis() for its human-readable output.
+    """
     _validate_options(options)
-    print("\n下載資料、計算技術指標與產生訊號中...")
     analysis = analyze_stock(
         options.stock_id,
         period=options.period,
@@ -186,36 +190,13 @@ def run_analysis(options: MainOptions) -> None:
     )
     summary = analysis.summary
 
-    print(f"\n股票代號：{options.stock_id}")
-    print(f"資料代號：{symbol}")
-    print(f"最新收盤價：{summary['Latest Close']}")
-    print(f"MA5：{summary['MA5']}")
-    print(f"MA20：{summary['MA20']}")
-    print(f"MA60：{summary['MA60']}")
-    print(f"RSI：{summary['RSI']}")
-    print(f"MACD：{summary['MACD']}")
-    print(f"Signal：{summary['Signal']}")
-    print(f"\n技術分數：{summary['Tech Score']}")
-    print(f"最新訊號：{summary['Latest Signal']}")
-    print("\n分析：")
-    print(summary["Analysis"])
-
-    print("\n回測結果：")
-    print(f"初始資金：{bt['Initial Capital']}")
-    print(f"最終資金：{bt['Final Capital']}")
-    print(f"總報酬率：{bt['Total Return %']}%")
-    print(f"交易次數：{bt['Trade Count']}")
-    print(f"勝率：{bt['Win Rate %']}%")
-    print(f"最大回撤：{bt['Max Drawdown %']}%")
-    print(f"平均獲利：{bt['Avg Profit']}")
-    print(f"平均虧損：{bt['Avg Loss']}")
-
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    chart_path = None
     if options.save_chart:
         chart_path = OUTPUT_DIR / f"{options.stock_id}_chart.png"
         plot_stock_chart(sig_df, stock_id=options.stock_id, symbol=symbol, save_path=chart_path)
-        print(f"圖表已儲存：{chart_path}")
 
+    report_path = None
     if options.export_excel:
         report_path = export_excel_report(
             stock_id=options.stock_id,
@@ -224,10 +205,56 @@ def run_analysis(options: MainOptions) -> None:
             summary=summary,
             output_dir=OUTPUT_DIR,
         )
-        print(f"Excel 報表已匯出：{report_path}")
 
-    print("\n提醒：本工具僅供技術分析與回測研究，不保證投資績效，也不提供自動下單。")
+    return {
+        "analysis": analysis,
+        "signal": sig_df,
+        "summary": summary,
+        "backtest": bt,
+        "symbol": symbol,
+        "excel_path": report_path,
+        "chart_path": chart_path,
+    }
 
+
+def run_analysis(options: MainOptions) -> None:
+    print("\n\u4e0b\u8f09\u8cc7\u6599\u3001\u8a08\u7b97\u6280\u8853\u6307\u6a19\u8207\u7522\u751f\u8a0a\u865f\u4e2d...")
+    result = run_analysis_result(options)
+    summary = result["summary"]
+    bt = result["backtest"]
+    symbol = result["symbol"]
+
+    print(f"\n\u80a1\u7968\u4ee3\u865f\uff1a{options.stock_id}")
+    print(f"\u8cc7\u6599\u4ee3\u865f\uff1a{symbol}")
+    print(f"\u6700\u65b0\u6536\u76e4\u50f9\uff1a{summary['Latest Close']}")
+    print(f"MA5\uff1a{summary['MA5']}")
+    print(f"MA20\uff1a{summary['MA20']}")
+    print(f"MA60\uff1a{summary['MA60']}")
+    print(f"RSI\uff1a{summary['RSI']}")
+    print(f"MACD\uff1a{summary['MACD']}")
+    print(f"Signal\uff1a{summary['Signal']}")
+    print(f"\n\u6280\u8853\u5206\u6578\uff1a{summary['Tech Score']}")
+    print(f"\u6700\u65b0\u8a0a\u865f\uff1a{summary['Latest Signal']}")
+    print("\n\u5206\u6790\uff1a")
+    print(summary["Analysis"])
+
+    print("\n\u56de\u6e2c\u7d50\u679c\uff1a")
+    print(f"\u521d\u59cb\u8cc7\u91d1\uff1a{bt['Initial Capital']}")
+    print(f"\u6700\u7d42\u8cc7\u91d1\uff1a{bt['Final Capital']}")
+    print(f"\u7e3d\u5831\u916c\u7387\uff1a{bt['Total Return %']}%")
+    print(f"\u4ea4\u6613\u6b21\u6578\uff1a{bt['Trade Count']}")
+    print(f"\u52dd\u7387\uff1a{bt['Win Rate %']}%")
+    print(f"\u6700\u5927\u56de\u64a4\uff1a{bt['Max Drawdown %']}%")
+    print(f"\u5e73\u5747\u7372\u5229\uff1a{bt['Avg Profit']}")
+    print(f"\u5e73\u5747\u8667\u640d\uff1a{bt['Avg Loss']}")
+
+    if options.save_chart:
+        print(f"\u5716\u8868\u5df2\u5132\u5b58\uff1a{result['chart_path']}")
+
+    if options.export_excel:
+        print(f"Excel \u5831\u8868\u5df2\u532f\u51fa\uff1a{result['excel_path']}")
+
+    print("\n\u63d0\u9192\uff1a\u672c\u5de5\u5177\u50c5\u4f9b\u6280\u8853\u5206\u6790\u8207\u56de\u6e2c\u7814\u7a76\uff0c\u4e0d\u4fdd\u8b49\u6295\u8cc7\u7e3e\u6548\uff0c\u4e5f\u4e0d\u63d0\u4f9b\u81ea\u52d5\u4e0b\u55ae\u3002")
 
 def main(argv: list[str] | None = None) -> None:
     try:
