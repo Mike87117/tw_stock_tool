@@ -101,7 +101,13 @@ python doctor.py --live
 python gui_app.py
 ```
 
-這是初版 Tkinter GUI 原型，目前主要用於環境檢查與資料來源檢查。掃描、Daily Report、單股分析會在後續逐步加入。
+說明：
+
+- 這是初版 Tkinter GUI 原型。
+- 目前主要用於環境檢查、官方股票清單來源檢查、價格資料來源檢查與 Task Log。
+- GUI 會透過 `gui_tasks.TaskRunner` 背景執行 `app_services`，避免主畫面卡住。
+- 多股票掃描、Daily Report、單股分析、快取管理會在後續逐步加入 GUI。
+- 原本 CLI 與 `twstock ...` 指令仍可正常使用。
 
 ### 統一 CLI 入口
 
@@ -230,6 +236,14 @@ AI Stock Scanner
 ## 新手第一次使用範例
 
 本流程適合第一次使用本專案的使用者。建議先檢查資料來源，再用小範圍掃描熟悉輸出，最後再進入策略比較、Walk Forward 與 AI / ML 研究。
+
+如果不想記 CLI 指令，也可以先試用本機 GUI 原型：
+
+```bash
+python gui_app.py
+```
+
+但目前 GUI 還是初版，完整功能仍以 CLI / `twstock ...` 為主。
 
 ### Step 1：安裝套件
 
