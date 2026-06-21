@@ -18,6 +18,7 @@ from ai_prediction_report import run_ai_prediction_report
 from config import DEFAULT_PERIOD, OUTPUT_DIR
 from scanner import load_stock_ids_from_file, normalize_stock_ids
 import stock_list_updater as stock_list_updater_module
+from stock_selection import apply_stock_selection
 
 AI_STOCK_RANKING_COLUMNS = [
     "Rank",
@@ -44,6 +45,9 @@ def collect_stock_ids(
     stock_market: str = "all",
     stock_list_output: str | Path = "stocks.txt",
     allow_partial_stock_list: bool = False,
+    stock_limit: int | None = None,
+    stock_sample: int | None = None,
+    random_state: int = 42,
 ) -> list[str]:
     """Collect stocks from auto-updater, direct values, and/or a text file."""
     if auto_stock_list:
@@ -53,19 +57,21 @@ def collect_stock_ids(
             allow_partial=allow_partial_stock_list,
         )
         collected = normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())
-        if not collected:
-            raise ValueError("Auto stock list did not return any stock ids.")
-        return collected
-
-    values: list[str] = []
-    if file_path:
-        values.extend(load_stock_ids_from_file(file_path))
-    if stocks:
-        values.extend(stocks)
-    collected = normalize_stock_ids(values)
+    else:
+        values: list[str] = []
+        if file_path:
+            values.extend(load_stock_ids_from_file(file_path))
+        if stocks:
+            values.extend(stocks)
+        collected = normalize_stock_ids(values)
     if not collected:
-        raise ValueError("No stocks provided. Use --stocks or --file.")
-    return collected
+        raise ValueError("No stocks provided. Use --stocks, --file, or --auto-stock-list.")
+    return apply_stock_selection(
+        collected,
+        stock_limit=stock_limit,
+        stock_sample=stock_sample,
+        random_state=random_state,
+    )
 
 
 def _summary_to_row(stock_id: str, summary: pd.DataFrame) -> dict[str, object]:
@@ -230,6 +236,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stock-market", choices=("all", "twse", "tpex"), default="all")
     parser.add_argument("--stock-list-output", default="stocks.txt")
     parser.add_argument("--allow-partial-stock-list", action="store_true")
+    parser.add_argument("--stock-limit", type=int, help="Only scan the first N collected stocks")
+    parser.add_argument("--stock-sample", type=int, help="Randomly scan N collected stocks")
     parser.add_argument("--period", default=DEFAULT_PERIOD)
     parser.add_argument("--horizon", type=int, default=5)
     parser.add_argument("--train-size", type=int, default=252)
@@ -259,6 +267,9 @@ def main() -> None:
             stock_market=args.stock_market,
             stock_list_output=args.stock_list_output,
             allow_partial_stock_list=args.allow_partial_stock_list,
+            stock_limit=args.stock_limit,
+            stock_sample=args.stock_sample,
+            random_state=args.random_state,
         )
         ranking = scan_ai_stocks(
             stock_ids,

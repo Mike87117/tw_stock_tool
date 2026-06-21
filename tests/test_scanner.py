@@ -279,6 +279,36 @@ class ScannerTest(unittest.TestCase):
         )
         self.assertEqual(result, ["2330", "2317"])
 
+    def test_scan_stocks_cli_applies_stock_limit(self) -> None:
+        args = argparse.Namespace(
+            auto_stock_list=False,
+            file=None,
+            stocks=["2330", "2317", "2454"],
+            stock_limit=2,
+            stock_sample=None,
+            random_state=42,
+        )
+
+        result = scan_stocks_cli._collect_stock_ids(args)
+
+        self.assertEqual(result, ["2330", "2317"])
+
+    def test_scan_stocks_cli_applies_stock_sample(self) -> None:
+        args = argparse.Namespace(
+            auto_stock_list=False,
+            file=None,
+            stocks=["2330", "2317", "2454", "2308"],
+            stock_limit=None,
+            stock_sample=2,
+            random_state=7,
+        )
+
+        first = scan_stocks_cli._collect_stock_ids(args)
+        second = scan_stocks_cli._collect_stock_ids(args)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 2)
+
     def test_scan_stocks_cli_updater_failure_does_not_scan(self) -> None:
         args = argparse.Namespace(
             auto_stock_list=True,

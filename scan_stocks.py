@@ -11,6 +11,7 @@ from config import (
 )
 from report import ReportError, export_stock_ranking
 import stock_list_updater as stock_list_updater_module
+from stock_selection import apply_stock_selection
 from scanner import (
     SUPPORTED_SORT_COLUMNS,
     ScanConfig,
@@ -39,6 +40,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stock-market", choices=("all", "twse", "tpex"), default="all")
     parser.add_argument("--stock-list-output", default="stocks.txt")
     parser.add_argument("--allow-partial-stock-list", action="store_true")
+    parser.add_argument("--stock-limit", type=int, help="Only scan the first N collected stocks")
+    parser.add_argument("--stock-sample", type=int, help="Randomly scan N collected stocks")
+    parser.add_argument("--random-state", type=int, default=42, help="Random seed for --stock-sample")
     parser.add_argument("--period", default=DEFAULT_PERIOD, choices=sorted(VALID_PERIODS))
     parser.add_argument("--interval", default=DEFAULT_INTERVAL, choices=sorted(VALID_INTERVALS))
     parser.add_argument("--workers", type=int, default=8, help="多執行緒數量，預設 8")
@@ -70,16 +74,22 @@ def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
             output=args.stock_list_output,
             allow_partial=args.allow_partial_stock_list,
         )
-        return normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())
-
-    stocks = []
-    if args.file:
-        stocks.extend(load_stock_ids_from_file(args.file))
-    if args.stocks:
-        stocks.extend(args.stocks)
-    if not stocks:
-        stocks = _ask_stock_ids()
-    return normalize_stock_ids(stocks)
+        stocks = normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())
+    else:
+        stocks = []
+        if args.file:
+            stocks.extend(load_stock_ids_from_file(args.file))
+        if args.stocks:
+            stocks.extend(args.stocks)
+        if not stocks:
+            stocks = _ask_stock_ids()
+        stocks = normalize_stock_ids(stocks)
+    return apply_stock_selection(
+        stocks,
+        stock_limit=getattr(args, "stock_limit", None),
+        stock_sample=getattr(args, "stock_sample", None),
+        random_state=getattr(args, "random_state", 42),
+    )
 
 
 def _print_progress(current: int, total: int, stock_id: str, status: str) -> None:

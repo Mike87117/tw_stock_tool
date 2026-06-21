@@ -13,6 +13,7 @@
 - Python: `3.11`、`3.12`
 - command: `python -m unittest discover -s tests`
 
+
 ## 安裝
 
 ```bash
@@ -54,6 +55,16 @@ pip install -r requirements.txt
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
+
+### Auto Stock List ????
+
+????? `--auto-stock-list` ???????????????????????????????? yfinance rate limit?
+
+```bash
+python scan_stocks.py --auto-stock-list --stock-limit 50
+python daily_report.py --auto-stock-list --stock-limit 50 --output
+python ai_stock_scanner.py --auto-stock-list --stock-limit 20 --output
+```
 
 ### 建議研究流程
 

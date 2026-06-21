@@ -133,6 +133,29 @@ class AIStockScannerTest(unittest.TestCase):
         )
         self.assertEqual(result, ["2330", "2317"])
 
+    def test_collect_stock_ids_applies_stock_limit(self) -> None:
+        result = ai_stock_scanner.collect_stock_ids(
+            stocks=["2330", "2317", "2454"],
+            stock_limit=2,
+        )
+
+        self.assertEqual(result, ["2330", "2317"])
+
+    def test_collect_stock_ids_applies_stock_sample(self) -> None:
+        first = ai_stock_scanner.collect_stock_ids(
+            stocks=["2330", "2317", "2454", "2308"],
+            stock_sample=2,
+            random_state=7,
+        )
+        second = ai_stock_scanner.collect_stock_ids(
+            stocks=["2330", "2317", "2454", "2308"],
+            stock_sample=2,
+            random_state=7,
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 2)
+
     def test_parse_args_supports_auto_stock_list(self) -> None:
         args = ai_stock_scanner._parse_args([
             "--auto-stock-list",
