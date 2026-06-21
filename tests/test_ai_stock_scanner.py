@@ -110,6 +110,58 @@ class AIStockScannerTest(unittest.TestCase):
             self.assertIn("Ranking", workbook.sheetnames)
             workbook.close()
 
+    def test_collect_stock_ids_auto_stock_list_calls_updater_and_has_priority(self) -> None:
+        updater_df = pd.DataFrame([{"Stock": "2330"}, {"Stock": "2317"}])
+        with patch.object(
+            ai_stock_scanner.stock_list_updater_module,
+            "update_stock_list",
+            return_value=(updater_df, "stocks.txt"),
+        ) as updater_mock:
+            result = ai_stock_scanner.collect_stock_ids(
+                stocks=["9999"],
+                file_path="ignored.txt",
+                auto_stock_list=True,
+                stock_market="all",
+                stock_list_output="stocks.txt",
+                allow_partial_stock_list=True,
+            )
+
+        updater_mock.assert_called_once_with(
+            market="all",
+            output="stocks.txt",
+            allow_partial=True,
+        )
+        self.assertEqual(result, ["2330", "2317"])
+
+    def test_parse_args_supports_auto_stock_list(self) -> None:
+        args = ai_stock_scanner._parse_args([
+            "--auto-stock-list",
+            "--stock-market",
+            "twse",
+            "--stock-list-output",
+            "stocks.txt",
+            "--allow-partial-stock-list",
+        ])
+
+        self.assertTrue(args.auto_stock_list)
+        self.assertEqual(args.stock_market, "twse")
+        self.assertEqual(args.stock_list_output, "stocks.txt")
+        self.assertTrue(args.allow_partial_stock_list)
+
+    def test_ai_stock_scanner_updater_failure_does_not_scan(self) -> None:
+        args = ai_stock_scanner._parse_args(["--auto-stock-list"])
+        with patch.object(ai_stock_scanner, "_parse_args", return_value=args):
+            with patch.object(
+                ai_stock_scanner.stock_list_updater_module,
+                "update_stock_list",
+                side_effect=RuntimeError("updater down"),
+            ):
+                with patch.object(ai_stock_scanner, "scan_ai_stocks") as scan_mock:
+                    with patch("builtins.print"):
+                        ai_stock_scanner.main()
+
+        scan_mock.assert_not_called()
+
     def test_parse_args(self) -> None:
         args = ai_stock_scanner._parse_args(
             [

@@ -1,3 +1,4 @@
+import argparse
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 import sys
@@ -9,6 +10,7 @@ from unittest.mock import patch
 
 import data_loader
 import scanner
+import scan_stocks as scan_stocks_cli
 from analysis import StockAnalysis
 from scanner import ScanConfig, _filter_ok_rows, _sort_ok_rows, normalize_stock_ids, scan_stocks
 
@@ -237,6 +239,64 @@ class ScannerTest(unittest.TestCase):
         )
 
         self.assertEqual(result["Stock"].tolist(), ["2330"])
+
+    def test_scan_stocks_cli_parse_args_supports_auto_stock_list(self) -> None:
+        args = scan_stocks_cli._parse_args([
+            "--auto-stock-list",
+            "--stock-market",
+            "tpex",
+            "--stock-list-output",
+            "stocks.txt",
+            "--allow-partial-stock-list",
+        ])
+
+        self.assertTrue(args.auto_stock_list)
+        self.assertEqual(args.stock_market, "tpex")
+        self.assertEqual(args.stock_list_output, "stocks.txt")
+        self.assertTrue(args.allow_partial_stock_list)
+
+    def test_scan_stocks_cli_auto_stock_list_calls_updater_and_has_priority(self) -> None:
+        args = argparse.Namespace(
+            auto_stock_list=True,
+            stock_market="all",
+            stock_list_output="stocks.txt",
+            allow_partial_stock_list=True,
+            file="ignored.txt",
+            stocks=["9999"],
+        )
+        updater_df = pd.DataFrame([{"Stock": "2330"}, {"Stock": "2317"}])
+        with patch.object(
+            scan_stocks_cli.stock_list_updater_module,
+            "update_stock_list",
+            return_value=(updater_df, "stocks.txt"),
+        ) as updater_mock:
+            result = scan_stocks_cli._collect_stock_ids(args)
+
+        updater_mock.assert_called_once_with(
+            market="all",
+            output="stocks.txt",
+            allow_partial=True,
+        )
+        self.assertEqual(result, ["2330", "2317"])
+
+    def test_scan_stocks_cli_updater_failure_does_not_scan(self) -> None:
+        args = argparse.Namespace(
+            auto_stock_list=True,
+            stock_market="all",
+            stock_list_output="stocks.txt",
+            allow_partial_stock_list=False,
+        )
+        with patch.object(scan_stocks_cli, "_parse_args", return_value=args):
+            with patch.object(
+                scan_stocks_cli.stock_list_updater_module,
+                "update_stock_list",
+                side_effect=RuntimeError("updater down"),
+            ):
+                with patch.object(scan_stocks_cli, "scan_stocks") as scan_mock:
+                    with patch("builtins.print"):
+                        scan_stocks_cli.main()
+
+        scan_mock.assert_not_called()
 
     def test_sort_ok_rows_supported_columns(self) -> None:
         df = pd.DataFrame(

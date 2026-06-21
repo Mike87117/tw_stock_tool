@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -137,6 +138,58 @@ class DailyReportTest(unittest.TestCase):
         self.assertIn("Candidates", sheetnames)
         self.assertIn("All", sheetnames)
         self.assertIn("Errors", sheetnames)
+
+    def test_collect_stock_ids_auto_stock_list_calls_updater_and_has_priority(self) -> None:
+        updater_df = pd.DataFrame([{"Stock": "2330"}, {"Stock": "2454"}])
+        with patch.object(
+            daily_report.stock_list_updater_module,
+            "update_stock_list",
+            return_value=(updater_df, "stocks.txt"),
+        ) as updater_mock:
+            result = daily_report.collect_stock_ids(
+                ["9999"],
+                "ignored.txt",
+                auto_stock_list=True,
+                stock_market="twse",
+                stock_list_output="stocks.txt",
+                allow_partial_stock_list=True,
+            )
+
+        updater_mock.assert_called_once_with(
+            market="twse",
+            output="stocks.txt",
+            allow_partial=True,
+        )
+        self.assertEqual(result, ["2330", "2454"])
+
+    def test_parse_args_supports_auto_stock_list(self) -> None:
+        args = daily_report._parse_args([
+            "--auto-stock-list",
+            "--stock-market",
+            "tpex",
+            "--stock-list-output",
+            "stocks.txt",
+            "--allow-partial-stock-list",
+        ])
+
+        self.assertTrue(args.auto_stock_list)
+        self.assertEqual(args.stock_market, "tpex")
+        self.assertEqual(args.stock_list_output, "stocks.txt")
+        self.assertTrue(args.allow_partial_stock_list)
+
+    def test_daily_report_updater_failure_does_not_run_report(self) -> None:
+        args = daily_report._parse_args(["--auto-stock-list"])
+        with patch.object(daily_report, "_parse_args", return_value=args):
+            with patch.object(
+                daily_report.stock_list_updater_module,
+                "update_stock_list",
+                side_effect=RuntimeError("updater down"),
+            ):
+                with patch.object(daily_report, "run_daily_report") as report_mock:
+                    with patch("builtins.print"):
+                        daily_report.main()
+
+        report_mock.assert_not_called()
 
     def test_parse_args_supports_auto_adjust(self) -> None:
         args = daily_report._parse_args(["--file", "stocks.txt", "--auto-adjust"])

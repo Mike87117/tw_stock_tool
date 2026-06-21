@@ -37,8 +37,10 @@ pip install -r requirements.txt
 | 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
 | 更新股票清單 | `python stock_list_updater.py --market all --output stocks.txt` |
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
+| 自動更新後多股票掃描 | `python scan_stocks.py --auto-stock-list` |
 | 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
 | 每日候選股票報告 | `python daily_report.py --file stocks.txt --output` |
+| 自動更新後每日候選股票報告 | `python daily_report.py --auto-stock-list --output` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
 | Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
 | Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
@@ -47,6 +49,7 @@ pip install -r requirements.txt
 | Baseline ML model | `python baseline_ml_model.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | AI Prediction Report | `python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output` |
 | 多股票 AI 掃描 | `python ai_stock_scanner.py --file stocks.txt --period 5y --horizon 5 --output` |
+| 自動更新後多股票 AI 掃描 | `python ai_stock_scanner.py --auto-stock-list --period 5y --horizon 5 --output` |
 | Benchmark | `python benchmark.py --file stocks.txt --workers 8 --repeat 3` |
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |

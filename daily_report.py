@@ -11,6 +11,7 @@ import pandas as pd
 
 from config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD, OUTPUT_DIR
 from scanner import ScanConfig, load_stock_ids_from_file, normalize_stock_ids, scan_stocks
+import stock_list_updater as stock_list_updater_module
 
 DEFAULT_SIGNALS = ("BUY", "WATCH")
 DEFAULT_MIN_SCORE = 4.0
@@ -36,8 +37,26 @@ SUMMARY_COLUMNS = [
 ]
 
 
-def collect_stock_ids(stocks: Iterable[str] | None, file_path: str | None) -> list[str]:
-    """Collect stock ids from CLI values and/or a text file."""
+def collect_stock_ids(
+    stocks: Iterable[str] | None,
+    file_path: str | None,
+    auto_stock_list: bool = False,
+    stock_market: str = "all",
+    stock_list_output: str | Path = "stocks.txt",
+    allow_partial_stock_list: bool = False,
+) -> list[str]:
+    """Collect stock ids from auto-updater, CLI values, and/or a text file."""
+    if auto_stock_list:
+        stocks_df, _ = stock_list_updater_module.update_stock_list(
+            market=stock_market,
+            output=stock_list_output,
+            allow_partial=allow_partial_stock_list,
+        )
+        normalized = normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())
+        if not normalized:
+            raise ValueError("Auto stock list did not return any stock ids.")
+        return normalized
+
     values: list[str] = []
     if file_path:
         values.extend(load_stock_ids_from_file(file_path))
@@ -208,6 +227,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Stock id list, for example: --stocks 2330 2317",
     )
     parser.add_argument("--file", help="Load stock ids from txt file")
+    parser.add_argument("--auto-stock-list", action="store_true", help="Update and use an official stock list before reporting")
+    parser.add_argument("--stock-market", choices=("all", "twse", "tpex"), default="all")
+    parser.add_argument("--stock-list-output", default="stocks.txt")
+    parser.add_argument("--allow-partial-stock-list", action="store_true")
     parser.add_argument("--period", default=DEFAULT_PERIOD)
     parser.add_argument("--interval", default=DEFAULT_INTERVAL)
     parser.add_argument("--signals", nargs="+", default=list(DEFAULT_SIGNALS))
@@ -232,7 +255,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main() -> None:
     try:
         args = _parse_args()
-        stock_ids = collect_stock_ids(args.stocks, args.file)
+        stock_ids = collect_stock_ids(
+            args.stocks,
+            args.file,
+            auto_stock_list=args.auto_stock_list,
+            stock_market=args.stock_market,
+            stock_list_output=args.stock_list_output,
+            allow_partial_stock_list=args.allow_partial_stock_list,
+        )
         summary_df, candidates_df, _, output_path = run_daily_report(
             stock_ids=stock_ids,
             period=args.period,

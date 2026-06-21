@@ -10,6 +10,7 @@ from config import (
     VALID_PERIODS,
 )
 from report import ReportError, export_stock_ranking
+import stock_list_updater as stock_list_updater_module
 from scanner import (
     SUPPORTED_SORT_COLUMNS,
     ScanConfig,
@@ -30,10 +31,14 @@ def _ask_stock_ids() -> list[str]:
     return normalize_stock_ids(values)
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="多股票技術分析掃描器")
     parser.add_argument("--stocks", nargs="*", help="股票代號清單，例如: --stocks 2330 2317 2454")
     parser.add_argument("--file", help="從 txt 載入股票代號，每行一檔")
+    parser.add_argument("--auto-stock-list", action="store_true", help="Update and use an official stock list before scanning")
+    parser.add_argument("--stock-market", choices=("all", "twse", "tpex"), default="all")
+    parser.add_argument("--stock-list-output", default="stocks.txt")
+    parser.add_argument("--allow-partial-stock-list", action="store_true")
     parser.add_argument("--period", default=DEFAULT_PERIOD, choices=sorted(VALID_PERIODS))
     parser.add_argument("--interval", default=DEFAULT_INTERVAL, choices=sorted(VALID_INTERVALS))
     parser.add_argument("--workers", type=int, default=8, help="多執行緒數量，預設 8")
@@ -55,10 +60,18 @@ def _parse_args() -> argparse.Namespace:
         help="使用除權息調整後價格",
     )
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="輸出資料夾")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
+    if args.auto_stock_list:
+        stocks_df, _ = stock_list_updater_module.update_stock_list(
+            market=args.stock_market,
+            output=args.stock_list_output,
+            allow_partial=args.allow_partial_stock_list,
+        )
+        return normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())
+
     stocks = []
     if args.file:
         stocks.extend(load_stock_ids_from_file(args.file))
