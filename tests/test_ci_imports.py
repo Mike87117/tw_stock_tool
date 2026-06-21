@@ -23,6 +23,7 @@ class CiImportsTest(unittest.TestCase):
             "stock_list_updater",
             "stock_selection",
             "stock_list_smoke_check",
+            "price_data_smoke_check",
         ]:
             with self.subTest(module=module_name):
                 self.assertIsNotNone(importlib.import_module(module_name))

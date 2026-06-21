@@ -38,6 +38,7 @@ pip install -r requirements.txt
 | 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
 | 更新股票清單 | `python stock_list_updater.py --market all --output stocks.txt` |
 | 官方資料來源檢查 | `python stock_list_smoke_check.py` |
+| 價格資料來源檢查 | `python price_data_smoke_check.py` |
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
 | 自動更新後多股票掃描 | `python scan_stocks.py --auto-stock-list` |
 | 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
@@ -101,6 +102,23 @@ python stock_list_smoke_check.py
 - 這是 live API smoke check。
 - 不會放進一般 unittest / CI 預設流程。
 - 如果官方服務暫時不穩，可能會失敗，失敗不一定代表程式邏輯錯誤。
+
+
+### 價格資料來源檢查
+
+如果掃描時大量股票顯示 no data、疑似 yfinance rate limit，或官方 fallback 無法使用，可以手動執行：
+
+```bash
+python price_data_smoke_check.py
+```
+
+這個工具會透過 `data_loader.download_tw_stock()` 檢查 yfinance 主資料源與官方 fallback 價格資料路徑是否可用。
+
+注意：
+
+- 這是 live API smoke check。
+- 不會放進一般 unittest / CI 預設流程。
+- 如果外部資料源暫時不穩，失敗不一定代表程式邏輯錯誤。
 
 
 ### 建議研究流程
