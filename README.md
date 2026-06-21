@@ -174,186 +174,93 @@ AI Stock Scanner
 
 ## 新手第一次使用範例
 
-這個範例適合第一次接觸本專案、還不熟悉技術分析、也不知道該先用哪個功能的使用者。以下使用 `2330` 作為主要範例股票，帶你從安裝到 Walk Forward 驗證完整跑一次。
+本流程適合第一次使用本專案的使用者。建議先檢查資料來源，再用小範圍掃描熟悉輸出，最後再進入策略比較、Walk Forward 與 AI / ML 研究。
 
 ### Step 1：安裝套件
 
-先安裝需求套件。
+先安裝需求套件，並確認 CLI 能正常顯示說明。
 
 ```bash
 pip install -r requirements.txt
-```
-
-確認 CLI 能正常顯示說明：
-
-```bash
 python main.py --help
 ```
 
-### Step 2：準備股票清單
+### Step 2：檢查資料來源
 
-建立 `stocks.txt`，每行一個股票代號：
-
-```text
-2330
-2317
-2454
-2308
-2882
-```
-
-### Step 3：掃描股票
+第一次使用時，建議先確認官方股票清單來源與價格資料來源可用。
 
 ```bash
-python scan_stocks.py --file stocks.txt
+python stock_list_smoke_check.py
+python price_data_smoke_check.py
 ```
 
-如果想直接產生每日候選清單 Excel：
+說明：
+
+- 如果這兩個檢查失敗，可能是外部資料源暫時不穩，不一定是程式錯。
+- 第一次使用時建議先確認資料來源正常。
+- 這兩個 smoke check 是手動 live API 檢查，不會放進一般 unittest / CI 預設流程。
+
+### Step 3：先小範圍掃描
 
 ```bash
-python daily_report.py --file stocks.txt --output
+python scan_stocks.py --auto-stock-list --stock-limit 50
 ```
 
-這一步會從多檔股票中找出值得進一步研究的標的。
+說明：
 
-觀察：
+- 第一次不要直接掃全市場。
+- 先用 `--stock-limit` 限制股票數量，確認速度與輸出都正常。
+- 如果想隨機抽樣，可以改用 `--stock-sample` 搭配 `--random-state`。
+
+### Step 4：產生每日候選報告
+
+```bash
+python daily_report.py --auto-stock-list --stock-limit 50 --output
+```
+
+這會產生每日候選股票 Excel，可以先觀察：
 
 - `Signal`
 - `Score`
 - `Volume_Ratio`
 - `Analysis`
 
-優先關注：
+### Step 5：單股深入分析
 
-- `BUY`
-- `WATCH`
-- 高 `Score`
-- 成交量放大
-
-### Step 4：單股分析
-
-假設對 `2330` 有興趣，可以執行：
+假設對 `2330` 有興趣，可以輸出單股分析 Excel 與圖表。
 
 ```bash
-python main.py --stock 2330 --period 2y
+python main.py --stock 2330 --period 2y --export-excel --save-chart
 ```
 
-觀察：
-
-- 技術指標
-- 訊號
-- 回測結果
-
-如果要輸出 Excel：
-
-```bash
-python main.py --stock 2330 --period 2y --export-excel
-```
-
-如果要輸出圖表：
-
-```bash
-python main.py --stock 2330 --period 2y --save-chart
-```
-
-### Step 5：比較策略
+### Step 6：策略比較與 Walk Forward
 
 ```bash
 python strategy_compare.py --stock 2330 --period 2y
-```
-
-比較：
-
-- Score Strategy
-- MA Cross Strategy
-- RSI Strategy
-- MACD Strategy
-
-觀察：
-
-- `Total Return %`
-- `CAGR %`
-- `Sharpe Ratio`
-- `Max Drawdown %`
-
-### Step 6：參數掃描
-
-```bash
-python parameter_sweep.py --stock 2330 --period 2y
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
-```
-
-如果要輸出 Excel：
-
-```bash
-python parameter_sweep.py --stock 2330 --period 2y --output-excel
-```
-
-觀察：
-
-- 哪組參數回測較佳
-- `Sharpe Ratio`
-- `Total Return %`
-- `Max Drawdown %`
-
-提醒：
-
-不要直接相信最佳參數。這一步只是在歷史資料上尋找表現較佳的參數組合。
-
-### Step 7：Walk Forward 驗證
-
-```bash
-python walk_forward.py --stock 2330 --period 10y
-```
-
-如果要輸出 Excel：
-
-```bash
 python walk_forward.py --stock 2330 --period 10y --output
 ```
 
-觀察：
+說明：
 
-- `Avg Test Total Return %`
-- `Avg Test Sharpe Ratio`
-- `Positive Test Windows %`
+- `strategy_compare.py` 用來比較不同策略在同一檔股票上的歷史回測結果。
+- `walk_forward.py` 用 train / test 視窗驗證參數是否可能過度擬合。
+- Walk Forward 比單純 Parameter Sweep 更適合用來觀察策略穩定性。
 
-重點：
+### Step 7：AI / ML 研究流程（進階選項）
 
-如果 train 很好但 test 很差，代表可能過度擬合。
-
-### Step 8：效能測試（選擇性）
+如果想研究 baseline AI / ML 結果，可以再執行：
 
 ```bash
-python benchmark.py --file stocks.txt --workers 8 --repeat 3
+python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output
+python ai_stock_scanner.py --auto-stock-list --stock-limit 20 --period 5y --horizon 5 --output
 ```
 
-用途：
+提醒：
 
-- 評估 cache 效果
-- 評估 worker 數量
-- 評估 force-refresh 成本
-
-### 最後成果
-
-執行完成後，使用者通常會得到：
-
-- 股票排行 Excel
-- 單股分析 Excel
-- 單股分析圖表
-- Parameter Sweep Excel
-- Walk Forward Excel
-- Benchmark 統計結果
-
-### 最後提醒
-
-注意事項：
-
-- 本工具僅供研究與技術分析用途
-- 不保證投資績效
-- 不提供投資建議
-- Walk Forward 比單純 Parameter Sweep 更有參考價值
-- 歷史績效不代表未來績效
+- 本工具僅供研究，不是投資建議。
+- AI / ML 結果不保證預測績效。
+- 第一次使用 `--auto-stock-list` 建議搭配 `--stock-limit`。
+- 歷史績效不代表未來績效。
 
 ## 常見使用流程
 
