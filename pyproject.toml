@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tw-stock-tool"
+version = "0.1.0"
+description = "Taiwan stock technical analysis and research CLI tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "yfinance>=0.2,<0.3",
+    "pandas>=2.1,<3.0",
+    "numpy>=1.26,<3.0",
+    "matplotlib>=3.8,<4.0",
+    "mplfinance>=0.12,<0.13",
+    "openpyxl>=3.1,<4.0",
+    "requests>=2.31,<3.0",
+    "scikit-learn>=1.3,<2.0",
+]
+
+[project.scripts]
+twstock = "twstock_cli:main"
+
+[tool.setuptools]
+py-modules = [
+    "ai_prediction_report",
+    "ai_stock_scanner",
+    "ai_walk_forward",
+    "analysis",
+    "app_services",
+    "backtest",
+    "baseline_ml_model",
+    "benchmark",
+    "cache_manager",
+    "cache_utils",
+    "clean_stocks",
+    "config",
+    "console_lock",
+    "daily_report",
+    "data_loader",
+    "doctor",
+    "indicators",
+    "main",
+    "ml_dataset",
+    "parameter_sweep",
+    "plotter",
+    "price_data_smoke_check",
+    "report",
+    "scan_stocks",
+    "scanner",
+    "signals",
+    "stock_list_smoke_check",
+    "stock_list_updater",
+    "stock_selection",
+    "strategies",
+    "strategy_compare",
+    "twstock_cli",
+    "verify_batch",
+    "walk_forward",
+]

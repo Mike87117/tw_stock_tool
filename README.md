@@ -21,6 +21,15 @@ cd tw_stock_tool
 pip install -r requirements.txt
 ```
 
+### 可選：安裝成 twstock 指令
+
+```bash
+pip install -e .
+twstock doctor
+```
+
+不安裝也可以繼續用 `python twstock_cli.py ...`。安裝後可以用 `twstock ...` 簡化指令。
+
 ### 環境檢查
 
 安裝套件後，建議先執行：
@@ -80,6 +89,9 @@ python doctor.py --live
 | 統一 CLI：環境檢查 | `python twstock_cli.py doctor` |
 | 統一 CLI：多股票掃描 | `python twstock_cli.py scan --auto-stock-list --stock-limit 50` |
 | 統一 CLI：每日候選報告 | `python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output` |
+| twstock：環境檢查 | `twstock doctor` |
+| twstock：多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
+| twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
 ### 統一 CLI 入口
