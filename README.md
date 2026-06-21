@@ -1352,3 +1352,12 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
+
+## 官方資料來源檢查
+
+`stock_list_smoke_check.py` 用於手動檢查 TWSE / TPEx 官方股票清單來源在目前網路環境中是否仍可用。這個指令會連線到官方 API，因此不會在 CI 預設流程中強制執行，避免外部服務不穩造成假失敗。
+
+```bash
+python stock_list_smoke_check.py
+```
+
