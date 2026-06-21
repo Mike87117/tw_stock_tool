@@ -86,6 +86,7 @@ python doctor.py --live
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |
 | 環境檢查 | `python doctor.py` |
+| 本機 GUI 原型 | `python gui_app.py` |
 | 統一 CLI：環境檢查 | `python twstock_cli.py doctor` |
 | 統一 CLI：多股票掃描 | `python twstock_cli.py scan --auto-stock-list --stock-limit 50` |
 | 統一 CLI：每日候選報告 | `python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output` |
@@ -93,6 +94,14 @@ python doctor.py --live
 | twstock：多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
 | twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
+
+### 本機 GUI 原型
+
+```bash
+python gui_app.py
+```
+
+這是初版 Tkinter GUI 原型，目前主要用於環境檢查與資料來源檢查。掃描、Daily Report、單股分析會在後續逐步加入。
 
 ### 統一 CLI 入口
 
