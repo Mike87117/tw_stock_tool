@@ -6,6 +6,13 @@ from gui_tasks import TaskState
 
 
 class GuiAppTest(unittest.TestCase):
+    class _Var:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
     def _root(self) -> Mock:
         root = Mock()
         root.after = Mock()
@@ -31,6 +38,51 @@ class GuiAppTest(unittest.TestCase):
         self.assertIs(app.root, root)
         self.assertIs(app.runner, runner)
         root.after.assert_not_called()
+
+    def test_stock_list_variables_exist_on_gui_instance(self) -> None:
+        root = self._root()
+        runner = self._runner()
+
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        self.assertTrue(hasattr(app, "market_var"))
+        self.assertTrue(hasattr(app, "output_var"))
+        self.assertTrue(hasattr(app, "allow_partial_var"))
+
+    def test_submit_stock_list_update_calls_runner_submit(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+        app.market_var = self._Var("tpex")
+        app.output_var = self._Var("output/stocks.txt")
+        app.allow_partial_var = self._Var(True)
+
+        task_id = app.submit_stock_list_update()
+
+        self.assertEqual(task_id, "task-1")
+        runner.submit.assert_called_once_with(
+            "Update Stock List",
+            gui_app.app_services.stock_list_updater_service,
+            market="tpex",
+            output="output/stocks.txt",
+            allow_partial=True,
+        )
+
+    def test_submit_stock_list_update_rejects_blank_output(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+        app.market_var = self._Var("all")
+        app.output_var = self._Var("   ")
+        app.allow_partial_var = self._Var(False)
+        app.result_text = Mock()
+
+        task_id = app.submit_stock_list_update()
+
+        self.assertIsNone(task_id)
+        runner.submit.assert_not_called()
+        inserted_text = app.result_text.insert.call_args.args[1]
+        self.assertIn("Output path cannot be blank.", inserted_text)
 
     def test_submit_task_calls_task_runner_submit(self) -> None:
         root = self._root()

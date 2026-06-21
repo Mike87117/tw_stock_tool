@@ -29,6 +29,9 @@ class TwStockToolGUI:
         self.runner = runner or TaskRunner(max_workers=2)
         self._closed = False
         self._reported_finished: set[str] = set()
+        self.market_var: tk.StringVar | None = None
+        self.output_var: tk.StringVar | None = None
+        self.allow_partial_var: tk.BooleanVar | None = None
         self.task_tree: ttk.Treeview | None = None
         self.result_text: tk.Text | None = None
         if build_ui:
@@ -44,13 +47,16 @@ class TwStockToolGUI:
 
         environment_frame = ttk.Frame(notebook)
         data_sources_frame = ttk.Frame(notebook)
+        stock_list_frame = ttk.Frame(notebook)
         task_log_frame = ttk.Frame(notebook)
         notebook.add(environment_frame, text="Environment")
         notebook.add(data_sources_frame, text="Data Sources")
+        notebook.add(stock_list_frame, text="Stock List")
         notebook.add(task_log_frame, text="Task Log")
 
         self._build_environment_tab(environment_frame)
         self._build_data_sources_tab(data_sources_frame)
+        self._build_stock_list_tab(stock_list_frame)
         self._build_task_log_tab(task_log_frame)
         self.refresh_tasks()
 
@@ -98,6 +104,41 @@ class TwStockToolGUI:
             ),
         ).pack(anchor="w", padx=12, pady=4)
 
+    def _build_stock_list_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="Update official stock list", font=("TkDefaultFont", 12, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 8)
+        )
+
+        form = ttk.Frame(parent)
+        form.pack(anchor="w", fill="x", padx=12, pady=4)
+
+        ttk.Label(form, text="Market").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.market_var = tk.StringVar(value="all")
+        ttk.Combobox(
+            form,
+            textvariable=self.market_var,
+            values=("all", "twse", "tpex"),
+            state="readonly",
+            width=12,
+        ).grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Output").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.output_var = tk.StringVar(value="stocks.txt")
+        ttk.Entry(form, textvariable=self.output_var, width=40).grid(row=1, column=1, sticky="w", pady=4)
+
+        self.allow_partial_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            form,
+            text="Allow partial",
+            variable=self.allow_partial_var,
+        ).grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Button(
+            parent,
+            text="Update Stock List",
+            command=self.submit_stock_list_update,
+        ).pack(anchor="w", padx=12, pady=(8, 4))
+
     def _build_task_log_tab(self, parent: ttk.Frame) -> None:
         columns = (
             "task_id",
@@ -122,6 +163,22 @@ class TwStockToolGUI:
 
         self.result_text = tk.Text(parent, height=12, wrap="word")
         self.result_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+    def submit_stock_list_update(self) -> str | None:
+        """Submit official stock-list update using current form values."""
+        market = self.market_var.get() if self.market_var is not None else "all"
+        output = self.output_var.get().strip() if self.output_var is not None else "stocks.txt"
+        allow_partial = self.allow_partial_var.get() if self.allow_partial_var is not None else False
+        if not output:
+            self._append_result("Output path cannot be blank.")
+            return None
+        return self.submit_task(
+            "Update Stock List",
+            app_services.stock_list_updater_service,
+            market=market,
+            output=output,
+            allow_partial=allow_partial,
+        )
 
     def submit_task(self, name: str, func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
         """Submit a service call to the background runner."""
