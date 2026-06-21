@@ -21,6 +21,26 @@ cd tw_stock_tool
 pip install -r requirements.txt
 ```
 
+### 環境檢查
+
+安裝套件後，建議先執行：
+
+```bash
+python doctor.py
+```
+
+如果想同時檢查外部資料來源，可以執行：
+
+```bash
+python doctor.py --live
+```
+
+說明：
+
+- `doctor.py` 預設只檢查本機環境，不連外部資料源。
+- `doctor.py --live` 會額外執行官方股票清單與價格資料 smoke check。
+- live check 失敗可能是外部服務暫時不穩，不一定代表程式邏輯錯誤。
+
 如果 Windows 環境中 `python` 不在 PATH，請改用你的 Python 絕對路徑執行，例如：
 
 ```powershell
@@ -56,6 +76,7 @@ pip install -r requirements.txt
 | Benchmark | `python benchmark.py --file stocks.txt --workers 8 --repeat 3` |
 | 查看快取摘要 | `python cache_manager.py --summary` |
 | 清除快取 | `python cache_manager.py --clear` |
+| 環境檢查 | `python doctor.py` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
 ### Auto Stock List 安全使用建議
