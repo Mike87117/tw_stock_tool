@@ -1,5 +1,5 @@
 ﻿import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import gui_app
 from gui_tasks import TaskState
@@ -544,13 +544,16 @@ class GuiAppTest(unittest.TestCase):
         app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
         app.result_text = Mock()
 
-        app.refresh_tasks(schedule_next=False)
-        app.refresh_tasks(schedule_next=False)
+        with patch.object(gui_app, "format_task_result", return_value="formatted result") as formatter:
+            app.refresh_tasks(schedule_next=False)
+            app.refresh_tasks(schedule_next=False)
 
+        formatter.assert_called_once_with("Doctor", {"ok": True})
         app.result_text.insert.assert_called_once()
         inserted_text = app.result_text.insert.call_args.args[1]
         self.assertIn("SUCCESS: Doctor", inserted_text)
-        self.assertIn("{'ok': True}", inserted_text)
+        self.assertIn("formatted result", inserted_text)
+        self.assertNotIn("{'ok': True}", inserted_text)
 
     def test_cancel_selected_task_calls_runner_cancel(self) -> None:
         root = self._root()

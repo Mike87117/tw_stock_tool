@@ -11,6 +11,7 @@ from tkinter import messagebox, ttk
 from typing import Any, Callable
 
 import app_services
+from gui_result_formatter import format_task_result
 from gui_tasks import FAILED, SUCCESS, TaskRunner, TaskState
 
 REFRESH_MS = 500
@@ -632,7 +633,8 @@ class TwStockToolGUI:
 
     def _append_finished_task(self, task: TaskState) -> None:
         if task.status == SUCCESS:
-            self._append_result(f"SUCCESS: {task.name}\n{task.result}")
+            formatted = format_task_result(task.name, task.result)
+            self._append_result(f"SUCCESS: {task.name}\n{formatted}")
         elif task.status == FAILED:
             self._append_result(f"FAILED: {task.name}\n{task.error}")
 
