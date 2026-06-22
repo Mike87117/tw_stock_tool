@@ -46,6 +46,15 @@ class TwStockToolGUI:
         self.daily_top_var: tk.StringVar | None = None
         self.daily_output_var: tk.StringVar | None = None
         self.daily_progress_var: tk.BooleanVar | None = None
+        self.single_stock_id_var: tk.StringVar | None = None
+        self.single_period_var: tk.StringVar | None = None
+        self.single_interval_var: tk.StringVar | None = None
+        self.single_stop_loss_var: tk.StringVar | None = None
+        self.single_take_profit_var: tk.StringVar | None = None
+        self.single_max_hold_days_var: tk.StringVar | None = None
+        self.single_position_size_var: tk.StringVar | None = None
+        self.single_export_excel_var: tk.BooleanVar | None = None
+        self.single_save_chart_var: tk.BooleanVar | None = None
         self.task_tree: ttk.Treeview | None = None
         self.result_text: tk.Text | None = None
         if build_ui:
@@ -64,12 +73,14 @@ class TwStockToolGUI:
         stock_list_frame = ttk.Frame(notebook)
         scan_frame = ttk.Frame(notebook)
         daily_report_frame = ttk.Frame(notebook)
+        single_stock_frame = ttk.Frame(notebook)
         task_log_frame = ttk.Frame(notebook)
         notebook.add(environment_frame, text="Environment")
         notebook.add(data_sources_frame, text="Data Sources")
         notebook.add(stock_list_frame, text="Stock List")
         notebook.add(scan_frame, text="Scan")
         notebook.add(daily_report_frame, text="Daily Report")
+        notebook.add(single_stock_frame, text="Single Stock")
         notebook.add(task_log_frame, text="Task Log")
 
         self._build_environment_tab(environment_frame)
@@ -77,6 +88,7 @@ class TwStockToolGUI:
         self._build_stock_list_tab(stock_list_frame)
         self._build_scan_tab(scan_frame)
         self._build_daily_report_tab(daily_report_frame)
+        self._build_single_stock_tab(single_stock_frame)
         self._build_task_log_tab(task_log_frame)
         self.refresh_tasks()
 
@@ -273,6 +285,74 @@ class TwStockToolGUI:
             command=self.submit_daily_report,
         ).pack(anchor="w", padx=12, pady=(8, 4))
 
+    def _build_single_stock_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="Run single stock analysis", font=("TkDefaultFont", 12, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 8)
+        )
+
+        form = ttk.Frame(parent)
+        form.pack(anchor="w", fill="x", padx=12, pady=4)
+
+        ttk.Label(form, text="Stock ID").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_stock_id_var = tk.StringVar(value="2330")
+        ttk.Entry(form, textvariable=self.single_stock_id_var, width=18).grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Period").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_period_var = tk.StringVar(value="2y")
+        ttk.Combobox(
+            form,
+            textvariable=self.single_period_var,
+            values=("1y", "2y", "5y", "10y"),
+            state="readonly",
+            width=12,
+        ).grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Interval").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_interval_var = tk.StringVar(value="1d")
+        ttk.Combobox(
+            form,
+            textvariable=self.single_interval_var,
+            values=("1d", "1wk", "1mo"),
+            state="readonly",
+            width=12,
+        ).grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Stop loss %").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_stop_loss_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.single_stop_loss_var, width=12).grid(row=3, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Take profit %").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_take_profit_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.single_take_profit_var, width=12).grid(row=4, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Max hold days").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_max_hold_days_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.single_max_hold_days_var, width=12).grid(row=5, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Position size").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.single_position_size_var = tk.StringVar(value="1.0")
+        ttk.Entry(form, textvariable=self.single_position_size_var, width=12).grid(row=6, column=1, sticky="w", pady=4)
+
+        self.single_export_excel_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            form,
+            text="Export Excel",
+            variable=self.single_export_excel_var,
+        ).grid(row=7, column=1, sticky="w", pady=4)
+
+        self.single_save_chart_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            form,
+            text="Save chart",
+            variable=self.single_save_chart_var,
+        ).grid(row=8, column=1, sticky="w", pady=4)
+
+        ttk.Button(
+            parent,
+            text="Run Single Stock Analysis",
+            command=self.submit_single_stock_analysis,
+        ).pack(anchor="w", padx=12, pady=(8, 4))
+
     def _build_task_log_tab(self, parent: ttk.Frame) -> None:
         columns = (
             "task_id",
@@ -325,6 +405,66 @@ class TwStockToolGUI:
         if not text:
             return None
         return self._parse_positive_int(text, error_message)
+
+    def _parse_optional_positive_float(self, value: str, error_message: str) -> float | None:
+        number = self._parse_optional_float(value, error_message)
+        if number is not None and number <= 0:
+            raise ValueError(error_message)
+        return number
+
+    def _parse_position_size(self, value: str) -> float:
+        try:
+            number = float(value.strip())
+        except ValueError as exc:
+            raise ValueError("Position size must be greater than 0 and less than or equal to 1.") from exc
+        if not 0 < number <= 1:
+            raise ValueError("Position size must be greater than 0 and less than or equal to 1.")
+        return number
+
+    def submit_single_stock_analysis(self) -> str | None:
+        """Submit single-stock analysis using current form values."""
+        stock_id = self.single_stock_id_var.get().strip() if self.single_stock_id_var is not None else ""
+        if not stock_id:
+            self._append_result("Stock ID cannot be blank.")
+            return None
+
+        try:
+            stop_loss_pct = self._parse_optional_positive_float(
+                self.single_stop_loss_var.get() if self.single_stop_loss_var is not None else "",
+                "Stop loss must be a positive number.",
+            )
+            take_profit_pct = self._parse_optional_positive_float(
+                self.single_take_profit_var.get() if self.single_take_profit_var is not None else "",
+                "Take profit must be a positive number.",
+            )
+            max_hold_days = self._parse_optional_positive_int(
+                self.single_max_hold_days_var.get() if self.single_max_hold_days_var is not None else "",
+                "Max hold days must be a positive integer.",
+            )
+            position_size = self._parse_position_size(
+                self.single_position_size_var.get() if self.single_position_size_var is not None else "1.0"
+            )
+        except ValueError as exc:
+            self._append_result(str(exc))
+            return None
+
+        period = self.single_period_var.get() if self.single_period_var is not None else "2y"
+        interval = self.single_interval_var.get() if self.single_interval_var is not None else "1d"
+        export_excel = self.single_export_excel_var.get() if self.single_export_excel_var is not None else True
+        save_chart = self.single_save_chart_var.get() if self.single_save_chart_var is not None else True
+        return self.submit_task(
+            "Run Single Stock Analysis",
+            app_services.single_stock_analysis_service,
+            stock_id=stock_id,
+            period=period,
+            interval=interval,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            max_hold_days=max_hold_days,
+            position_size=position_size,
+            export_excel=export_excel,
+            save_chart=save_chart,
+        )
 
     def submit_daily_report(self) -> str | None:
         """Submit daily report generation using current form values."""

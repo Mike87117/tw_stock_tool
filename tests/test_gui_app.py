@@ -313,6 +313,152 @@ class GuiAppTest(unittest.TestCase):
         runner.submit.assert_not_called()
         self.assertIn("Top must be a positive integer.", app.result_text.insert.call_args.args[1])
 
+    def _configure_single_stock_vars(
+        self,
+        app,
+        stock_id="2330",
+        period="2y",
+        interval="1d",
+        stop_loss="8",
+        take_profit="20",
+        max_hold_days="30",
+        position_size="0.5",
+        export_excel=True,
+        save_chart=True,
+    ) -> None:
+        app.single_stock_id_var = self._Var(stock_id)
+        app.single_period_var = self._Var(period)
+        app.single_interval_var = self._Var(interval)
+        app.single_stop_loss_var = self._Var(stop_loss)
+        app.single_take_profit_var = self._Var(take_profit)
+        app.single_max_hold_days_var = self._Var(max_hold_days)
+        app.single_position_size_var = self._Var(position_size)
+        app.single_export_excel_var = self._Var(export_excel)
+        app.single_save_chart_var = self._Var(save_chart)
+
+    def test_single_stock_variables_exist_on_gui_instance(self) -> None:
+        root = self._root()
+        runner = self._runner()
+
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        self.assertTrue(hasattr(app, "single_stock_id_var"))
+        self.assertTrue(hasattr(app, "single_period_var"))
+        self.assertTrue(hasattr(app, "single_interval_var"))
+        self.assertTrue(hasattr(app, "single_stop_loss_var"))
+        self.assertTrue(hasattr(app, "single_take_profit_var"))
+        self.assertTrue(hasattr(app, "single_max_hold_days_var"))
+        self.assertTrue(hasattr(app, "single_position_size_var"))
+        self.assertTrue(hasattr(app, "single_export_excel_var"))
+        self.assertTrue(hasattr(app, "single_save_chart_var"))
+
+    def test_submit_single_stock_analysis_calls_runner_submit_with_options(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+        self._configure_single_stock_vars(app)
+
+        task_id = app.submit_single_stock_analysis()
+
+        self.assertEqual(task_id, "task-1")
+        runner.submit.assert_called_once_with(
+            "Run Single Stock Analysis",
+            gui_app.app_services.single_stock_analysis_service,
+            stock_id="2330",
+            period="2y",
+            interval="1d",
+            stop_loss_pct=8.0,
+            take_profit_pct=20.0,
+            max_hold_days=30,
+            position_size=0.5,
+            export_excel=True,
+            save_chart=True,
+        )
+
+    def test_submit_single_stock_analysis_optional_fields_blank_pass_none(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_single_stock_vars(
+            app,
+            stop_loss="",
+            take_profit="",
+            max_hold_days="",
+            position_size="1.0",
+            export_excel=False,
+            save_chart=False,
+        )
+
+        app.submit_single_stock_analysis()
+
+        kwargs = runner.submit.call_args.kwargs
+        self.assertIsNone(kwargs["stop_loss_pct"])
+        self.assertIsNone(kwargs["take_profit_pct"])
+        self.assertIsNone(kwargs["max_hold_days"])
+        self.assertEqual(kwargs["position_size"], 1.0)
+        self.assertFalse(kwargs["export_excel"])
+        self.assertFalse(kwargs["save_chart"])
+
+    def test_submit_single_stock_analysis_rejects_blank_stock_id(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_single_stock_vars(app, stock_id="   ")
+        app.result_text = Mock()
+
+        self.assertIsNone(app.submit_single_stock_analysis())
+        runner.submit.assert_not_called()
+        self.assertIn("Stock ID cannot be blank.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_single_stock_analysis_rejects_invalid_stop_loss(self) -> None:
+        for value in ("0", "abc"):
+            with self.subTest(value=value):
+                runner = self._runner()
+                app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+                self._configure_single_stock_vars(app, stop_loss=value)
+                app.result_text = Mock()
+
+                self.assertIsNone(app.submit_single_stock_analysis())
+                runner.submit.assert_not_called()
+                self.assertIn("Stop loss must be a positive number.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_single_stock_analysis_rejects_invalid_take_profit(self) -> None:
+        for value in ("0", "abc"):
+            with self.subTest(value=value):
+                runner = self._runner()
+                app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+                self._configure_single_stock_vars(app, take_profit=value)
+                app.result_text = Mock()
+
+                self.assertIsNone(app.submit_single_stock_analysis())
+                runner.submit.assert_not_called()
+                self.assertIn("Take profit must be a positive number.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_single_stock_analysis_rejects_invalid_max_hold_days(self) -> None:
+        for value in ("0", "abc"):
+            with self.subTest(value=value):
+                runner = self._runner()
+                app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+                self._configure_single_stock_vars(app, max_hold_days=value)
+                app.result_text = Mock()
+
+                self.assertIsNone(app.submit_single_stock_analysis())
+                runner.submit.assert_not_called()
+                self.assertIn("Max hold days must be a positive integer.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_single_stock_analysis_rejects_invalid_position_size(self) -> None:
+        for value in ("abc", "0", "1.5"):
+            with self.subTest(value=value):
+                runner = self._runner()
+                app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+                self._configure_single_stock_vars(app, position_size=value)
+                app.result_text = Mock()
+
+                self.assertIsNone(app.submit_single_stock_analysis())
+                runner.submit.assert_not_called()
+                self.assertIn(
+                    "Position size must be greater than 0 and less than or equal to 1.",
+                    app.result_text.insert.call_args.args[1],
+                )
+
     def test_submit_task_calls_task_runner_submit(self) -> None:
         root = self._root()
         runner = self._runner()
