@@ -200,6 +200,119 @@ class GuiAppTest(unittest.TestCase):
         runner.submit.assert_not_called()
         self.assertIn("Top must be a positive integer.", app.result_text.insert.call_args.args[1])
 
+    def _configure_daily_vars(
+        self,
+        app,
+        stock_ids="2330, 2317 2454",
+        period="2y",
+        interval="1d",
+        min_score="4.5",
+        top="20",
+        output="output/daily_report.xlsx",
+        progress=True,
+    ) -> None:
+        app.daily_stock_ids_var = self._Var(stock_ids)
+        app.daily_period_var = self._Var(period)
+        app.daily_interval_var = self._Var(interval)
+        app.daily_min_score_var = self._Var(min_score)
+        app.daily_top_var = self._Var(top)
+        app.daily_output_var = self._Var(output)
+        app.daily_progress_var = self._Var(progress)
+
+    def test_daily_report_variables_exist_on_gui_instance(self) -> None:
+        root = self._root()
+        runner = self._runner()
+
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        self.assertTrue(hasattr(app, "daily_stock_ids_var"))
+        self.assertTrue(hasattr(app, "daily_period_var"))
+        self.assertTrue(hasattr(app, "daily_interval_var"))
+        self.assertTrue(hasattr(app, "daily_min_score_var"))
+        self.assertTrue(hasattr(app, "daily_top_var"))
+        self.assertTrue(hasattr(app, "daily_output_var"))
+        self.assertTrue(hasattr(app, "daily_progress_var"))
+
+    def test_submit_daily_report_calls_runner_submit_with_options(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+        self._configure_daily_vars(app)
+
+        task_id = app.submit_daily_report()
+
+        self.assertEqual(task_id, "task-1")
+        runner.submit.assert_called_once_with(
+            "Run Daily Report",
+            gui_app.app_services.daily_report_service,
+            stock_ids=["2330", "2317", "2454"],
+            period="2y",
+            interval="1d",
+            min_score=4.5,
+            top=20,
+            output="output/daily_report.xlsx",
+            progress=True,
+        )
+
+    def test_submit_daily_report_blank_output_passes_none(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_daily_vars(app, output="   ")
+
+        app.submit_daily_report()
+
+        self.assertIsNone(runner.submit.call_args.kwargs["output"])
+
+    def test_submit_daily_report_blank_min_score_uses_default(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_daily_vars(app, min_score="")
+
+        app.submit_daily_report()
+
+        self.assertEqual(runner.submit.call_args.kwargs["min_score"], gui_app.app_services.DEFAULT_MIN_SCORE)
+
+    def test_submit_daily_report_blank_top_passes_none(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_daily_vars(app, top="")
+
+        app.submit_daily_report()
+
+        self.assertIsNone(runner.submit.call_args.kwargs["top"])
+
+    def test_submit_daily_report_rejects_blank_stock_ids(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_daily_vars(app, stock_ids="   ")
+        app.result_text = Mock()
+
+        task_id = app.submit_daily_report()
+
+        self.assertIsNone(task_id)
+        runner.submit.assert_not_called()
+        self.assertIn("Stock IDs cannot be blank.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_daily_report_rejects_invalid_min_score(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_daily_vars(app, min_score="abc")
+        app.result_text = Mock()
+
+        self.assertIsNone(app.submit_daily_report())
+        runner.submit.assert_not_called()
+        self.assertIn("Min score must be a number.", app.result_text.insert.call_args.args[1])
+
+    def test_submit_daily_report_rejects_invalid_top(self) -> None:
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=self._root(), runner=runner, build_ui=False)
+        self._configure_daily_vars(app, top="0")
+        app.result_text = Mock()
+
+        self.assertIsNone(app.submit_daily_report())
+        runner.submit.assert_not_called()
+        self.assertIn("Top must be a positive integer.", app.result_text.insert.call_args.args[1])
+
     def test_submit_task_calls_task_runner_submit(self) -> None:
         root = self._root()
         runner = self._runner()

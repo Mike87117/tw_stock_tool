@@ -39,6 +39,13 @@ class TwStockToolGUI:
         self.scan_min_score_var: tk.StringVar | None = None
         self.scan_top_var: tk.StringVar | None = None
         self.scan_errors_only_var: tk.BooleanVar | None = None
+        self.daily_stock_ids_var: tk.StringVar | None = None
+        self.daily_period_var: tk.StringVar | None = None
+        self.daily_interval_var: tk.StringVar | None = None
+        self.daily_min_score_var: tk.StringVar | None = None
+        self.daily_top_var: tk.StringVar | None = None
+        self.daily_output_var: tk.StringVar | None = None
+        self.daily_progress_var: tk.BooleanVar | None = None
         self.task_tree: ttk.Treeview | None = None
         self.result_text: tk.Text | None = None
         if build_ui:
@@ -56,17 +63,20 @@ class TwStockToolGUI:
         data_sources_frame = ttk.Frame(notebook)
         stock_list_frame = ttk.Frame(notebook)
         scan_frame = ttk.Frame(notebook)
+        daily_report_frame = ttk.Frame(notebook)
         task_log_frame = ttk.Frame(notebook)
         notebook.add(environment_frame, text="Environment")
         notebook.add(data_sources_frame, text="Data Sources")
         notebook.add(stock_list_frame, text="Stock List")
         notebook.add(scan_frame, text="Scan")
+        notebook.add(daily_report_frame, text="Daily Report")
         notebook.add(task_log_frame, text="Task Log")
 
         self._build_environment_tab(environment_frame)
         self._build_data_sources_tab(data_sources_frame)
         self._build_stock_list_tab(stock_list_frame)
         self._build_scan_tab(scan_frame)
+        self._build_daily_report_tab(daily_report_frame)
         self._build_task_log_tab(task_log_frame)
         self.refresh_tasks()
 
@@ -206,6 +216,63 @@ class TwStockToolGUI:
             command=self.submit_scan,
         ).pack(anchor="w", padx=12, pady=(8, 4))
 
+    def _build_daily_report_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="Run daily candidate report", font=("TkDefaultFont", 12, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 8)
+        )
+
+        form = ttk.Frame(parent)
+        form.pack(anchor="w", fill="x", padx=12, pady=4)
+
+        ttk.Label(form, text="Stock IDs").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.daily_stock_ids_var = tk.StringVar(value="2330,2317,2454")
+        ttk.Entry(form, textvariable=self.daily_stock_ids_var, width=42).grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Period").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.daily_period_var = tk.StringVar(value="1y")
+        ttk.Combobox(
+            form,
+            textvariable=self.daily_period_var,
+            values=("1y", "2y", "5y"),
+            state="readonly",
+            width=12,
+        ).grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Interval").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.daily_interval_var = tk.StringVar(value="1d")
+        ttk.Combobox(
+            form,
+            textvariable=self.daily_interval_var,
+            values=("1d", "1wk", "1mo"),
+            state="readonly",
+            width=12,
+        ).grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Min score").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.daily_min_score_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.daily_min_score_var, width=12).grid(row=3, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Top").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.daily_top_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self.daily_top_var, width=12).grid(row=4, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text="Output").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.daily_output_var = tk.StringVar(value="output/daily_report.xlsx")
+        ttk.Entry(form, textvariable=self.daily_output_var, width=42).grid(row=5, column=1, sticky="w", pady=4)
+
+        self.daily_progress_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            form,
+            text="Progress",
+            variable=self.daily_progress_var,
+        ).grid(row=6, column=1, sticky="w", pady=4)
+
+        ttk.Button(
+            parent,
+            text="Run Daily Report",
+            command=self.submit_daily_report,
+        ).pack(anchor="w", padx=12, pady=(8, 4))
+
     def _build_task_log_tab(self, parent: ttk.Frame) -> None:
         columns = (
             "task_id",
@@ -258,6 +325,43 @@ class TwStockToolGUI:
         if not text:
             return None
         return self._parse_positive_int(text, error_message)
+
+    def submit_daily_report(self) -> str | None:
+        """Submit daily report generation using current form values."""
+        raw_stock_ids = self.daily_stock_ids_var.get() if self.daily_stock_ids_var is not None else ""
+        stock_ids = self.parse_stock_ids(raw_stock_ids)
+        if not stock_ids:
+            self._append_result("Stock IDs cannot be blank.")
+            return None
+
+        try:
+            min_score = self._parse_optional_float(
+                self.daily_min_score_var.get() if self.daily_min_score_var is not None else "",
+                "Min score must be a number.",
+            )
+            top = self._parse_optional_positive_int(
+                self.daily_top_var.get() if self.daily_top_var is not None else "",
+                "Top must be a positive integer.",
+            )
+        except ValueError as exc:
+            self._append_result(str(exc))
+            return None
+
+        period = self.daily_period_var.get() if self.daily_period_var is not None else "1y"
+        interval = self.daily_interval_var.get() if self.daily_interval_var is not None else "1d"
+        output = self.daily_output_var.get().strip() if self.daily_output_var is not None else ""
+        progress = self.daily_progress_var.get() if self.daily_progress_var is not None else False
+        return self.submit_task(
+            "Run Daily Report",
+            app_services.daily_report_service,
+            stock_ids=stock_ids,
+            period=period,
+            interval=interval,
+            min_score=app_services.DEFAULT_MIN_SCORE if min_score is None else min_score,
+            top=top,
+            output=output or None,
+            progress=progress,
+        )
 
     def submit_scan(self) -> str | None:
         """Submit multi-stock scanner using current form values."""
