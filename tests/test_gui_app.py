@@ -459,6 +459,41 @@ class GuiAppTest(unittest.TestCase):
                     app.result_text.insert.call_args.args[1],
                 )
 
+    def test_cache_submit_methods_exist_on_gui_instance(self) -> None:
+        root = self._root()
+        runner = self._runner()
+
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        self.assertTrue(hasattr(app, "submit_cache_summary"))
+        self.assertTrue(hasattr(app, "submit_cache_clear"))
+
+    def test_submit_cache_summary_calls_runner_submit(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        task_id = app.submit_cache_summary()
+
+        self.assertEqual(task_id, "task-1")
+        runner.submit.assert_called_once_with(
+            "Cache Summary",
+            gui_app.app_services.cache_summary_service,
+        )
+
+    def test_submit_cache_clear_calls_runner_submit(self) -> None:
+        root = self._root()
+        runner = self._runner()
+        app = gui_app.TwStockToolGUI(root=root, runner=runner, build_ui=False)
+
+        task_id = app.submit_cache_clear()
+
+        self.assertEqual(task_id, "task-1")
+        runner.submit.assert_called_once_with(
+            "Clear Cache",
+            gui_app.app_services.cache_clear_service,
+        )
+
     def test_submit_task_calls_task_runner_submit(self) -> None:
         root = self._root()
         runner = self._runner()

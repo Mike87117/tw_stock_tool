@@ -104,9 +104,9 @@ python gui_app.py
 說明：
 
 - 這是初版 Tkinter GUI 原型。
-- 目前主要用於環境檢查、官方股票清單來源檢查、價格資料來源檢查、股票清單更新、多股票掃描、Daily Report、單股分析與 Task Log。
+- 目前主要用於環境檢查、官方股票清單來源檢查、價格資料來源檢查、股票清單更新、多股票掃描、Daily Report、單股分析、快取管理與 Task Log。
 - GUI 會透過 `gui_tasks.TaskRunner` 背景執行 `app_services`，避免主畫面卡住。
-- 快取管理會在後續逐步加入 GUI。
+- 研究工具與 AI/ML 頁面會在後續視需求加入 GUI。
 - 原本 CLI 與 `twstock ...` 指令仍可正常使用。
 
 ### 統一 CLI 入口

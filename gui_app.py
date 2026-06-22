@@ -74,6 +74,7 @@ class TwStockToolGUI:
         scan_frame = ttk.Frame(notebook)
         daily_report_frame = ttk.Frame(notebook)
         single_stock_frame = ttk.Frame(notebook)
+        cache_frame = ttk.Frame(notebook)
         task_log_frame = ttk.Frame(notebook)
         notebook.add(environment_frame, text="Environment")
         notebook.add(data_sources_frame, text="Data Sources")
@@ -81,6 +82,7 @@ class TwStockToolGUI:
         notebook.add(scan_frame, text="Scan")
         notebook.add(daily_report_frame, text="Daily Report")
         notebook.add(single_stock_frame, text="Single Stock")
+        notebook.add(cache_frame, text="Cache")
         notebook.add(task_log_frame, text="Task Log")
 
         self._build_environment_tab(environment_frame)
@@ -89,6 +91,7 @@ class TwStockToolGUI:
         self._build_scan_tab(scan_frame)
         self._build_daily_report_tab(daily_report_frame)
         self._build_single_stock_tab(single_stock_frame)
+        self._build_cache_tab(cache_frame)
         self._build_task_log_tab(task_log_frame)
         self.refresh_tasks()
 
@@ -353,6 +356,21 @@ class TwStockToolGUI:
             command=self.submit_single_stock_analysis,
         ).pack(anchor="w", padx=12, pady=(8, 4))
 
+    def _build_cache_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="Cache management", font=("TkDefaultFont", 12, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 8)
+        )
+        ttk.Button(
+            parent,
+            text="Cache Summary",
+            command=self.submit_cache_summary,
+        ).pack(anchor="w", padx=12, pady=4)
+        ttk.Button(
+            parent,
+            text="Clear Cache",
+            command=self.submit_cache_clear,
+        ).pack(anchor="w", padx=12, pady=4)
+
     def _build_task_log_tab(self, parent: ttk.Frame) -> None:
         columns = (
             "task_id",
@@ -420,6 +438,20 @@ class TwStockToolGUI:
         if not 0 < number <= 1:
             raise ValueError("Position size must be greater than 0 and less than or equal to 1.")
         return number
+
+    def submit_cache_summary(self) -> str:
+        """Submit cache summary task."""
+        return self.submit_task(
+            "Cache Summary",
+            app_services.cache_summary_service,
+        )
+
+    def submit_cache_clear(self) -> str:
+        """Submit cache clear task."""
+        return self.submit_task(
+            "Clear Cache",
+            app_services.cache_clear_service,
+        )
 
     def submit_single_stock_analysis(self) -> str | None:
         """Submit single-stock analysis using current form values."""
