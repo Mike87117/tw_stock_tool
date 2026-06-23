@@ -1369,3 +1369,14 @@ tw_stock_tool/
 - 本工具不提供自動下單。
 - 本工具不串接券商 API。
 - 官方 fallback 與 yfinance 的資料口徑可能不同，尤其是除權息調整與成交量單位，正式使用前請自行比對。
+
+## 開發與安全文件
+
+本專案目前仍是台股研究工具，不提供投資建議，也不保證獲利。若要理解長期功能方向、策略訊號標準與未來自動下單前置安全條件，請先閱讀：
+
+- [Development Roadmap](docs/DEVELOPMENT_ROADMAP.md)
+- [Signal Standard](docs/SIGNAL_STANDARD.md)
+- [Auto Trading Safety](docs/AUTO_TRADING_SAFETY.md)
+
+自動下單是長期目標，不是目前功能；在任何真實下單前，必須完成 Backtest 標準化、Parameter Sweep、Walk Forward、Paper Trading、Risk Manager、Kill Switch 與 Trade Log。
+
