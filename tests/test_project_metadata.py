@@ -15,7 +15,7 @@ class ProjectMetadataTest(unittest.TestCase):
     def test_console_script(self) -> None:
         metadata = self._metadata()
 
-        self.assertEqual(metadata["project"]["scripts"]["twstock"], "twstock_cli:main")
+        self.assertEqual(metadata["project"]["scripts"]["twstock"], "tw_stock_tool.cli.twstock_cli:main")
 
     def test_requires_python(self) -> None:
         metadata = self._metadata()

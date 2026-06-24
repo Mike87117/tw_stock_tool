@@ -20,45 +20,11 @@ dependencies = [
 ]
 
 [project.scripts]
-twstock = "twstock_cli:main"
+twstock = "tw_stock_tool.cli.twstock_cli:main"
 
 [tool.setuptools]
-py-modules = [
-    "ai_prediction_report",
-    "ai_stock_scanner",
-    "ai_walk_forward",
-    "analysis",
-    "app_services",
-    "backtest",
-    "baseline_ml_model",
-    "benchmark",
-    "cache_manager",
-    "cache_utils",
-    "clean_stocks",
-    "config",
-    "console_lock",
-    "daily_report",
-    "data_loader",
-    "doctor",
-    "gui_app",
-    "gui_result_formatter",
-    "gui_tasks",
-    "indicators",
-    "main",
-    "ml_dataset",
-    "parameter_sweep",
-    "plotter",
-    "price_data_smoke_check",
-    "report",
-    "scan_stocks",
-    "scanner",
-    "signals",
-    "stock_list_smoke_check",
-    "stock_list_updater",
-    "stock_selection",
-    "strategies",
-    "strategy_compare",
-    "twstock_cli",
-    "verify_batch",
-    "walk_forward",
-]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["tw_stock_tool*"]

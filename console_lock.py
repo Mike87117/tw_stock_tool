@@ -1,14 +1,7 @@
-"""Shared console IO lock for thread-safe terminal output."""
+"""Compatibility wrapper for package module."""
 
-from contextlib import contextmanager
-from collections.abc import Iterator
-import threading
+from importlib import import_module as _import_module
+import sys as _sys
 
-_CONSOLE_IO_LOCK = threading.RLock()
-
-
-@contextmanager
-def console_io_lock() -> Iterator[None]:
-    """Serialize process-global stdout/stderr changes and console prints."""
-    with _CONSOLE_IO_LOCK:
-        yield
+_impl = _import_module("tw_stock_tool.utils.console_lock")
+_sys.modules[__name__] = _impl

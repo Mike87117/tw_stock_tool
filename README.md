@@ -1,4 +1,4 @@
-# 台股技術分析工具
+﻿# 台股技術分析工具
 
 ![Python Tests](https://github.com/Mike87117/tw_stock_tool/actions/workflows/python-tests.yml/badge.svg)
 
@@ -1337,31 +1337,38 @@ python -m unittest discover -s tests
 ```text
 tw_stock_tool/
   .github/workflows/python-tests.yml
+  src/tw_stock_tool/
+    analysis/
+    backtesting/
+    backtest/
+    cli/
+    data/
+    gui/
+    ml/
+    reports/
+    strategies/
+    utils/
+  tw_stock_tool/
+    __init__.py  # src layout ????
   main.py
   scan_stocks.py
-  clean_stocks.py
   daily_report.py
   strategy_compare.py
   parameter_sweep.py
   walk_forward.py
   benchmark.py
-  cache_manager.py
-  analysis.py
-  scanner.py
-  strategies.py
-  cache_utils.py
-  data_loader.py
-  indicators.py
-  signals.py
-  backtest.py
-  report.py
-  plotter.py
-  config.py
+  clean_stocks.py
+  doctor.py
+  twstock_cli.py
+  pyproject.toml
   requirements.txt
   README.md
   tests/
 ```
 
+???? `main.py`?`scan_stocks.py`?`daily_report.py` ?????????? thin wrapper?
+??? CLI ??? README ????????????????? `src/tw_stock_tool/` ??
+????????????? `pip install -e .` ?????
 ## 注意事項
 
 - 本工具僅供研究、教學與技術分析參考。

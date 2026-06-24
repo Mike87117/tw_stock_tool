@@ -1,28 +1,7 @@
-from pathlib import Path
+"""Compatibility wrapper for package module."""
 
-BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = BASE_DIR / "output"
-CACHE_DIR = BASE_DIR / "cache"
+from importlib import import_module as _import_module
+import sys as _sys
 
-VALID_PERIODS = {
-    "1d",
-    "5d",
-    "1mo",
-    "3mo",
-    "6mo",
-    "1y",
-    "2y",
-    "5y",
-    "10y",
-    "ytd",
-    "max",
-}
-VALID_INTERVALS = {"1d", "1wk", "1mo"}
-
-DEFAULT_PERIOD = "1y"
-DEFAULT_INTERVAL = "1d"
-DEFAULT_AUTO_ADJUST = False
-
-INITIAL_CAPITAL = 100000
-FEE_RATE = 0.001425
-TAX_RATE = 0.003
+_impl = _import_module("tw_stock_tool.utils.config")
+_sys.modules[__name__] = _impl
