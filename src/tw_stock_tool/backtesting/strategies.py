@@ -20,7 +20,7 @@ def score_strategy(
     if buy_score is None and sell_score is None:
         if "Signal" not in df.columns:
             raise ValueError("score_strategy requires Signal column when score thresholds are not set.")
-        return df[["Close", "Signal"]].copy()
+        return _with_signal(df, df["Signal"])
 
     if buy_score is None or sell_score is None:
         raise ValueError("buy_score and sell_score must be set together.")
