@@ -4,7 +4,9 @@ import pandas as pd
 def _with_signal(df: pd.DataFrame, signal: pd.Series) -> pd.DataFrame:
     out = df.copy()
     out["Signal"] = signal
-    return out[["Close", "Signal"]]
+    out["entry_signal"] = (signal == "BUY")
+    out["exit_signal"] = (signal == "SELL")
+    return out[["Close", "Signal", "entry_signal", "exit_signal"]]
 
 
 def score_strategy(
