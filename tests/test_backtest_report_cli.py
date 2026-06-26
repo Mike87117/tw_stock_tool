@@ -144,3 +144,31 @@ class TestBacktestReportCLI(unittest.TestCase):
             main()
             
         self.assertEqual(cm.exception.code, 1)
+
+    @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_report.run_backtest")
+    @patch("tw_stock_tool.cli.backtest_report.export_backtest_report_markdown")
+    @patch("tw_stock_tool.cli.backtest_report.export_backtest_report_excel")
+    @patch("tw_stock_tool.cli.backtest_report._parse_args")
+    def test_unsupported_strategy_exits_with_1(self, mock_parse, mock_export_excel, mock_export_md, mock_run, mock_analyze):
+        mock_parse.return_value = MagicMock(
+            stock="2330",
+            strategy="unknown_strategy",
+            period="1y",
+            initial_capital=100000,
+            output_md=None,
+            output_excel=None,
+            output_dir="output",
+            force_refresh=False,
+            short_window=5,
+            long_window=20
+        )
+        
+        with self.assertRaises(SystemExit) as cm:
+            main()
+            
+        self.assertEqual(cm.exception.code, 1)
+        mock_analyze.assert_not_called()
+        mock_run.assert_not_called()
+        mock_export_md.assert_not_called()
+        mock_export_excel.assert_not_called()
