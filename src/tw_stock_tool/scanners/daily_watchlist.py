@@ -54,13 +54,13 @@ def build_daily_watchlist(
         
     return pd.DataFrame(candidates)
 
-def export_daily_watchlist_excel(df: pd.DataFrame, output: str | None = None) -> Path | None:
-    if not output:
-        return None
-        
-    out_path = Path(output)
-    if out_path.is_dir() or not out_path.suffix:
-        out_path = out_path / "daily_watchlist.xlsx"
+def export_daily_watchlist_excel(df: pd.DataFrame, output: str | None = None) -> Path:
+    if output is None:
+        out_path = Path("output") / "daily_watchlist.xlsx"
+    else:
+        out_path = Path(output)
+        if out_path.is_dir() or not out_path.suffix:
+            out_path = out_path / "daily_watchlist.xlsx"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
@@ -84,13 +84,13 @@ def export_daily_watchlist_excel(df: pd.DataFrame, output: str | None = None) ->
         
     return out_path
 
-def export_daily_watchlist_markdown(df: pd.DataFrame, output: str | None = None) -> Path | None:
-    if not output:
-        return None
-        
-    out_path = Path(output)
-    if out_path.is_dir() or not out_path.suffix:
-        out_path = out_path / "daily_watchlist.md"
+def export_daily_watchlist_markdown(df: pd.DataFrame, output: str | None = None) -> Path:
+    if output is None:
+        out_path = Path("output") / "daily_watchlist.md"
+    else:
+        out_path = Path(output)
+        if out_path.is_dir() or not out_path.suffix:
+            out_path = out_path / "daily_watchlist.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
     md_lines = [

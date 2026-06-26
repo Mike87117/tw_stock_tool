@@ -110,5 +110,84 @@ class TestDailyWatchlist(unittest.TestCase):
         self.assertIn("2330", content)
         self.assertIn("2317", content)
 
+    def test_export_excel_default_path(self):
+        import os
+        old_cwd = Path.cwd()
+        try:
+            os.chdir(self.temp_dir.name)
+            df = build_daily_watchlist([])
+            excel_path = export_daily_watchlist_excel(df)
+            self.assertEqual(excel_path.parts[-2:], ("output", "daily_watchlist.xlsx"))
+            self.assertTrue(excel_path.exists())
+        finally:
+            os.chdir(old_cwd)
+
+    def test_export_markdown_default_path(self):
+        import os
+        old_cwd = Path.cwd()
+        try:
+            os.chdir(self.temp_dir.name)
+            df = build_daily_watchlist([])
+            md_path = export_daily_watchlist_markdown(df)
+            self.assertEqual(md_path.parts[-2:], ("output", "daily_watchlist.md"))
+            self.assertTrue(md_path.exists())
+        finally:
+            os.chdir(old_cwd)
+
+    def test_empty_dataframe_export_markdown(self):
+        df = build_daily_watchlist([])
+        md_path = export_daily_watchlist_markdown(df, str(self.output_dir / "empty.md"))
+        self.assertTrue(md_path.exists())
+        content = md_path.read_text(encoding="utf-8")
+        self.assertIn("Daily Watchlist", content)
+        self.assertIn("Research candidates only, not investment advice.", content)
+        self.assertIn("## Technical Breakout", content)
+        self.assertIn("No technical breakout candidates.", content)
+        self.assertIn("## Risk Warning", content)
+        self.assertIn("No risk warning candidates.", content)
+        self.assertIn("## Errors", content)
+        self.assertIn("No errors.", content)
+
+    def test_empty_dataframe_export_excel(self):
+        df = build_daily_watchlist([])
+        excel_path = export_daily_watchlist_excel(df, str(self.output_dir / "empty.xlsx"))
+        self.assertTrue(excel_path.exists())
+        # Check sheet names
+        with pd.ExcelFile(excel_path) as xls:
+            self.assertIn("All", xls.sheet_names)
+
+    @patch("tw_stock_tool.cli.daily_watchlist.build_daily_watchlist")
+    @patch("tw_stock_tool.cli.daily_watchlist._parse_args")
+    @patch("tw_stock_tool.cli.daily_watchlist._collect_stock_ids")
+    def test_cli_exception_raises_systemexit(self, mock_collect, mock_parse, mock_build):
+        mock_build.side_effect = Exception("Test unhandled exception")
+        from tw_stock_tool.cli.daily_watchlist import main
+        with self.assertRaises(SystemExit) as cm:
+            main()
+        self.assertEqual(cm.exception.code, 1)
+
+    @patch("tw_stock_tool.cli.daily_watchlist.export_daily_watchlist_markdown")
+    @patch("tw_stock_tool.cli.daily_watchlist.export_daily_watchlist_excel")
+    @patch("tw_stock_tool.cli.daily_watchlist._parse_args")
+    @patch("tw_stock_tool.cli.daily_watchlist._collect_stock_ids")
+    def test_cli_empty_watchlist_exports(self, mock_collect, mock_parse, mock_excel, mock_md):
+        mock_collect.return_value = []
+        import argparse
+        args = argparse.Namespace(
+            output_excel="test.xlsx",
+            output_md="test.md",
+            output_dir=str(self.output_dir),
+            period="1y",
+            stock_limit=None,
+            force_refresh=False,
+            breakout_min_score=3.0,
+            risk_min_score=2.0
+        )
+        mock_parse.return_value = args
+        from tw_stock_tool.cli.daily_watchlist import main
+        main()
+        mock_excel.assert_called_once()
+        mock_md.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()

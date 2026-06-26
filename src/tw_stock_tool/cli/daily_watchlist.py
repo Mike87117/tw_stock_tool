@@ -9,7 +9,7 @@ from tw_stock_tool.scanners.daily_watchlist import (
     export_daily_watchlist_excel,
     export_daily_watchlist_markdown,
 )
-from tw_stock_tool.utils.config import DEFAULT_PERIOD, OUTPUT_DIR
+from tw_stock_tool.utils.config import DEFAULT_PERIOD
 
 
 def _split_cli_stock_values(values: list[str] | None) -> list[str]:
@@ -49,7 +49,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--risk-min-score", type=float, default=2.0, help="Minimum score for risk warning candidates")
     parser.add_argument("--output-excel", nargs="?", const="", default=None, help="Export Excel report, optionally with a custom output path")
     parser.add_argument("--output-md", nargs="?", const="", default=None, help="Export Markdown report, optionally with a custom output path")
-    parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="Default output directory")
+    parser.add_argument("--output-dir", default="output", help="Default output directory")
     return parser.parse_args(argv)
 
 
@@ -93,10 +93,12 @@ def main() -> None:
 
         if df.empty:
             print("No watchlist candidates.")
-            return
-
-        candidate_count = int((df["Status"] == "ok").sum())
-        error_count = int((df["Status"] != "ok").sum())
+            candidate_count = 0
+            error_count = 0
+        else:
+            candidate_count = int((df["Status"] == "ok").sum())
+            error_count = int((df["Status"] != "ok").sum())
+            
         print(f"Candidate rows: {candidate_count}, Error rows: {error_count}")
 
         out_dir = Path(args.output_dir)
@@ -111,11 +113,12 @@ def main() -> None:
             md_path = export_daily_watchlist_markdown(df, md_output)
             print(f"Markdown: {md_path}")
 
-        if args.output_excel is None and args.output_md is None:
+        if args.output_excel is None and args.output_md is None and not df.empty:
             print(df[["Stock", "Name", "Category", "Score", "Close", "Status"]].to_string())
 
     except Exception as exc:
         print(f"Unexpected error: {exc}")
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":
