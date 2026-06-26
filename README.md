@@ -1336,39 +1336,92 @@ python -m unittest discover -s tests
 
 ```text
 tw_stock_tool/
-  .github/workflows/python-tests.yml
-  src/tw_stock_tool/
-    analysis/
-    backtesting/
-    backtest/
-    cli/
-    data/
-    gui/
-    ml/
-    reports/
-    strategies/
-    utils/
+  .github/
+    workflows/
+      python-tests.yml          # GitHub Actions：執行 unittest
+
+  src/
+    tw_stock_tool/
+      __init__.py
+
+      analysis/                 # 單股分析、多股票掃描、股票篩選共用邏輯
+      backtesting/              # 回測、策略、績效指標、Signal adapter
+      cli/                      # package 內的 CLI 入口
+      data/                     # 資料下載、股票清單更新、資料快取
+      gui/                      # Tkinter GUI 原型相關模組
+      ml/                       # AI / ML 研究用 baseline 與資料集流程
+      reports/                  # 報表輸出與摘要整理
+      scanners/                 # Daily Watchlist / 股票雷達
+      strategies/               # 策略或策略相關擴充
+      utils/                    # 設定、路徑與共用工具
+
   tw_stock_tool/
-    __init__.py  # src layout ????
-  main.py
-  scan_stocks.py
-  daily_report.py
-  strategy_compare.py
-  parameter_sweep.py
-  walk_forward.py
-  benchmark.py
-  clean_stocks.py
-  doctor.py
-  twstock_cli.py
+    __init__.py                 # 相容 src layout 的 package shim
+
+  tests/                        # unittest 測試
+
+  output/                       # 報表輸出資料夾，執行後自動產生
+  cache/                        # 價格資料快取資料夾，執行後自動產生
+
+  main.py                       # 單股分析 wrapper
+  scan_stocks.py                # 多股票掃描 wrapper
+  daily_report.py               # 每日候選報告 wrapper
+  daily_watchlist.py            # Daily Watchlist / 股票雷達 wrapper
+  strategy_compare.py           # 策略比較 wrapper
+  parameter_sweep.py            # 參數掃描 wrapper
+  walk_forward.py               # Walk Forward 驗證 wrapper
+  benchmark.py                  # 大量股票掃描效能測試 wrapper
+  clean_stocks.py               # 股票清單檢查 wrapper
+  doctor.py                     # 環境檢查 wrapper
+  twstock_cli.py                # 統一 CLI 入口
+
   pyproject.toml
   requirements.txt
   README.md
-  tests/
 ```
 
-???? `main.py`?`scan_stocks.py`?`daily_report.py` ?????????? thin wrapper?
-??? CLI ??? README ????????????????? `src/tw_stock_tool/` ??
-????????????? `pip install -e .` ?????
+### 架構說明
+
+本專案採用 `src/` layout，主要程式邏輯放在 `src/tw_stock_tool/`。
+
+根目錄的 `main.py`、`scan_stocks.py`、`daily_report.py`、`daily_watchlist.py`、`strategy_compare.py`、`parameter_sweep.py`、`walk_forward.py` 等檔案主要是相容舊用法的 thin wrapper，方便使用者直接執行：
+
+```bash
+python main.py --stock 2330
+python scan_stocks.py --file stocks.txt
+python daily_watchlist.py --stock 2330 --output-excel --output-md
+```
+
+若使用：
+
+```bash
+pip install -e .
+```
+
+則可以讓 package import 與 CLI 使用更穩定。後續開發也應優先把主要邏輯放在 `src/tw_stock_tool/` 內，再視需要保留根目錄 wrapper。
+
+### 主要模組職責
+
+| 模組 | 職責 |
+| --- | --- |
+| `analysis/` | 單股分析、多股票掃描、股票篩選與分析流程整合 |
+| `backtesting/` | 回測引擎、策略、績效指標、BacktestResult、Signal 標準化 |
+| `data/` | yfinance / TWSE / TPEx 資料下載、股票清單、cache |
+| `scanners/` | Daily Watchlist / 股票雷達候選股偵測 |
+| `reports/` | Excel / Markdown / 報告輸出輔助 |
+| `ml/` | AI / ML 研究流程與 baseline model |
+| `cli/` | package 內 CLI 解析與入口 |
+| `gui/` | 本機 Tkinter GUI 原型 |
+| `utils/` | 共用設定、路徑、常數與工具函式 |
+
+### 開發原則
+
+- 新功能的主要邏輯應放在 `src/tw_stock_tool/`。
+- 根目錄 `.py` 檔案優先維持 thin wrapper，避免把新邏輯塞回根目錄。
+- 測試放在 `tests/`，並使用 `unittest`。
+- `output/` 與 `cache/` 是執行後產生的資料夾，不應放入核心邏輯。
+- 本專案目前仍是研究工具，不提供自動下單、不串接券商 API，也不保證投資績效。
+
 ## 注意事項
 
 - 本工具僅供研究、教學與技術分析參考。
