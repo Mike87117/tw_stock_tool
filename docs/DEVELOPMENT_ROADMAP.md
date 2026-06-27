@@ -73,9 +73,12 @@ Broker Interface
 - Phase 3.2：完成 (Backtest Report CLI 測試補強)
 - Repo audit cleanup P1：完成 (避免 --auto-stock-list 污染 tracked stocks.txt)
 - Repo audit cleanup P2：完成 (Backtest trade schema 顯示 PnL_pct / PnL % 相容)
+- Phase 4.1：完成 (Parameter Sweep Report exporter)
+- Phase 4.2：完成 (Parameter Sweep Report CLI)
+- Phase 4.3：完成 (Parameter Sweep Report CLI documentation update)
 
 下一步：
-- Phase 4：Parameter Sweep / Walk Forward report integration (尚未開始)
+- Phase 4.4：Parameter Sweep range configuration or Walk Forward report integration (尚未開始)
 
 ## 3. 台股資料取得
 

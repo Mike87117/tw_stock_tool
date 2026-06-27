@@ -807,12 +807,77 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-
 - `Sortino Ratio`
 - `Error`
 
-CSV / Excel 輸出：
+## Parameter Sweep Report CLI
 
-- `--output`: 輸出 CSV，預設路徑為 `output/{stock}_parameter_sweep.csv`。
-- `--output-excel`: 輸出 Excel，預設路徑為 `output/{stock}_parameter_sweep.xlsx`。
-- `--output-excel output/custom.xlsx`: 輸出 Excel 到指定路徑。
-- Excel 會固定建立 `All`、`MA_Cross`、`RSI`、`Score`、`Errors` sheets。
+我們提供了專用的 CLI 來輸出 Parameter Sweep Report，包含詳細的 Markdown 與 Excel 報表格式。
+此 CLI 的執行入口為 `parameter_sweep_report.py` 或 `tw_stock_tool/cli/parameter_sweep_report.py`。
+
+### Important Behavior Notes
+
+1. `--stock` is required.
+2. `--strategy` is required.
+3. `--output-md` is optional.
+4. `--output-excel` is optional.
+5. If neither output flag is provided, the CLI prints a summary only.
+6. `--output-md` without a custom path uses `output/parameter_sweep_report.md`.
+7. `--output-excel` without a custom path uses `output/parameter_sweep_report.xlsx`.
+8. Custom paths are supported.
+9. The report is for research only and is not investment advice.
+10. The CLI does not place orders and does not connect to broker APIs.
+
+### Basic run without file export
+
+這會執行 Parameter Sweep 並將簡明摘要印在 stdout，不會產出任何報表檔案。
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross
+```
+
+### Export Markdown report
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --output-md
+```
+
+Default output: `output/parameter_sweep_report.md`
+
+### Export Excel report
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --output-excel
+```
+
+Default output: `output/parameter_sweep_report.xlsx`
+
+### Export both Markdown and Excel
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --output-md --output-excel
+```
+
+### Custom output paths
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --output-md reports/sweep.md --output-excel reports/sweep.xlsx
+```
+
+### Optional period
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --period 2y --output-md
+```
+
+### Force refresh
+
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
+```
+
+> **Note**: Custom parameter ranges are not exposed through this CLI yet. The CLI uses the existing parameter sweep engine and its current built-in sweep settings.
+
+> **Safety Boundary**: This project is a research / backtesting / reporting tool. It is not an auto-trading system. It does not connect to broker APIs. It does not provide investment advice. It does not guarantee profit.
+
+## Walk Forward 驗證
 - 若某個 sheet 沒有資料，仍會保留欄位標題。
 
 注意：參數掃描只是歷史回測比較，不代表未來績效，也不提供投資建議。單一參數組合失敗時，工具會記錄在 `Error` 欄位並繼續掃描其他組合。
