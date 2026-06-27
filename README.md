@@ -120,7 +120,7 @@ python gui_app.py
 
 ### 統一 CLI 入口
 
-原本的 `main.py`、`scan_stocks.py`、`daily_report.py` 等檔案仍可直接使用。如果想用統一入口，可以改用 `twstock_cli.py`。
+原本的 `main.py`、`scan_stocks.py` 等既有 CLI 檔案仍可直接使用。Daily Report 請使用統一入口 `twstock daily` 或 `python twstock_cli.py daily`。
 
 ```bash
 python twstock_cli.py doctor
@@ -569,7 +569,7 @@ python scan_stocks.py --file stocks.txt --errors-only --log-errors
 
 ## 股票清單檢查
 
-`clean_stocks.py` 用於檢查 `stocks.txt` 內股票代號是否有效，適合在 `daily_report.py` 或 `scan_stocks.py` 前先執行。它會重用 `data_loader.download_tw_stock()`，保留 `.TW` / `.TWO` fallback、快取與 yfinance quiet download 行為。
+`clean_stocks.py` 用於檢查 `stocks.txt` 內股票代號是否有效，適合在 `twstock daily` 或 `scan_stocks.py` 前先執行。它會重用 `data_loader.download_tw_stock()`，保留 `.TW` / `.TWO` fallback、快取與 yfinance quiet download 行為。
 
 CLI 範例：
 
