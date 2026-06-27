@@ -20,8 +20,9 @@ This document maps out the current data failure modes, fallback behaviors, and r
 - **Invalid stock IDs**: Will exhaust all symbol candidates and ultimately raise a `DataLoaderError` containing the tried symbols and reasons.
 
 ## 4. Stock List Failure Modes
-- **Stock list update failures**: The official endpoints are queried. If one fails (e.g., TWSE fails but TPEx succeeds), the behavior depends on the `--allow-partial` flag (default `False`). If `False`, the entire update fails, raising a `StockListUpdaterError`.
+- **Stock list update failures**: The official endpoints are queried. If one fails (e.g., TWSE fails but TPEx succeeds), the behavior depends on the `--allow-partial` flag (default `False`). If `False`, the entire update fails, raising a `StockListUpdaterError`. If `True`, the tool successfully writes the partial list and prints a warning to `sys.stderr` about the failed source.
 - **Empty/Short lists**: A safety check `len(normalized) < min_common_stocks` (default 100) prevents wiping out the `stocks.txt` file if the official API format unexpectedly changes and returns 0 stocks.
+- **Stock List Output Format**: By default, `stock_list_updater.py` writes plain stock IDs (e.g., `2330`). The opt-in `--add-suffix` flag appends market suffixes (e.g., `2330.TW`, `8069.TWO`), which reduces subsequent fallback guessing overhead during price downloads.
 
 ## 5. Scanner Failure Modes
 - **Failed-symbol handling**: In `scan_one_stock`, any `Exception` (including `DataLoaderError`) is caught and returns a default dictionary with `Status="ERROR"` and `Error=str(exc)`. 
@@ -52,7 +53,7 @@ This document maps out the current data failure modes, fallback behaviors, and r
 
 ## 10. Phase 6 Follow-up Candidates
 - **Phase 6.2 (Completed)**: Price data fallback and cache behavior cleanup. Cache freshness is now timezone-aware and accounts for market close times.
-- **Phase 6.3: Stock list reliability and invalid-symbol handling**: Improve error parsing for stock lists.
+- **Phase 6.3 (Completed)**: Stock list reliability and invalid-symbol handling. Includes `--add-suffix`, `sys.stderr` warnings on partial updates, and strictly rejecting invalid alphanumeric strings.
 - **Phase 6.4: Daily Report partial-failure behavior and user-facing warnings**: Explicitly pass `ranking_df` error rows into `build_daily_report_data` to populate "Data Limitations".
 - **Phase 6.5: Data reliability tests and documentation**: Fill offline test gaps.
 

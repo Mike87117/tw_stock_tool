@@ -25,6 +25,11 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
     if not stock_id or not stock_id.strip():
         raise DataLoaderError("Stock id cannot be blank.")
+
+    base = stock_id.strip().upper().replace(".TWO", "").replace(".TW", "")
+    if not any(c.isdigit() for c in base):
+        raise DataLoaderError(f"Invalid stock ID format: {stock_id}")
+
     if period not in VALID_PERIODS:
         raise DataLoaderError(f"Invalid period: {period}.")
     if interval not in VALID_INTERVALS:

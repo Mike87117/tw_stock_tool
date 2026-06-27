@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import Any, Iterable
 
 import pandas as pd
@@ -153,12 +154,17 @@ def normalize_stock_list(df: pd.DataFrame) -> pd.DataFrame:
     return normalized.reindex(columns=["Stock", "Name", "Market", "Type"])
 
 
-def write_stock_list(df: pd.DataFrame, output: str | Path) -> Path:
+def write_stock_list(df: pd.DataFrame, output: str | Path, add_suffix: bool = False) -> Path:
     """Write one stock id per line."""
     path = Path(output)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        stocks = df["Stock"].astype(str).tolist()
+        if add_suffix and "Market" in df.columns:
+            suffix_map = {"TWSE": ".TW", "TPEX": ".TWO"}
+            suffixes = df["Market"].map(suffix_map).fillna("")
+            stocks = (df["Stock"].astype(str) + suffixes).tolist()
+        else:
+            stocks = df["Stock"].astype(str).tolist()
         path.write_text("\n".join(stocks) + ("\n" if stocks else ""), encoding="utf-8")
     except OSError as exc:
         raise StockListUpdaterError(f"Failed to write stock list: {path} ({exc})") from exc
@@ -178,6 +184,7 @@ def update_stock_list(
     output: str | Path = "stocks.txt",
     allow_partial: bool = False,
     min_common_stocks: int = MIN_COMMON_STOCKS,
+    add_suffix: bool = False,
 ) -> tuple[pd.DataFrame, Path]:
     """Fetch, normalize, and write a stock list for the selected market."""
     selected = market.lower().strip()
@@ -196,6 +203,9 @@ def update_stock_list(
     if errors and (not allow_partial or not frames):
         joined = "; ".join(errors)
         raise StockListUpdaterError(f"Failed to update stock list. {joined}")
+    elif errors and allow_partial:
+        joined = "; ".join(errors)
+        print(f"Warning: Partial stock list update. Errors: {joined}", file=sys.stderr)
 
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     normalized = normalize_stock_list(combined)
@@ -205,7 +215,7 @@ def update_stock_list(
             f"{len(normalized)} < {min_common_stocks}. "
             "Official data format may have changed."
         )
-    path = write_stock_list(normalized, output)
+    path = write_stock_list(normalized, output, add_suffix=add_suffix)
     return normalized, path
 
 
@@ -218,6 +228,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Allow output when one source fails but another source succeeds",
     )
+    parser.add_argument(
+        "--add-suffix",
+        action="store_true",
+        help="Append .TW or .TWO market suffix to stock codes",
+    )
     return parser.parse_args(argv)
 
 
@@ -228,6 +243,7 @@ def main() -> None:
             market=args.market,
             output=args.output,
             allow_partial=args.allow_partial,
+            add_suffix=args.add_suffix,
         )
         print(f"Stock list updated: {path}")
         print(f"Stocks: {len(df)}")

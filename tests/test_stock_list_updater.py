@@ -1,3 +1,4 @@
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -114,6 +115,18 @@ class StockListUpdaterTest(unittest.TestCase):
 
         self.assertEqual(content, ["1101", "2330"])
 
+    def test_write_stock_list_outputs_txt_with_suffix(self) -> None:
+        data = pd.DataFrame([
+            {"Stock": "1101", "Market": "TWSE"},
+            {"Stock": "2330", "Market": "TPEX"}
+        ])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "stocks.txt"
+            path = stock_list_updater.write_stock_list(data, output, add_suffix=True)
+            content = path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(content, ["1101.TW", "2330.TWO"])
+
     def test_update_stock_list_writes_normal_mock_output(self) -> None:
         twse = pd.DataFrame([{"Stock": "2330", "Name": "TSMC", "Market": "TWSE", "Type": "stock"}])
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -146,6 +159,24 @@ class StockListUpdaterTest(unittest.TestCase):
                         )
             self.assertFalse(output.exists())
 
+    def test_partial_failure_logs_warning_with_allow_partial(self) -> None:
+        twse = pd.DataFrame([{"Stock": "2330", "Name": "TSMC", "Market": "TWSE", "Type": "stock"}])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "stocks.txt"
+            with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse):
+                with patch.object(stock_list_updater, "fetch_tpex_stock_list", side_effect=RuntimeError("down")):
+                    with patch("sys.stderr", new_callable=io.StringIO) as mock_stderr:
+                        result, path = stock_list_updater.update_stock_list(
+                            "all",
+                            output,
+                            allow_partial=True,
+                            min_common_stocks=1,
+                        )
+
+            self.assertEqual(result["Stock"].tolist(), ["2330"])
+            self.assertIn("Warning: Partial stock list update. Errors: TPEX: down", mock_stderr.getvalue())
+            self.assertTrue(output.exists())
+
     def test_parse_args(self) -> None:
         args = stock_list_updater._parse_args(
             ["--market", "all", "--output", "stocks.txt", "--allow-partial"]
@@ -154,6 +185,11 @@ class StockListUpdaterTest(unittest.TestCase):
         self.assertEqual(args.market, "all")
         self.assertEqual(args.output, "stocks.txt")
         self.assertTrue(args.allow_partial)
+        self.assertFalse(args.add_suffix)
+
+    def test_parse_args_with_add_suffix(self) -> None:
+        args = stock_list_updater._parse_args(["--add-suffix"])
+        self.assertTrue(args.add_suffix)
 
 
 if __name__ == "__main__":

@@ -104,6 +104,16 @@ python doctor.py --live
 | twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output-md` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
+### 更新股票清單
+
+```bash
+python stock_list_updater.py --market all --output stocks.txt --add-suffix
+```
+
+- Default behavior remains unchanged: `stock_list_updater.py` writes plain stock IDs such as `2330`.
+- With `--add-suffix`, it writes market-qualified symbols such as `2330.TW` or `8069.TWO`.
+- This can reduce later TW/TWO fallback guessing during price download.
+
 ### 本機 GUI 原型
 
 ```bash

@@ -403,6 +403,22 @@ class DataLoaderTest(unittest.TestCase):
             self.assertFalse(data_loader._is_cache_fresh(path_before))
             self.assertTrue(data_loader._is_cache_fresh(path_after))
 
+    def test_validate_inputs_rejects_invalid_stock_id_format(self) -> None:
+        with self.assertRaisesRegex(data_loader.DataLoaderError, "Invalid stock ID format"):
+            data_loader._validate_inputs("ABCD", "1y", "1d")
+
+        with self.assertRaisesRegex(data_loader.DataLoaderError, "Invalid stock ID format"):
+            data_loader._validate_inputs("!@#$", "1y", "1d")
+
+        # These should pass validation
+        try:
+            data_loader._validate_inputs("2330", "1y", "1d")
+            data_loader._validate_inputs("2330.TW", "1y", "1d")
+            data_loader._validate_inputs("0050", "1y", "1d")
+            data_loader._validate_inputs("00632R", "1y", "1d")
+        except Exception as e:
+            self.fail(f"Valid stock IDs raised an exception: {e}")
+
 
 if __name__ == "__main__":
     unittest.main()
