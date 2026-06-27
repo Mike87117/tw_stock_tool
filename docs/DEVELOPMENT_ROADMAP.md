@@ -87,9 +87,10 @@ Broker Interface
 - Phase 4.10：完成 (Walk Forward custom range support)
 - Phase 4.11：完成 (Report documentation polish / smoke audit)
 - Phase 4.12：完成 (Release readiness audit / cleanup backlog)
+- Phase 5.1：完成 (Daily Report MVP design / scope lock)
 
 下一步：
-- Phase 5：Daily report / research workflow expansion (尚未開始)
+- Phase 5.2：Daily Report data model / builder (尚未開始)
 
 ## 3. 台股資料取得
 
