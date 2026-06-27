@@ -108,6 +108,59 @@ class TestBacktestReport(unittest.TestCase):
             self.assertTrue(out_md.exists())
             self.assertTrue(out_xlsx.exists())
 
+    def test_markdown_trades_table_supports_pnl_pct(self):
+        result = {
+            "Stock": "2330",
+            "Strategy": "test",
+            "Trades": pd.DataFrame({
+                "Entry Date": ["2024-01-01"],
+                "Exit Date": ["2024-01-05"],
+                "Entry Price": [100],
+                "Exit Price": [105],
+                "Shares": [1000],
+                "PnL": [5000],
+                "PnL_pct": [5.0],
+                "Hold Days": [4],
+            }),
+        }
+        with tempfile.TemporaryDirectory() as d:
+            out_md = Path(d) / "test.md"
+            export_backtest_report_markdown(result, str(out_md))
+            content = out_md.read_text(encoding="utf-8")
+            self.assertIn("PnL_pct", content)
+            self.assertIn("5.0", content)
+
+    def test_markdown_trades_table_supports_legacy_pnl_pct_string(self):
+        result = {
+            "Stock": "2330",
+            "Strategy": "test",
+            "Trades": pd.DataFrame({
+                "Entry Date": ["2024-01-01"],
+                "PnL %": [5.0],
+            }),
+        }
+        with tempfile.TemporaryDirectory() as d:
+            out_md = Path(d) / "test.md"
+            export_backtest_report_markdown(result, str(out_md))
+            content = out_md.read_text(encoding="utf-8")
+            self.assertIn("PnL %", content)
+            self.assertIn("5.0", content)
+
+    def test_excel_trades_sheet_keeps_pnl_pct(self):
+        result = {
+            "Stock": "2330",
+            "Strategy": "test",
+            "Trades": pd.DataFrame({
+                "Entry Date": ["2024-01-01"],
+                "PnL_pct": [5.0],
+            }),
+        }
+        with tempfile.TemporaryDirectory() as d:
+            out_xlsx = Path(d) / "test.xlsx"
+            export_backtest_report_excel(result, str(out_xlsx))
+            df = pd.read_excel(out_xlsx, sheet_name="Trades")
+            self.assertIn("PnL_pct", df.columns)
+
     def test_missing_pnl_in_trades_does_not_crash(self):
         result = {
             "Stock": "2330",

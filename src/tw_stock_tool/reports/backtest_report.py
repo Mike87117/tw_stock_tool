@@ -191,7 +191,7 @@ def export_backtest_report_markdown(result: dict[str, Any], output: str | None =
         lines.append("No trades.")
     else:
         # Suggest core columns, filter to those that exist
-        core_cols = ["Entry Date", "Exit Date", "Entry Price", "Exit Price", "Shares", "PnL", "PnL %", "Hold Days", "Exit Reason"]
+        core_cols = ["Entry Date", "Exit Date", "Entry Price", "Exit Price", "Shares", "PnL", "PnL_pct", "PnL %", "Hold Days", "Exit Reason"]
         cols_to_show = [c for c in core_cols if c in trades_df.columns]
         if not cols_to_show:
             cols_to_show = list(trades_df.columns)
