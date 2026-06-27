@@ -47,28 +47,55 @@ SCORE_SELL = (-2, -3, -4)
 VALID_STRATEGIES = {"all", "ma_cross", "rsi", "score"}
 
 
-def ma_cross_parameter_grid() -> list[dict[str, int]]:
-    return [
+def ma_cross_parameter_grid(
+    short_windows: tuple[int, ...] | None = None,
+    long_windows: tuple[int, ...] | None = None,
+) -> list[dict[str, int]]:
+    shorts = short_windows if short_windows is not None else MA_SHORT_WINDOWS
+    longs = long_windows if long_windows is not None else MA_LONG_WINDOWS
+
+    grid = [
         {"short_window": short, "long_window": long}
-        for short, long in product(MA_SHORT_WINDOWS, MA_LONG_WINDOWS)
+        for short, long in product(shorts, longs)
         if short < long
     ]
+    if not grid:
+        raise ValueError("No valid ma_cross parameter combinations found.")
+    return grid
 
 
-def rsi_parameter_grid() -> list[dict[str, int]]:
-    return [
+def rsi_parameter_grid(
+    buy_below: tuple[int, ...] | None = None,
+    sell_above: tuple[int, ...] | None = None,
+) -> list[dict[str, int]]:
+    buys = buy_below if buy_below is not None else RSI_BUY_BELOW
+    sells = sell_above if sell_above is not None else RSI_SELL_ABOVE
+
+    grid = [
         {"buy_below": buy, "sell_above": sell}
-        for buy, sell in product(RSI_BUY_BELOW, RSI_SELL_ABOVE)
+        for buy, sell in product(buys, sells)
         if buy < sell
     ]
+    if not grid:
+        raise ValueError("No valid rsi parameter combinations found.")
+    return grid
 
 
-def score_parameter_grid() -> list[dict[str, int]]:
-    return [
+def score_parameter_grid(
+    buy_scores: tuple[int, ...] | None = None,
+    sell_scores: tuple[int, ...] | None = None,
+) -> list[dict[str, int]]:
+    buys = buy_scores if buy_scores is not None else SCORE_BUY
+    sells = sell_scores if sell_scores is not None else SCORE_SELL
+
+    grid = [
         {"buy_score": buy, "sell_score": sell}
-        for buy, sell in product(SCORE_BUY, SCORE_SELL)
+        for buy, sell in product(buys, sells)
         if buy > sell
     ]
+    if not grid:
+        raise ValueError("No valid score parameter combinations found.")
+    return grid
 
 
 def _validate_inputs(
@@ -93,14 +120,22 @@ def _validate_inputs(
         raise ValueError("max_hold_days must be greater than 0.")
 
 
-def _selected_parameter_sets(strategy: str) -> list[tuple[str, dict[str, int]]]:
+def _selected_parameter_sets(
+    strategy: str,
+    ma_short_windows: tuple[int, ...] | None = None,
+    ma_long_windows: tuple[int, ...] | None = None,
+    rsi_buy_below: tuple[int, ...] | None = None,
+    rsi_sell_above: tuple[int, ...] | None = None,
+    score_buy: tuple[int, ...] | None = None,
+    score_sell: tuple[int, ...] | None = None,
+) -> list[tuple[str, dict[str, int]]]:
     selected: list[tuple[str, dict[str, int]]] = []
     if strategy in {"all", "ma_cross"}:
-        selected.extend(("ma_cross", params) for params in ma_cross_parameter_grid())
+        selected.extend(("ma_cross", params) for params in ma_cross_parameter_grid(ma_short_windows, ma_long_windows))
     if strategy in {"all", "rsi"}:
-        selected.extend(("rsi", params) for params in rsi_parameter_grid())
+        selected.extend(("rsi", params) for params in rsi_parameter_grid(rsi_buy_below, rsi_sell_above))
     if strategy in {"all", "score"}:
-        selected.extend(("score", params) for params in score_parameter_grid())
+        selected.extend(("score", params) for params in score_parameter_grid(score_buy, score_sell))
     return selected
 
 
@@ -147,6 +182,12 @@ def run_parameter_sweep(
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
     position_size: float = 1.0,
+    ma_short_windows: tuple[int, ...] | None = None,
+    ma_long_windows: tuple[int, ...] | None = None,
+    rsi_buy_below: tuple[int, ...] | None = None,
+    rsi_sell_above: tuple[int, ...] | None = None,
+    score_buy: tuple[int, ...] | None = None,
+    score_sell: tuple[int, ...] | None = None,
 ) -> pd.DataFrame:
     _validate_inputs(
         stock_id=stock_id,
@@ -159,7 +200,18 @@ def run_parameter_sweep(
 
     analysis = analyze_stock(stock_id=stock_id.strip(), period=period, force_refresh=force_refresh)
     rows: list[dict[str, Any]] = []
-    for strategy_name, params in _selected_parameter_sets(strategy):
+
+    parameter_sets = _selected_parameter_sets(
+        strategy=strategy,
+        ma_short_windows=ma_short_windows,
+        ma_long_windows=ma_long_windows,
+        rsi_buy_below=rsi_buy_below,
+        rsi_sell_above=rsi_sell_above,
+        score_buy=score_buy,
+        score_sell=score_sell,
+    )
+
+    for strategy_name, params in parameter_sets:
         try:
             strategy_df = _build_strategy_df(strategy_name, analysis.signal_df, params)
             strategy_df = strategy_df.dropna(subset=["Close", "Signal"])

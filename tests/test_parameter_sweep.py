@@ -142,6 +142,22 @@ class ParameterSweepTest(unittest.TestCase):
         self.assertEqual(len(grid), 9)
         self.assertTrue(all(item["buy_score"] > item["sell_score"] for item in grid))
 
+    def test_ma_parameter_grid_custom_ranges(self) -> None:
+        grid = parameter_sweep.ma_cross_parameter_grid(short_windows=(2, 3), long_windows=(3, 4))
+        self.assertEqual(len(grid), 3) # (2,3), (2,4), (3,4)
+
+    def test_rsi_parameter_grid_custom_ranges(self) -> None:
+        grid = parameter_sweep.rsi_parameter_grid(buy_below=(20, 25), sell_above=(80,))
+        self.assertEqual(len(grid), 2)
+
+    def test_score_parameter_grid_custom_ranges(self) -> None:
+        grid = parameter_sweep.score_parameter_grid(buy_scores=(8,), sell_scores=(-5, -8))
+        self.assertEqual(len(grid), 2)
+
+    def test_custom_range_invalid_raises_value_error(self) -> None:
+        with self.assertRaisesRegex(ValueError, "No valid ma_cross parameter combinations found."):
+            parameter_sweep.ma_cross_parameter_grid(short_windows=(20,), long_windows=(10,))
+
     def test_parameter_sweep_returns_dataframe(self) -> None:
         with patch.object(parameter_sweep, "analyze_stock", return_value=_fake_analysis()):
             with patch.object(parameter_sweep, "run_backtest", side_effect=_fake_backtest):
@@ -155,6 +171,27 @@ class ParameterSweepTest(unittest.TestCase):
         self.assertEqual(len(result), 5)
         self.assertIn("Rank", result.columns)
         self.assertIn("Total Return %", result.columns)
+
+    def test_parameter_sweep_custom_ranges_all_strategy(self) -> None:
+        with patch.object(parameter_sweep, "analyze_stock", return_value=_fake_analysis()):
+            with patch.object(parameter_sweep, "run_backtest", side_effect=_fake_backtest):
+                result = parameter_sweep.run_parameter_sweep(
+                    "2330",
+                    strategy="all",
+                    ma_short_windows=(2,),
+                    ma_long_windows=(20,),
+                    rsi_buy_below=(30,),
+                    rsi_sell_above=(70,),
+                    score_buy=(5,),
+                    score_sell=(-5,),
+                    top=0,
+                )
+
+        self.assertEqual(len(result), 3)
+        strategies = result["Strategy"].unique()
+        self.assertIn("ma_cross", strategies)
+        self.assertIn("rsi", strategies)
+        self.assertIn("score", strategies)
 
     def test_single_strategy_failure_does_not_stop_sweep(self) -> None:
         original_score_strategy = parameter_sweep.score_strategy
