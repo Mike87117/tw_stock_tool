@@ -1038,6 +1038,30 @@ python walk_forward_report.py --stock 2330 --strategy ma_cross --period 2y --out
 python walk_forward_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
 ```
 
+### Custom parameter ranges
+
+You can provide custom parameter ranges to override the built-in defaults. Values are comma-separated integers, and whitespace is tolerated. Negative integers are supported for score ranges (e.g. `--score-sell=-2,-3,-4`).
+
+MA custom ranges:
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --ma-short-windows 5,10,20 --ma-long-windows 30,60,120
+```
+
+RSI custom ranges:
+```bash
+python walk_forward_report.py --stock 2330 --strategy rsi --rsi-buy-below "25, 30, 35" --rsi-sell-above 65,70,75
+```
+
+Score custom ranges:
+```bash
+python walk_forward_report.py --stock 2330 --strategy score --score-buy 4,5,6 --score-sell=-2,-3,-4
+```
+
+Combined custom ranges with Markdown or Excel output:
+```bash
+python walk_forward_report.py --stock 2330 --strategy all --ma-short-windows 5,10 --rsi-buy-below 20,30 --score-sell=-2,-4 --output-md --output-excel
+```
+
 ## Backtest Report CLI
 
 `backtest_report.py` 提供單次歷史回測並輸出研究報告（Markdown / Excel）。
