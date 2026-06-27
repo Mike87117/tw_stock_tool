@@ -86,9 +86,10 @@ Broker Interface
 - Phase 4.9：完成 (Report CLI consistency polish batch)
 - Phase 4.10：完成 (Walk Forward custom range support)
 - Phase 4.11：完成 (Report documentation polish / smoke audit)
+- Phase 4.12：完成 (Release readiness audit / cleanup backlog)
 
 下一步：
-- Phase 4.12：Release readiness audit / cleanup backlog (尚未開始)
+- Phase 5：Daily report / research workflow expansion (尚未開始)
 
 ## 3. 台股資料取得
 
