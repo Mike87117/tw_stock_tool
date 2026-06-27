@@ -135,6 +135,19 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         self.assertIn("Best Strategy: ma_cross", out)
         self.assertIn("Best Parameters: short=10", out)
 
+        mock_run_sweep.assert_called_once_with(
+            stock_id="2330",
+            strategy="ma_cross",
+            period="1y",
+            force_refresh=False,
+            ma_short_windows=None,
+            ma_long_windows=None,
+            rsi_buy_below=None,
+            rsi_sell_above=None,
+            score_buy=None,
+            score_sell=None,
+        )
+
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_excel")

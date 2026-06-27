@@ -67,7 +67,7 @@ def main() -> None:
             
     except Exception as exc:
         print(f"Error: {exc}")
-        sys.exit(1)
+        raise SystemExit(1) from exc
 
 if __name__ == "__main__":
     main()

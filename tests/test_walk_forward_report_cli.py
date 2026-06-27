@@ -105,6 +105,13 @@ class WalkForwardReportCliTest(unittest.TestCase):
         self.assertIn("Best Strategy: ma_cross", out)
         self.assertIn("Best Parameters: short=10,long=30", out)
 
+        mock_run_wf.assert_called_once_with(
+            stock_id="2330",
+            strategy="ma_cross",
+            period="1y",
+            force_refresh=False,
+        )
+
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_markdown")
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_excel")
