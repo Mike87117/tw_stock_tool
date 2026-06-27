@@ -83,9 +83,10 @@ Broker Interface
 - Phase 4.8A：完成 (Parameter Sweep custom range engine support)
 - Phase 4.8B：完成 (Expose custom parameter ranges in Parameter Sweep Report CLI)
 - Phase 4.8C：完成 (Parameter Sweep custom range CLI documentation update)
+- Phase 4.9：完成 (Report CLI consistency polish batch)
 
 下一步：
-- Phase 4.9：Walk Forward custom range support or report polish (尚未開始)
+- Phase 4.10：Walk Forward custom range support or report polish (尚未開始)
 
 ## 3. 台股資料取得
 
