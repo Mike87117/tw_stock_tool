@@ -80,8 +80,8 @@ python doctor.py --live
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
 | 自動更新後多股票掃描 | `python scan_stocks.py --auto-stock-list` |
 | 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
-| 每日候選股票報告 | `python daily_report.py --file stocks.txt --output` |
-| 自動更新後每日候選股票報告 | `python daily_report.py --auto-stock-list --output` |
+| 每日候選股票報告 | `twstock daily --file stocks.txt --output-md` |
+| 自動更新後每日候選股票報告 | `twstock daily --auto-stock-list --output-md` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
 | Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
 | Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
@@ -98,10 +98,10 @@ python doctor.py --live
 | 本機 GUI 原型 | `python gui_app.py` |
 | 統一 CLI：環境檢查 | `python twstock_cli.py doctor` |
 | 統一 CLI：多股票掃描 | `python twstock_cli.py scan --auto-stock-list --stock-limit 50` |
-| 統一 CLI：每日候選報告 | `python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output` |
+| 統一 CLI：每日候選報告 | `python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output-md` |
 | twstock：環境檢查 | `twstock doctor` |
 | twstock：多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
-| twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output` |
+| twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output-md` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
 ### 本機 GUI 原型
@@ -125,7 +125,7 @@ python gui_app.py
 ```bash
 python twstock_cli.py doctor
 python twstock_cli.py scan --auto-stock-list --stock-limit 50
-python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output
+python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output-md
 ```
 
 ### Auto Stock List 安全使用建議
@@ -135,7 +135,7 @@ python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output
 
 ```bash
 python scan_stocks.py --auto-stock-list --stock-limit 50
-python daily_report.py --auto-stock-list --stock-limit 50 --output
+twstock daily --auto-stock-list --stock-limit 50 --output-md
 python ai_stock_scanner.py --auto-stock-list --stock-limit 20 --output
 ```
 
@@ -293,10 +293,10 @@ python scan_stocks.py --auto-stock-list --stock-limit 50
 ### Step 4：產生每日候選報告
 
 ```bash
-python daily_report.py --auto-stock-list --stock-limit 50 --output
+twstock daily --auto-stock-list --stock-limit 50 --output-md
 ```
 
-這會產生每日候選股票 Excel，可以先觀察：
+這會產生 Markdown 格式的每日候選股票報告，可以先觀察：
 
 - `Signal`
 - `Score`
@@ -361,7 +361,7 @@ python scan_stocks.py --stocks 2330 2317 2454
 如果想直接產生每日候選清單：
 
 ```bash
-python daily_report.py --file stocks.txt --output
+twstock daily --file stocks.txt --output-md
 ```
 
 說明：
@@ -1166,7 +1166,7 @@ python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --out
 | `scan_stocks.py` | 錯誤紀錄 | `output/scan_errors.log` | 需使用 `--log-errors`。 |
 | `clean_stocks.py` | 股票清單檢查 Excel | `output/clean_stocks_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
 | `clean_stocks.py` | 有效股票清單 | `output/stocks_clean.txt` | 使用 `--write-clean-file`；只包含可正常取得資料的股票。 |
-| `daily_report.py` | 每日候選清單 Excel | `output/daily_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
+| `twstock daily` | 每日候選清單報告 | `output/daily_report.md` | 使用 `--output-md` 或 `--output-dir`；也可指定自訂路徑。 |
 | `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 需搭配 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep Excel | `output/{stock}_parameter_sweep.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
@@ -1654,7 +1654,7 @@ python -m unittest discover -s tests
 - `strategy_compare.py` 分數門檻 CLI 傳遞
 - `parameter_sweep.py` 參數組合、排序、錯誤處理
 - `walk_forward.py` 視窗切分、策略驗證、錯誤處理與 Excel 輸出
-- `daily_report.py` Summary、候選股篩選、排序、Errors sheet 與 Excel 輸出
+- `twstock daily` Summary、候選股篩選、排序、錯誤處理與 Markdown 輸出
 
 ## 專案結構
 
