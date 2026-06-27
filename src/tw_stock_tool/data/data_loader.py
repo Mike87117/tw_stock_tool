@@ -1,5 +1,4 @@
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import date
 from io import StringIO
 import logging
 from pathlib import Path
@@ -40,8 +39,19 @@ def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool) -> P
 def _is_cache_fresh(path: Path) -> bool:
     if not path.exists():
         return False
-    modified = date.fromtimestamp(path.stat().st_mtime)
-    return modified == date.today()
+
+    now = pd.Timestamp.now(tz="Asia/Taipei")
+    mtime = path.stat().st_mtime
+    modified = pd.Timestamp(mtime, unit="s", tz="UTC").tz_convert("Asia/Taipei")
+
+    if modified.date() != now.date():
+        return False
+
+    market_close = now.replace(hour=14, minute=30, second=0, microsecond=0)
+    if now >= market_close:
+        return modified >= market_close
+
+    return True
 
 
 def _read_cache(path: Path) -> pd.DataFrame:
@@ -64,6 +74,13 @@ def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     out = df[required].dropna(subset=["Open", "High", "Low", "Close"])
     if out.empty:
         raise DataLoaderError(f"{symbol} has no usable OHLC data.")
+
+    if not pd.api.types.is_datetime64_any_dtype(out.index):
+        try:
+            out.index = pd.to_datetime(out.index)
+        except Exception:
+            raise DataLoaderError(f"{symbol} index is not a valid DatetimeIndex.")
+
     out.index.name = "Date"
     return out
 

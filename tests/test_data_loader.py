@@ -346,6 +346,63 @@ class DataLoaderTest(unittest.TestCase):
         twse.assert_not_called()
         tpex.assert_not_called()
 
+    def test_cache_read_failure_falls_back_to_download(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader, "_is_cache_fresh", return_value=True):
+                    with patch.object(data_loader, "_read_cache", side_effect=Exception("Read error")):
+                        with patch.object(data_loader.yf, "download", return_value=_download_df()) as download:
+                            df, symbol = data_loader.download_tw_stock("2330", period="1y")
+
+        self.assertEqual(download.call_count, 1)
+        self.assertEqual(symbol, "2330.TW")
+
+    def test_prepare_ohlcv_rejects_invalid_index(self) -> None:
+        df = pd.DataFrame(
+            {
+                "Open": [10.0],
+                "High": [12.0],
+                "Low": [9.0],
+                "Close": [11.0],
+                "Volume": [1000],
+            },
+            index=["not_a_date"],
+        )
+        with self.assertRaises(data_loader.DataLoaderError) as context:
+            data_loader._prepare_ohlcv(df, "2330.TW")
+        self.assertIn("not a valid DatetimeIndex", str(context.exception))
+
+    def test_is_cache_fresh_considers_market_close_time(self) -> None:
+        # Mock Path and its stat
+        class MockStat:
+            def __init__(self, mtime: float):
+                self.st_mtime = mtime
+
+        class MockPath:
+            def __init__(self, mtime: float):
+                self.mtime = mtime
+
+            def exists(self) -> bool:
+                return True
+
+            def stat(self) -> MockStat:
+                return MockStat(self.mtime)
+
+        # Simulate 15:00 TST today
+        mock_now = pd.Timestamp("2024-01-01 15:00:00", tz="Asia/Taipei")
+
+        # Scenario 1: Cache from 14:00 TST today (before close). Should be stale at 15:00.
+        cache_before_close = pd.Timestamp("2024-01-01 14:00:00", tz="Asia/Taipei")
+        path_before = MockPath(cache_before_close.timestamp())
+
+        # Scenario 2: Cache from 14:45 TST today (after close). Should be fresh at 15:00.
+        cache_after_close = pd.Timestamp("2024-01-01 14:45:00", tz="Asia/Taipei")
+        path_after = MockPath(cache_after_close.timestamp())
+
+        with patch.object(data_loader.pd.Timestamp, "now", return_value=mock_now):
+            self.assertFalse(data_loader._is_cache_fresh(path_before))
+            self.assertTrue(data_loader._is_cache_fresh(path_after))
+
 
 if __name__ == "__main__":
     unittest.main()

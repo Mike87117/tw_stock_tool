@@ -28,7 +28,10 @@ This document maps out the current data failure modes, fallback behaviors, and r
 - **Can one failed stock break an entire scan?**: No. The thread pool safely isolates failures. Failed stocks are appended to the results DataFrame with `Status="ERROR"` and placed at the bottom of the list with `Rank=None`. The rest of the scan succeeds.
 
 ## 6. Cache / Force Refresh Failure Modes
-- **Cache hit / miss**: `data_loader.py` checks `_is_cache_fresh` which relies purely on the file's modification time being equal to `date.today()`. If it is today, it reads the CSV. If reading fails, it catches the error and falls back to network download.
+- **Cache hit / miss**: `data_loader.py` uses `_is_cache_fresh` to check freshness based on `Asia/Taipei` market-close timing.
+  - Before 14:30, same-day cache is considered fresh.
+  - After 14:30, the cache file must have been modified at or after 14:30 to be considered fresh.
+  If a cache file is deemed fresh but reading fails, it catches the error and falls back to network download.
 - **Force refresh**: The `--force-refresh` flag bypasses the cache freshness check and immediately proceeds to network download, overwriting the cache.
 - **Empty data cache corruption**: If a network download succeeds but returns unusable data, it shouldn't be written to cache because `_prepare_ohlcv` raises an error before `_write_cache` is called.
 
@@ -46,10 +49,9 @@ This document maps out the current data failure modes, fallback behaviors, and r
 ## 9. Reliability Risks
 - **Silent partial failures**: Users rely on the Daily Report for their watchlists. If a stock's data is temporarily unavailable, it silently drops out of the candidates list instead of explicitly warning the user.
 - **API Rate Limiting**: The TWSE/TPEx fallbacks use standard requests without delays between them. A large batch of `yfinance` failures could trigger rate-limiting on the official servers.
-- **Cache invalidation**: The cache is purely date-based. If a user runs the tool at 8:00 AM (before market open) and again at 2:00 PM (after market close), the 2:00 PM run will hit the 8:00 AM cache, returning stale data.
 
 ## 10. Phase 6 Follow-up Candidates
-- **Phase 6.2: Price data fallback and cache behavior cleanup**: Refine cache invalidation rules (e.g., checking if the last recorded date matches expectations).
+- **Phase 6.2 (Completed)**: Price data fallback and cache behavior cleanup. Cache freshness is now timezone-aware and accounts for market close times.
 - **Phase 6.3: Stock list reliability and invalid-symbol handling**: Improve error parsing for stock lists.
 - **Phase 6.4: Daily Report partial-failure behavior and user-facing warnings**: Explicitly pass `ranking_df` error rows into `build_daily_report_data` to populate "Data Limitations".
 - **Phase 6.5: Data reliability tests and documentation**: Fill offline test gaps.
