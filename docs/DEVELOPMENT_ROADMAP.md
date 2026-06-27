@@ -93,6 +93,7 @@ Broker Interface
 - Phase 5.4：完成 (Daily Report CLI)
 - Phase 5.5：完成 (Daily Report docs and smoke tests)
 - Phase 5.6：完成 (Daily Report MVP final audit / cleanup)
+- Phase 6.1：完成 (Data reliability audit / failure-mode map)
 
 ## 3. 台股資料取得
 
