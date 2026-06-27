@@ -92,8 +92,7 @@ Broker Interface
 - Phase 5.3：完成 (Daily Report Markdown exporter)
 - Phase 5.4：完成 (Daily Report CLI)
 
-下一步：
-- Phase 5.5：Daily Report docs and smoke tests (尚未開始)
+- Phase 5.5：完成 (Daily Report docs and smoke tests)
 
 ## 3. 台股資料取得
 

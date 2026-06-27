@@ -93,6 +93,49 @@ class TestDailyReportCli(unittest.TestCase):
 
         mock_open.assert_called_once_with(Path("custom/report.md"), "w", encoding="utf-8")
 
+    @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data")
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_report")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_daily_report_cli_smoke_offline(self, mock_open, mock_mkdir, mock_collect, mock_run_daily, mock_build):
+        # Mocks collect_stock_ids, run_daily_report, and build_daily_report_data to ensure no live network calls
+        mock_collect.return_value = ["2330"]
+        mock_run_daily.return_value = (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None)
+        mock_build.return_value = {"Report Date": "2023-01-01"}
+
+        test_args = ["--stocks", "2330", "--output-md", "smoke_test.md"]
+        with patch.object(sys, "argv", ["daily_report_cli.py"] + test_args):
+            main()
+
+        # Verify run_daily_report is called with output=None
+        mock_run_daily.assert_called_once_with(
+            stock_ids=["2330"],
+            period='1y',
+            interval='1d',
+            signals=['BUY', 'WATCH'],
+            min_score=4.0,
+            top=20,
+            force_refresh=False,
+            auto_adjust=False,
+            output=None,
+            progress=True
+        )
+
+        # Verify Markdown file is written
+        mock_open.assert_called_once_with(Path("smoke_test.md"), "w", encoding="utf-8")
+
+        # Verify written content
+        written_content = "".join(call.args[0] for call in mock_open().write.call_args_list)
+
+        # Research-only disclaimer appears in generated Markdown
+        self.assertIn("This report is for research purposes only and does not constitute investment advice.", written_content)
+
+        # No banned investment recommendation wording appears
+        banned_words = ["buy recommendation", "sell recommendation", "guaranteed", "profit opportunity", "best stocks to buy"]
+        for word in banned_words:
+            self.assertNotIn(word.lower(), written_content.lower())
+
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
     def test_no_stocks_exits(self, mock_collect):
         mock_collect.return_value = []
