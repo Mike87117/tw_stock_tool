@@ -1,8 +1,17 @@
-﻿# 台股技術分析工具
+# 台股技術分析工具
 
 ![Python Tests](https://github.com/Mike87117/tw_stock_tool/actions/workflows/python-tests.yml/badge.svg)
 
-本工具用於台股技術分析、回測、多股票掃描、策略比較與 benchmark 研究。它不提供自動下單，不串接券商 API，也不保證投資績效。
+本工具用於台股技術分析、回測、多股票掃描、策略比較與 benchmark 研究。
+本專案目前是台股研究 / 回測 / 報告工具，不是自動下單系統，不串接券商 API，不提供保證獲利，不提供買賣建議。
+
+## 目前可用功能摘要
+
+- 單股分析
+- 多股票掃描
+- Daily Watchlist / 股票雷達
+- Backtest Report Markdown / Excel exporter
+- Backtest Report CLI
 
 ## CI
 
@@ -639,6 +648,45 @@ Excel sheets：
 
 Daily Report 只是研究候選清單，不代表買賣建議，也不提供自動下單。
 
+## Daily Watchlist / 股票雷達
+
+`daily_watchlist.py` 用於掃描台股並找出符合特定條件（如技術面突破）的候選股。
+
+CLI 範例：
+
+```bash
+python daily_watchlist.py --stock 2330 --output-md --output-excel
+```
+
+多股票：
+
+```bash
+python daily_watchlist.py --stocks 2330 2317 2454 --output-md
+```
+
+使用檔案：
+
+```bash
+python daily_watchlist.py --file stocks.txt --output-excel
+```
+
+自動取得官方股票清單：
+
+```bash
+python daily_watchlist.py --auto-stock-list --stock-limit 50 --output-md
+```
+
+說明：
+`--auto-stock-list` 預設會把下載的清單寫到 `output/auto_stock_list.txt`，不會直接覆蓋 tracked `stocks.txt`。
+
+若使用者真的想更新 `stocks.txt`，請明確指定：
+
+```bash
+python daily_watchlist.py --auto-stock-list --auto-stock-list-output stocks.txt
+```
+
+這會修改 tracked `stocks.txt`，建議確認 git diff 後再 commit。
+
 ## Benchmark
 
 benchmark 工具檔名維持 `benchmark.py`，輸出分為三段：
@@ -831,6 +879,24 @@ Excel sheet：
 - 不模擬盤中觸價、滑價、流動性
 - 不提供投資建議
 - 不提供自動下單
+
+## Backtest Report CLI
+
+`backtest_report.py` 提供單次歷史回測並輸出研究報告（Markdown / Excel）。
+
+CLI 範例：
+
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --period 2y --output-md --output-excel
+```
+
+預設輸出：
+- `output/backtest_report.md`
+- `output/backtest_report.xlsx`
+
+Backtest trades 目前支援 `PnL_pct` 欄位；report exporter 也保留 legacy `PnL %` 顯示相容。
+
+注意：Backtest Report 目前是研究報告輸出，不代表投資建議。
 
 ## 輸出檔案位置總覽
 
@@ -1439,4 +1505,5 @@ pip install -e .
 - [Auto Trading Safety](docs/AUTO_TRADING_SAFETY.md)
 
 自動下單是長期目標，不是目前功能；在任何真實下單前，必須完成 Backtest 標準化、Parameter Sweep、Walk Forward、Paper Trading、Risk Manager、Kill Switch 與 Trade Log。
+目前專案尚未開始 Paper Trading / Broker / AI 自動決策。
 

@@ -1,4 +1,4 @@
-﻿# DEVELOPMENT ROADMAP
+# DEVELOPMENT ROADMAP
 
 本文件描述 `tw_stock_tool` 的長期發展方向。它用來界定研究工具、驗證工具、Paper Trading、Broker Interface、半自動下單與自動下單之間的階段差異。
 
@@ -61,6 +61,21 @@ Broker Interface
 - Risk Manager。
 - Kill Switch。
 - Trade Log。
+
+## 2.5 目前開發進度
+
+- Phase 1：完成 (Backtest metrics / result standardization)
+- Phase 1.5：完成 (Signal standard adapter)
+- Phase 2：完成 (Daily Watchlist)
+- Phase 2 cleanup：完成 (Daily Watchlist CLI / export cleanup)
+- Phase 3：完成 (Backtest Report exporter)
+- Phase 3.1：完成 (Backtest Report CLI)
+- Phase 3.2：完成 (Backtest Report CLI 測試補強)
+- Repo audit cleanup P1：完成 (避免 --auto-stock-list 污染 tracked stocks.txt)
+- Repo audit cleanup P2：完成 (Backtest trade schema 顯示 PnL_pct / PnL % 相容)
+
+下一步：
+- Phase 4：Parameter Sweep / Walk Forward report integration (尚未開始)
 
 ## 3. 台股資料取得
 
