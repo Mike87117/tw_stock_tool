@@ -74,5 +74,19 @@ class TestDailyReportMarkdown(unittest.TestCase):
         
         self.assertEqual(len(input_data["Risk Notes"]), original_risk_notes_len)
 
+    def test_table_renders_union_headers_for_inconsistent_rows(self):
+        data = build_daily_report_data(
+            watchlist_candidates=[
+                {"Stock": "2330", "Score": 5},
+                {"Stock": "2317", "RSI": 62},
+            ]
+        )
+
+        markdown = render_daily_report_markdown(data)
+
+        self.assertIn("| Stock | Score | RSI |", markdown)
+        self.assertIn("| 2330 | 5 |  |", markdown)
+        self.assertIn("| 2317 |  | 62 |", markdown)
+
 if __name__ == '__main__':
     unittest.main()

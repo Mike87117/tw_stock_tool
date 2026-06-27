@@ -397,7 +397,11 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
     def _render_table(lst: list[dict[str, Any]]) -> list[str]:
         if not lst:
             return ["No data provided.\n"]
-        headers = list(lst[0].keys())
+        headers = []
+        for row in lst:
+            for key in row.keys():
+                if key not in headers:
+                    headers.append(key)
         out = []
         out.append("| " + " | ".join(headers) + " |")
         out.append("|" + "|".join(["---"] * len(headers)) + "|")
