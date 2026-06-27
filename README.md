@@ -945,6 +945,75 @@ Excel sheet：
 - 不提供投資建議
 - 不提供自動下單
 
+## Walk Forward Report CLI
+
+我們提供了專用的 CLI 來輸出 Walk Forward Report，包含詳細的 Markdown 與 Excel 報表格式。
+此 CLI 的執行入口為 `walk_forward_report.py` 或 `tw_stock_tool/cli/walk_forward_report.py`。
+
+### Important Behavior Notes
+
+1. `--stock` is required.
+2. `--strategy` is required.
+3. `--output-md` is optional.
+4. `--output-excel` is optional.
+5. If neither output flag is provided, the CLI prints a summary only and does not create report files.
+6. `--output-md` without a custom path uses `output/walk_forward_report.md`.
+7. `--output-excel` without a custom path uses `output/walk_forward_report.xlsx`.
+8. Custom paths are supported.
+9. The CLI supports `--output-dir` to change the default output directory.
+10. The report uses the existing Walk Forward Report exporter logic.
+11. Best-window selection follows the report exporter logic (e.g. Test Sharpe Ratio > Test Total Return %), not raw row order.
+12. Research report only, not investment advice. Historical performance does not guarantee future results.
+13. The CLI does not place orders and does not connect to broker APIs.
+
+### Basic run without file export
+
+這會執行 Walk Forward 並將簡明摘要印在 stdout，不會產出任何報表檔案。
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross
+```
+
+### Export Markdown report
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --output-md
+```
+
+Default output: `output/walk_forward_report.md`
+
+### Export Excel report
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --output-excel
+```
+
+Default output: `output/walk_forward_report.xlsx`
+
+### Export both Markdown and Excel
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --output-md --output-excel
+```
+
+### Custom output paths
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --output-md reports/wf.md --output-excel reports/wf.xlsx
+```
+
+### Optional period
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --period 2y --output-md
+```
+
+### Force refresh
+
+```bash
+python walk_forward_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
+```
+
 ## Backtest Report CLI
 
 `backtest_report.py` 提供單次歷史回測並輸出研究報告（Markdown / Excel）。
