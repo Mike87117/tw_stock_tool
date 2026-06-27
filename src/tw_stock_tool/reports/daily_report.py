@@ -394,8 +394,3 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
     lines.extend(_render_list_of_strings(report_data.get("Next Research Actions", [])))
 
     return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    main()
-

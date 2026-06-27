@@ -58,12 +58,12 @@ class TwStockCliTest(unittest.TestCase):
             captured.append(sys.argv[:])
 
         with patch.object(twstock_cli.daily_report_cli, "main", side_effect=fake_main) as mocked:
-            twstock_cli.main(["daily", "--auto-stock-list", "--stock-limit", "50", "--output"])
+            twstock_cli.main(["daily", "--auto-stock-list", "--stock-limit", "50", "--output-md"])
 
         mocked.assert_called_once_with()
         self.assertEqual(
             captured[0],
-            ["daily_report_cli.py", "--auto-stock-list", "--stock-limit", "50", "--output"],
+            ["daily_report_cli.py", "--auto-stock-list", "--stock-limit", "50", "--output-md"],
         )
 
     def test_ai_scan_subcommand_dispatches_to_ai_stock_scanner(self) -> None:

@@ -1,9 +1,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
-from tw_stock_tool.cli.parsers import parse_int_tuple
 from tw_stock_tool.utils.config import (
     DEFAULT_PERIOD,
     DEFAULT_INTERVAL,
@@ -18,11 +16,7 @@ from tw_stock_tool.reports.daily_report import (
     render_daily_report_markdown,
     collect_stock_ids,
 )
-from tw_stock_tool.analysis.analysis import analyze_stock
-from tw_stock_tool.backtesting.backtest import run_backtest
-from tw_stock_tool.backtesting.parameter_sweep import run_parameter_sweep
-from tw_stock_tool.backtesting.walk_forward import run_walk_forward
-from tw_stock_tool.backtesting.strategies import STRATEGIES
+
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Daily Report CLI")
@@ -46,14 +40,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--force-refresh", action="store_true")
     parser.add_argument("--auto-adjust", action=argparse.BooleanOptionalAction, default=DEFAULT_AUTO_ADJUST)
     
-    # Deep Dive
-    parser.add_argument("--run-backtest", action="store_true", help="Run standard backtest on candidates")
-    parser.add_argument("--run-sweep", action="store_true", help="Run parameter sweep on candidates")
-    parser.add_argument("--run-walk-forward", action="store_true", help="Run walk-forward on candidates")
-    parser.add_argument("--deep-dive-strategy", default="ma_cross", help="Strategy to use for deep dives")
-    
     # Output
-    parser.add_argument("--output-md", nargs="?", const="", default=None)
+    parser.add_argument("--output-md", nargs="?", const="output/daily_report.md", default="output/daily_report.md")
     parser.add_argument("--output-dir", default="output")
     return parser.parse_args(argv)
 
@@ -91,73 +79,15 @@ def main() -> None:
             progress=True,
         )
         
-        bt_highlights = []
-        ps_highlights = []
-        wf_highlights = []
-        
-        strategy_name = args.deep_dive_strategy
-        if strategy_name not in STRATEGIES:
-            if f"{strategy_name}_strategy" in STRATEGIES:
-                strategy_name = f"{strategy_name}_strategy"
-        
-        if not candidates_df.empty and (args.run_backtest or args.run_sweep or args.run_walk_forward):
-            print(f"\nRunning deep dives using strategy: {strategy_name}")
-            
-            for stock_id in candidates_df["Stock"].tolist():
-                # Backtest
-                if args.run_backtest:
-                    try:
-                        analysis = analyze_stock(stock_id, period=args.period, force_refresh=args.force_refresh)
-                        strategy_func = STRATEGIES[strategy_name]
-                        df_exec = strategy_func(analysis.indicator_df)
-                        bt_result = run_backtest(df_exec)
-                        summary = bt_result.get("Summary", {})
-                        bt_highlights.append({
-                            "Stock": stock_id,
-                            "Strategy": args.deep_dive_strategy,
-                            "Return": summary.get("Total Return", "N/A"),
-                            "WinRate": summary.get("Win Rate", "N/A"),
-                        })
-                    except Exception as e:
-                        bt_highlights.append({"Stock": stock_id, "Strategy": args.deep_dive_strategy, "Error": str(e)})
-                        
-                # Sweep
-                if args.run_sweep:
-                    try:
-                        sweep_df = run_parameter_sweep(stock_id, args.deep_dive_strategy, period=args.period, force_refresh=args.force_refresh)
-                        if not sweep_df.empty:
-                            best_row = sweep_df.iloc[0]
-                            ps_highlights.append({
-                                "Stock": stock_id,
-                                "Strategy": args.deep_dive_strategy,
-                                "Best Return": best_row.get("Total Return", "N/A"),
-                                "Best WinRate": best_row.get("Win Rate", "N/A")
-                            })
-                    except Exception as e:
-                        ps_highlights.append({"Stock": stock_id, "Strategy": args.deep_dive_strategy, "Error": str(e)})
-                        
-                # Walk Forward
-                if args.run_walk_forward:
-                    try:
-                        wf_df = run_walk_forward(stock_id, args.deep_dive_strategy, period=args.period, force_refresh=args.force_refresh)
-                        if not wf_df.empty:
-                            wf_highlights.append({
-                                "Stock": stock_id,
-                                "Strategy": args.deep_dive_strategy,
-                                "Avg Return": wf_df["Total Return"].mean(),
-                            })
-                    except Exception as e:
-                        wf_highlights.append({"Stock": stock_id, "Strategy": args.deep_dive_strategy, "Error": str(e)})
-        
         import datetime
         report_data = build_daily_report_data(
             report_date=datetime.datetime.now().strftime("%Y-%m-%d"),
             stock_universe=list(stock_ids),
             screening_results=summary_df,
             watchlist_candidates=candidates_df,
-            backtest_highlights=bt_highlights,
-            parameter_sweep_highlights=ps_highlights,
-            walk_forward_highlights=wf_highlights,
+            backtest_highlights=[],
+            parameter_sweep_highlights=[],
+            walk_forward_highlights=[],
         )
         
         md_text = render_daily_report_markdown(report_data)
@@ -166,13 +96,12 @@ def main() -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
         
         output_md = args.output_md
-        if output_md == "":
+        if not output_md:
             output_md = str(out_dir / "daily_report.md")
             
-        if output_md:
-            with open(output_md, "w", encoding="utf-8") as f:
-                f.write(md_text)
-            print(f"\nMarkdown report exported to {output_md}")
+        with open(output_md, "w", encoding="utf-8") as f:
+            f.write(md_text)
+        print(f"\nMarkdown report exported to {output_md}")
             
         print("\nProcess completed successfully.")
         
