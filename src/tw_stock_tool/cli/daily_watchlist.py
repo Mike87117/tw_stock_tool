@@ -41,6 +41,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stocks", nargs="*", help="Stock IDs such as --stocks 2330 2317 2454 or --stocks 2330,2317")
     parser.add_argument("--file", help="Load stock IDs from a txt file")
     parser.add_argument("--auto-stock-list", action="store_true", help="Update the official stock list before scanning")
+    parser.add_argument("--auto-stock-list-output", default="output/auto_stock_list.txt", help="Path to save the auto-downloaded stock list")
     parser.add_argument("--stock-market", choices=("all", "twse", "tpex"), default="all")
     parser.add_argument("--stock-limit", type=int, help="Limit how many stocks are scanned")
     parser.add_argument("--period", default=DEFAULT_PERIOD, help="Analysis period")
@@ -57,7 +58,7 @@ def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
     if args.auto_stock_list:
         stocks_df, _ = stock_list_updater_module.update_stock_list(
             market=args.stock_market,
-            output="stocks.txt",
+            output=args.auto_stock_list_output,
             allow_partial=False,
         )
         stocks = normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())

@@ -189,5 +189,29 @@ class TestDailyWatchlist(unittest.TestCase):
         mock_excel.assert_called_once()
         mock_md.assert_called_once()
 
+    @patch("tw_stock_tool.cli.daily_watchlist.stock_list_updater_module.update_stock_list")
+    def test_auto_stock_list_defaults_to_ignored_path(self, mock_update):
+        mock_update.return_value = (pd.DataFrame({"Stock": ["2330"]}), "mock_path")
+        args = _parse_args(["--auto-stock-list"])
+        self.assertEqual(args.auto_stock_list_output, "output/auto_stock_list.txt")
+        _collect_stock_ids(args)
+        mock_update.assert_called_once_with(
+            market="all",
+            output="output/auto_stock_list.txt",
+            allow_partial=False
+        )
+
+    @patch("tw_stock_tool.cli.daily_watchlist.stock_list_updater_module.update_stock_list")
+    def test_auto_stock_list_supports_custom_output_path(self, mock_update):
+        mock_update.return_value = (pd.DataFrame({"Stock": ["2330"]}), "mock_path")
+        args = _parse_args(["--auto-stock-list", "--auto-stock-list-output", "custom_path.txt"])
+        self.assertEqual(args.auto_stock_list_output, "custom_path.txt")
+        _collect_stock_ids(args)
+        mock_update.assert_called_once_with(
+            market="all",
+            output="custom_path.txt",
+            allow_partial=False
+        )
+
 if __name__ == "__main__":
     unittest.main()
