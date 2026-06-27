@@ -9,7 +9,7 @@ from tw_stock_tool.reports.walk_forward_report import (
     export_walk_forward_report_excel,
 )
 from tw_stock_tool.utils.config import DEFAULT_PERIOD
-
+from tw_stock_tool.cli.parsers import parse_int_tuple
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Walk Forward Report CLI")
@@ -20,6 +20,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-excel", nargs="?", const="", default=None, help="Export Excel report")
     parser.add_argument("--output-dir", default="output", help="Default output directory")
     parser.add_argument("--force-refresh", action="store_true", help="Redownload data ignoring cache")
+
+    # Custom Parameter Ranges
+    parser.add_argument("--ma-short-windows", type=parse_int_tuple, help="Comma-separated integers, e.g. 5,10")
+    parser.add_argument("--ma-long-windows", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--rsi-buy-below", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--rsi-sell-above", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--score-buy", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--score-sell", type=parse_int_tuple, help="Comma-separated integers, can be negative")
+
     return parser.parse_args(argv)
 
 
@@ -33,6 +42,12 @@ def main() -> None:
             strategy=args.strategy,
             period=args.period,
             force_refresh=args.force_refresh,
+            ma_short_windows=args.ma_short_windows,
+            ma_long_windows=args.ma_long_windows,
+            rsi_buy_below=args.rsi_buy_below,
+            rsi_sell_above=args.rsi_sell_above,
+            score_buy=args.score_buy,
+            score_sell=args.score_sell,
         )
         
         result_dict = {

@@ -162,13 +162,21 @@ def _selected_strategies(strategy: str) -> list[str]:
     return [strategy]
 
 
-def _parameter_grid(strategy: str) -> list[dict[str, int]]:
+def _parameter_grid(
+    strategy: str,
+    ma_short_windows: tuple[int, ...] | None = None,
+    ma_long_windows: tuple[int, ...] | None = None,
+    rsi_buy_below: tuple[int, ...] | None = None,
+    rsi_sell_above: tuple[int, ...] | None = None,
+    score_buy: tuple[int, ...] | None = None,
+    score_sell: tuple[int, ...] | None = None,
+) -> list[dict[str, int]]:
     if strategy == "ma_cross":
-        return ma_cross_parameter_grid()
+        return ma_cross_parameter_grid(ma_short_windows, ma_long_windows)
     if strategy == "rsi":
-        return rsi_parameter_grid()
+        return rsi_parameter_grid(rsi_buy_below, rsi_sell_above)
     if strategy == "score":
-        return score_parameter_grid()
+        return score_parameter_grid(score_buy, score_sell)
     raise ValueError(f"unsupported strategy: {strategy}.")
 
 
@@ -292,13 +300,29 @@ def _evaluate_window_strategy(
     take_profit_pct: float | None,
     max_hold_days: int | None,
     position_size: float,
+    ma_short_windows: tuple[int, ...] | None = None,
+    ma_long_windows: tuple[int, ...] | None = None,
+    rsi_buy_below: tuple[int, ...] | None = None,
+    rsi_sell_above: tuple[int, ...] | None = None,
+    score_buy: tuple[int, ...] | None = None,
+    score_sell: tuple[int, ...] | None = None,
 ) -> dict[str, Any]:
     best_params: dict[str, int] | None = None
     best_train_result: dict[str, Any] | None = None
     best_value = float("-inf")
     errors: list[str] = []
 
-    for params in _parameter_grid(strategy):
+    grid = _parameter_grid(
+        strategy=strategy,
+        ma_short_windows=ma_short_windows,
+        ma_long_windows=ma_long_windows,
+        rsi_buy_below=rsi_buy_below,
+        rsi_sell_above=rsi_sell_above,
+        score_buy=score_buy,
+        score_sell=score_sell,
+    )
+
+    for params in grid:
         try:
             train_result = _run_strategy_backtest(
                 train,
@@ -354,6 +378,12 @@ def run_walk_forward(
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
     position_size: float = 1.0,
+    ma_short_windows: tuple[int, ...] | None = None,
+    ma_long_windows: tuple[int, ...] | None = None,
+    rsi_buy_below: tuple[int, ...] | None = None,
+    rsi_sell_above: tuple[int, ...] | None = None,
+    score_buy: tuple[int, ...] | None = None,
+    score_sell: tuple[int, ...] | None = None,
 ) -> pd.DataFrame:
     actual_step_days = test_days if step_days is None else step_days
     _validate_inputs(
@@ -391,6 +421,12 @@ def run_walk_forward(
                         take_profit_pct=take_profit_pct,
                         max_hold_days=max_hold_days,
                         position_size=position_size,
+                        ma_short_windows=ma_short_windows,
+                        ma_long_windows=ma_long_windows,
+                        rsi_buy_below=rsi_buy_below,
+                        rsi_sell_above=rsi_sell_above,
+                        score_buy=score_buy,
+                        score_sell=score_sell,
                     )
                 )
             except Exception as exc:

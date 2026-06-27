@@ -44,6 +44,37 @@ class WalkForwardReportCliTest(unittest.TestCase):
         args = _parse_args()
         self.assertEqual(args.output_md, "custom.md")
 
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "ma_cross", "--ma-short-windows", "5, 10, 20", "--ma-long-windows", "30, 60"])
+    def test_argument_parsing_custom_ranges_ma(self):
+        args = _parse_args()
+        self.assertEqual(args.ma_short_windows, (5, 10, 20))
+        self.assertEqual(args.ma_long_windows, (30, 60))
+
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "rsi", "--rsi-buy-below", "25,35", "--rsi-sell-above", "65,75"])
+    def test_argument_parsing_custom_ranges_rsi(self):
+        args = _parse_args()
+        self.assertEqual(args.rsi_buy_below, (25, 35))
+        self.assertEqual(args.rsi_sell_above, (65, 75))
+
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "score", "--score-buy", "4,6", "--score-sell=-2,-4"])
+    def test_argument_parsing_custom_ranges_score_negative(self):
+        args = _parse_args()
+        self.assertEqual(args.score_buy, (4, 6))
+        self.assertEqual(args.score_sell, (-2, -4))
+
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "all", "--ma-short-windows", "5", "--rsi-buy-below", "20", "--score-sell=-5"])
+    def test_argument_parsing_custom_ranges_multiple(self):
+        args = _parse_args()
+        self.assertEqual(args.ma_short_windows, (5,))
+        self.assertEqual(args.rsi_buy_below, (20,))
+        self.assertEqual(args.score_sell, (-5,))
+
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "ma_cross", "--ma-short-windows", "5,a,20"])
+    def test_argument_parsing_invalid_range_raises_error(self):
+        with self.assertRaises(SystemExit) as cm:
+            _parse_args()
+        self.assertIsNotNone(cm.exception.code)
+
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_markdown")
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_excel")
@@ -53,7 +84,16 @@ class WalkForwardReportCliTest(unittest.TestCase):
         main()
         
         mock_run_wf.assert_called_once_with(
-            stock_id="2330", strategy="ma_cross", period="1y", force_refresh=False
+            stock_id="2330",
+            strategy="ma_cross",
+            period="1y",
+            force_refresh=False,
+            ma_short_windows=None,
+            ma_long_windows=None,
+            rsi_buy_below=None,
+            rsi_sell_above=None,
+            score_buy=None,
+            score_sell=None,
         )
         mock_export_md.assert_called_once()
         self.assertEqual(str(mock_export_md.call_args[0][1]).replace("\\", "/"), "output/walk_forward_report.md")
@@ -110,6 +150,12 @@ class WalkForwardReportCliTest(unittest.TestCase):
             strategy="ma_cross",
             period="1y",
             force_refresh=False,
+            ma_short_windows=None,
+            ma_long_windows=None,
+            rsi_buy_below=None,
+            rsi_sell_above=None,
+            score_buy=None,
+            score_sell=None,
         )
 
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")

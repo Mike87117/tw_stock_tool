@@ -1,10 +1,12 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 from openpyxl import load_workbook
+from typing import Any
+import unittest.mock as mock
 
 import walk_forward
 from analysis import StockAnalysis
@@ -193,6 +195,47 @@ class WalkForwardTest(unittest.TestCase):
 
         self.assertEqual(result["Parameters"], "buy_score=4, sell_score=-2")
         self.assertEqual(test_calls, [params_a])
+
+    @mock.patch("src.tw_stock_tool.backtesting.walk_forward.analyze_stock")
+    @mock.patch("src.tw_stock_tool.backtesting.walk_forward._run_strategy_backtest")
+    def test_walk_forward_custom_ranges(
+        self, mock_run_backtest: mock.MagicMock, mock_analyze: mock.MagicMock
+    ) -> None:
+        mock_analyze.return_value.signal_df = self._sample_df(rows=100)
+
+        # Provide deterministic fake results for all params
+        def side_effect(df: pd.DataFrame, strategy: str, params: dict[str, int], *args: Any, **kwargs: Any) -> dict[str, Any]:
+            return {
+                "Total Return %": 10.0,
+                "CAGR %": 10.0,
+                "Trade Count": 2,
+                "Win Rate %": 50.0,
+                "Max Drawdown %": -5.0,
+                "Profit Factor": 1.5,
+                "Sharpe Ratio": 1.0,
+                "Sortino Ratio": 1.0,
+            }
+        mock_run_backtest.side_effect = side_effect
+
+        df = walk_forward.run_walk_forward(
+            stock_id="2330",
+            period="1y",
+            strategy="ma_cross",
+            train_days=50,
+            test_days=20,
+            ma_short_windows=(2, 3),
+            ma_long_windows=(3, 4)
+        )
+
+        # Expected parameters in grid:
+        # short=2, long=3
+        # short=2, long=4
+        # short=3, long=4
+        # Test just the first window's best param
+        self.assertFalse(df.empty)
+        # Verify custom ranges didn't fail
+        for param in df["Parameters"]:
+            self.assertTrue("short_window=2" in param or "short_window=3" in param)
 
     def test_export_excel_contains_required_sheets(self) -> None:
         detail = pd.DataFrame(

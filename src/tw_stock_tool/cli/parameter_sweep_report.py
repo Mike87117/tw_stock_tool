@@ -10,13 +10,7 @@ from tw_stock_tool.reports.parameter_sweep_report import (
 from tw_stock_tool.utils.config import DEFAULT_PERIOD
 
 
-def _parse_int_tuple(value: str) -> tuple[int, ...]:
-    if not value.strip():
-        raise argparse.ArgumentTypeError("range cannot be empty")
-    try:
-        return tuple(int(x.strip()) for x in value.split(","))
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"invalid integer list: '{value}'") from exc
+from tw_stock_tool.cli.parsers import parse_int_tuple
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -30,12 +24,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--force-refresh", action="store_true", help="Redownload data ignoring cache")
 
     # Custom Parameter Ranges
-    parser.add_argument("--ma-short-windows", type=_parse_int_tuple, help="Comma-separated integers, e.g. 5,10")
-    parser.add_argument("--ma-long-windows", type=_parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--rsi-buy-below", type=_parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--rsi-sell-above", type=_parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--score-buy", type=_parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--score-sell", type=_parse_int_tuple, help="Comma-separated integers, can be negative")
+    parser.add_argument("--ma-short-windows", type=parse_int_tuple, help="Comma-separated integers, e.g. 5,10")
+    parser.add_argument("--ma-long-windows", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--rsi-buy-below", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--rsi-sell-above", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--score-buy", type=parse_int_tuple, help="Comma-separated integers")
+    parser.add_argument("--score-sell", type=parse_int_tuple, help="Comma-separated integers, can be negative")
 
     return parser.parse_args(argv)
 
