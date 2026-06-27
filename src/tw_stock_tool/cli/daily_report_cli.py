@@ -41,7 +41,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--auto-adjust", action=argparse.BooleanOptionalAction, default=DEFAULT_AUTO_ADJUST)
     
     # Output
-    parser.add_argument("--output-md", nargs="?", const="output/daily_report.md", default="output/daily_report.md")
+    parser.add_argument("--output-md", nargs="?", const="", default=None)
     parser.add_argument("--output-dir", default="output")
     return parser.parse_args(argv)
 
@@ -92,19 +92,20 @@ def main() -> None:
         
         md_text = render_daily_report_markdown(report_data)
         
-        out_dir = Path(args.output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
+        default_output = Path(args.output_dir) / "daily_report.md"
         
-        output_md = args.output_md
-        if not output_md:
-            output_md = str(out_dir / "daily_report.md")
+        if args.output_md in (None, ""):
+            output_md = default_output
+        else:
+            output_md = Path(args.output_md)
             
+        output_md.parent.mkdir(parents=True, exist_ok=True)
+
         with open(output_md, "w", encoding="utf-8") as f:
             f.write(md_text)
         print(f"\nMarkdown report exported to {output_md}")
-            
         print("\nProcess completed successfully.")
-        
+
     except Exception as exc:
         print(f"Error: {exc}")
         sys.exit(1)
