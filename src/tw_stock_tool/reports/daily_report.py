@@ -364,6 +364,97 @@ def build_daily_report_data(
     return report_data
 
 
+def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
+    """
+    Render a structured daily report dict into a Markdown document.
+    Ensures deterministic ordering and research-only language.
+    """
+    lines = ["# Daily Research Report\n"]
+
+    def _render_dict(d: dict[str, Any]) -> list[str]:
+        if not d:
+            return ["No data provided.\n"]
+        out = []
+        for k, v in d.items():
+            if isinstance(v, list) and not v:
+                out.append(f"- **{k}**: None")
+            elif isinstance(v, list):
+                out.append(f"- **{k}**: {', '.join(str(x) for x in v)}")
+            else:
+                out.append(f"- **{k}**: {v}")
+        out.append("")
+        return out
+
+    def _render_list_of_strings(lst: list[str]) -> list[str]:
+        if not lst:
+            return ["No data provided.\n"]
+        out = []
+        for item in lst:
+            out.append(f"- {item}")
+        out.append("")
+        return out
+
+    def _render_table(lst: list[dict[str, Any]]) -> list[str]:
+        if not lst:
+            return ["No data provided.\n"]
+        headers = list(lst[0].keys())
+        out = []
+        out.append("| " + " | ".join(headers) + " |")
+        out.append("|" + "|".join(["---"] * len(headers)) + "|")
+        for row in lst:
+            row_vals = [str(row.get(h, "")) for h in headers]
+            out.append("| " + " | ".join(row_vals) + " |")
+        out.append("")
+        return out
+
+    # 1. Report Metadata
+    lines.append("## Report Metadata\n")
+    lines.extend(_render_dict(report_data.get("Report Metadata", {})))
+
+    # 2. Universe Summary
+    lines.append("## Universe Summary\n")
+    lines.extend(_render_dict(report_data.get("Universe Summary", {})))
+
+    # 3. Screening Summary
+    lines.append("## Screening Summary\n")
+    lines.extend(_render_table(report_data.get("Screening Summary", [])))
+
+    # 4. Watchlist Candidates for Further Review
+    lines.append("## Watchlist Candidates for Further Review\n")
+    lines.extend(_render_table(report_data.get("Watchlist Candidates", [])))
+
+    # 5. Backtest Highlights
+    lines.append("## Backtest Highlights\n")
+    lines.extend(_render_table(report_data.get("Backtest Highlights", [])))
+
+    # 6. Parameter Sweep Highlights
+    lines.append("## Parameter Sweep Highlights\n")
+    lines.extend(_render_table(report_data.get("Parameter Sweep Highlights", [])))
+
+    # 7. Walk Forward Highlights
+    lines.append("## Walk Forward Highlights\n")
+    lines.extend(_render_table(report_data.get("Walk Forward Highlights", [])))
+
+    # 8. Risk Notes
+    lines.append("## Risk Notes\n")
+    risk_notes = report_data.get("Risk Notes", [])
+    disclaimer = "This report is for research purposes only and does not constitute investment advice."
+    if disclaimer not in risk_notes:
+        risk_notes = risk_notes.copy()
+        risk_notes.append(disclaimer)
+    lines.extend(_render_list_of_strings(risk_notes))
+
+    # 9. Data Limitations
+    lines.append("## Data Limitations\n")
+    lines.extend(_render_list_of_strings(report_data.get("Data Limitations", [])))
+
+    # 10. Next Research Actions
+    lines.append("## Next Research Actions\n")
+    lines.extend(_render_list_of_strings(report_data.get("Next Research Actions", [])))
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     main()
 
