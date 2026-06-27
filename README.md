@@ -873,7 +873,31 @@ python parameter_sweep_report.py --stock 2330 --strategy ma_cross --period 2y --
 python parameter_sweep_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
 ```
 
-> **Note**: Custom parameter ranges are not exposed through this CLI yet. The CLI uses the existing parameter sweep engine and its current built-in sweep settings.
+> **Note**: Research report only, not investment advice. Historical performance does not guarantee future results.
+
+### Custom parameter ranges
+
+You can provide custom parameter ranges to override the built-in defaults. Values are comma-separated integers, and whitespace is tolerated. Negative integers are supported for score ranges (e.g. `--score-sell=-2,-3,-4`).
+
+MA custom ranges:
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy ma_cross --ma-short-windows 5,10,20 --ma-long-windows 30,60,120
+```
+
+RSI custom ranges:
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy rsi --rsi-buy-below "25, 30, 35" --rsi-sell-above 65,70,75
+```
+
+Score custom ranges:
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy score --score-buy 4,5,6 --score-sell=-2,-3,-4
+```
+
+Combined custom ranges with Markdown or Excel output:
+```bash
+python parameter_sweep_report.py --stock 2330 --strategy all --ma-short-windows 5,10 --rsi-buy-below 20,30 --score-sell=-2,-4 --output-md --output-excel
+```
 
 > **Safety Boundary**: This project is a research / backtesting / reporting tool. It is not an auto-trading system. It does not connect to broker APIs. It does not provide investment advice. It does not guarantee profit.
 
