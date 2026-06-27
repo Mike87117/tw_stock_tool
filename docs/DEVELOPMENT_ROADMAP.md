@@ -88,9 +88,10 @@ Broker Interface
 - Phase 4.11：完成 (Report documentation polish / smoke audit)
 - Phase 4.12：完成 (Release readiness audit / cleanup backlog)
 - Phase 5.1：完成 (Daily Report MVP design / scope lock)
+- Phase 5.2：完成 (Daily Report data model / builder)
 
 下一步：
-- Phase 5.2：Daily Report data model / builder (尚未開始)
+- Phase 5.3：Daily Report Markdown exporter (尚未開始)
 
 ## 3. 台股資料取得
 

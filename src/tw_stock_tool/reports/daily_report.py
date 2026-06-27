@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Any
 
 import pandas as pd
 
@@ -289,6 +289,79 @@ def main() -> None:
         print_report_summary(summary_df, candidates_df, output_path)
     except Exception as exc:
         print(f"Error: {exc}")
+
+
+def _normalize_to_list_of_dicts(data: pd.DataFrame | list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    if data is None:
+        return []
+    if isinstance(data, pd.DataFrame):
+        return data.to_dict(orient="records")
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def build_daily_report_data(
+    report_date: str | None = None,
+    stock_universe: list[str] | None = None,
+    screening_results: pd.DataFrame | list[dict[str, Any]] | None = None,
+    watchlist_candidates: pd.DataFrame | list[dict[str, Any]] | None = None,
+    backtest_highlights: pd.DataFrame | list[dict[str, Any]] | None = None,
+    parameter_sweep_highlights: pd.DataFrame | list[dict[str, Any]] | None = None,
+    walk_forward_highlights: pd.DataFrame | list[dict[str, Any]] | None = None,
+    risk_notes: list[str] | None = None,
+    data_limitations: list[str] | None = None,
+    next_research_actions: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Build structured daily report data from existing scanner and backtest outputs.
+    This builder normalizes inputs and ensures research-only language.
+    """
+    if report_date is None:
+        report_date = "N/A"
+
+    universe_list = stock_universe if stock_universe is not None else []
+
+    # Normalize tabular inputs
+    norm_screening = _normalize_to_list_of_dicts(screening_results)
+    norm_watchlist = _normalize_to_list_of_dicts(watchlist_candidates)
+    norm_backtest = _normalize_to_list_of_dicts(backtest_highlights)
+    norm_parameter_sweep = _normalize_to_list_of_dicts(parameter_sweep_highlights)
+    norm_walk_forward = _normalize_to_list_of_dicts(walk_forward_highlights)
+
+    # Safe list handling for text blocks
+    final_risk_notes = risk_notes.copy() if risk_notes is not None else []
+    final_data_limitations = data_limitations.copy() if data_limitations is not None else []
+    final_next_actions = next_research_actions.copy() if next_research_actions is not None else []
+
+    # Enforce research-only disclaimers
+    standard_disclaimer = "This report is for research purposes only and does not constitute investment advice."
+    if standard_disclaimer not in final_risk_notes:
+        final_risk_notes.append(standard_disclaimer)
+
+    if not universe_list and not norm_screening and not norm_watchlist:
+        final_data_limitations.append("No screening data or watchlist candidates were provided for this run.")
+
+    report_data = {
+        "Report Metadata": {
+            "Date": report_date,
+            "Type": "Daily Research Report"
+        },
+        "Universe Summary": {
+            "Total Stocks": len(universe_list),
+            "Universe": universe_list
+        },
+        "Screening Summary": norm_screening,
+        "Watchlist Candidates": norm_watchlist,
+        "Backtest Highlights": norm_backtest,
+        "Parameter Sweep Highlights": norm_parameter_sweep,
+        "Walk Forward Highlights": norm_walk_forward,
+        "Risk Notes": final_risk_notes,
+        "Data Limitations": final_data_limitations,
+        "Next Research Actions": final_next_actions,
+    }
+
+    return report_data
 
 
 if __name__ == "__main__":
