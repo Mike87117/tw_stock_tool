@@ -12,8 +12,8 @@ class ParameterSweepReportCLITest(unittest.TestCase):
     def setUp(self):
         # Sample sweep result
         self.mock_sweep_df = pd.DataFrame([
-            {"Strategy": "ma_cross", "Parameters": "short=5", "Total Return %": 10.0, "Sharpe Ratio": 1.5},
-            {"Strategy": "ma_cross", "Parameters": "short=10", "Total Return %": 8.0, "Sharpe Ratio": 1.2},
+            {"Strategy": "ma_cross", "Parameters": "short=5", "Total Return %": 10.0, "Sharpe Ratio": 1.0},
+            {"Strategy": "ma_cross", "Parameters": "short=10", "Total Return %": 8.0, "Sharpe Ratio": 2.0},
         ])
 
     @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross"])
@@ -102,6 +102,7 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         out = captured_output.getvalue()
         self.assertIn("Total Rows: 2", out)
         self.assertIn("Best Strategy: ma_cross", out)
+        self.assertIn("Best Parameters: short=10", out)
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")

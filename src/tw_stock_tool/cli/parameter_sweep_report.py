@@ -3,6 +3,7 @@ from pathlib import Path
 
 from tw_stock_tool.backtesting.parameter_sweep import run_parameter_sweep
 from tw_stock_tool.reports.parameter_sweep_report import (
+    build_parameter_sweep_report_data,
     export_parameter_sweep_report_markdown,
     export_parameter_sweep_report_excel,
 )
@@ -55,12 +56,13 @@ def main() -> None:
             print("Parameter sweep finished. Summary:")
             print(f"  Total Rows: {len(sweep_df)}")
             if not sweep_df.empty:
-                # Find the best row simply by taking the first row (the sweep engine already sorts)
-                best_row = sweep_df.iloc[0]
-                print(f"  Best Strategy: {best_row.get('Strategy', 'N/A')}")
-                print(f"  Best Parameters: {best_row.get('Parameters', 'N/A')}")
-                print(f"  Best Total Return: {best_row.get('Total Return %', 0)}%")
-                print(f"  Best Sharpe Ratio: {best_row.get('Sharpe Ratio', 'N/A')}")
+                report_data = build_parameter_sweep_report_data(result_dict)
+                best_row = report_data.get("Best Row")
+                if best_row:
+                    print(f"  Best Strategy: {best_row.get('Strategy', 'N/A')}")
+                    print(f"  Best Parameters: {best_row.get('Parameters', 'N/A')}")
+                    print(f"  Best Total Return: {best_row.get('Total Return %', 0)}%")
+                    print(f"  Best Sharpe Ratio: {best_row.get('Sharpe Ratio', 'N/A')}")
             
     except Exception as exc:
         print(f"Error: {exc}")
