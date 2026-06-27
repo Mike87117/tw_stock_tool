@@ -25,21 +25,29 @@ class TestDailyReportCli(unittest.TestCase):
 
     @patch("tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown")
     @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data")
+    @patch("tw_stock_tool.cli.daily_report_cli.build_data_limitations_from_ranking")
     @patch("tw_stock_tool.cli.daily_report_cli.run_daily_report")
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
     @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_e2e_mvp_execution_no_output_md(self, mock_open, mock_mkdir, mock_collect, mock_run_daily, mock_build, mock_render):
+    def test_e2e_mvp_execution_no_output_md(self, mock_open, mock_mkdir, mock_collect, mock_run_daily, mock_build_limitations, mock_build, mock_render):
         mock_collect.return_value = ["2330"]
         summary_df = pd.DataFrame([{"Stocks Scanned": 1}])
         candidates_df = pd.DataFrame([{"Stock": "2330", "Score": 5}])
         mock_run_daily.return_value = (summary_df, candidates_df, pd.DataFrame(), None)
+        mock_build_limitations.return_value = ["limit1"]
         mock_build.return_value = {"dummy": "data"}
         mock_render.return_value = "# Markdown Report"
 
         test_args = ["--stocks", "2330"]
         with patch.object(sys, "argv", ["daily_report_cli.py"] + test_args):
             main()
+
+        # Check build_data_limitations_from_ranking was called
+        mock_build_limitations.assert_called_once()
+        # Check that data_limitations was passed to build_daily_report_data
+        called_kwargs = mock_build.call_args[1]
+        self.assertEqual(called_kwargs.get("data_limitations"), ["limit1"])
 
         # output_md should default to output/daily_report.md
         mock_open.assert_called_once_with(Path("output/daily_report.md"), "w", encoding="utf-8")

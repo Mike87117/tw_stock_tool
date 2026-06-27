@@ -188,6 +188,33 @@ class DailyReportTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(first), 2)
 
+    def test_data_limitations_from_ranking_with_failures(self) -> None:
+        ranking = _ranking_df()
+        limitations = daily_report.build_data_limitations_from_ranking(ranking)
+        self.assertEqual(len(limitations), 1)
+        self.assertEqual(limitations[0], "9999: ERROR - bad stock")
+
+    def test_data_limitations_from_ranking_all_ok(self) -> None:
+        ranking = pd.DataFrame([
+            {"Stock": "2330", "Status": "OK", "Error": ""},
+            {"Stock": "2317", "Status": "OK", "Error": ""},
+        ])
+        limitations = daily_report.build_data_limitations_from_ranking(ranking)
+        self.assertEqual(limitations, [])
+
+    def test_data_limitations_from_ranking_empty(self) -> None:
+        limitations = daily_report.build_data_limitations_from_ranking(pd.DataFrame())
+        self.assertEqual(limitations, [])
+        limitations_none = daily_report.build_data_limitations_from_ranking(None)
+        self.assertEqual(limitations_none, [])
+
+    def test_data_limitations_from_ranking_truncation(self) -> None:
+        rows = [{"Stock": str(i), "Status": "ERROR", "Error": "fail"} for i in range(1, 15)]
+        ranking = pd.DataFrame(rows)
+        limitations = daily_report.build_data_limitations_from_ranking(ranking, max_items=10)
+        self.assertEqual(len(limitations), 11)
+        self.assertEqual(limitations[0], "1: ERROR - fail")
+        self.assertEqual(limitations[-1], "... and 4 more failed stock(s).")
 
 
 

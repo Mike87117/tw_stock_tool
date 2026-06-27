@@ -237,6 +237,41 @@ def _normalize_to_list_of_dicts(data: pd.DataFrame | list[dict[str, Any]] | None
     return []
 
 
+def build_data_limitations_from_ranking(
+    ranking_df: pd.DataFrame | None,
+    max_items: int = 10,
+) -> list[str]:
+    """Extract failure messages from scan ranking into a list for Data Limitations."""
+    if ranking_df is None or ranking_df.empty or "Status" not in ranking_df.columns:
+        return []
+
+    failed_mask = ranking_df["Status"].astype(str).str.upper() != "OK"
+    failed_rows = ranking_df[failed_mask]
+
+    if failed_rows.empty:
+        return []
+
+    limitations = []
+    for _, row in failed_rows.head(max_items).iterrows():
+        stock_id = row.get("Stock", "Unknown")
+        status = row.get("Status", "ERROR")
+        error_msg = row.get("Error", "")
+        if pd.isna(error_msg):
+            error_msg = ""
+        msg = f"{stock_id}: {status}"
+        if error_msg:
+            msg += f" - {error_msg}"
+        limitations.append(msg)
+
+    total_failed = len(failed_rows)
+    if total_failed > max_items:
+        remaining = total_failed - max_items
+        limitations.append(f"... and {remaining} more failed stock(s).")
+
+    return limitations
+
+
+
 def build_daily_report_data(
     report_date: str | None = None,
     stock_universe: list[str] | None = None,

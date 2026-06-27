@@ -15,6 +15,7 @@ from tw_stock_tool.reports.daily_report import (
     build_daily_report_data,
     render_daily_report_markdown,
     collect_stock_ids,
+    build_data_limitations_from_ranking,
 )
 
 
@@ -80,6 +81,7 @@ def main() -> None:
         )
         
         import datetime
+        data_limitations = build_data_limitations_from_ranking(ranking_df)
         report_data = build_daily_report_data(
             report_date=datetime.datetime.now().strftime("%Y-%m-%d"),
             stock_universe=list(stock_ids),
@@ -88,6 +90,7 @@ def main() -> None:
             backtest_highlights=[],
             parameter_sweep_highlights=[],
             walk_forward_highlights=[],
+            data_limitations=data_limitations,
         )
         
         md_text = render_daily_report_markdown(report_data)

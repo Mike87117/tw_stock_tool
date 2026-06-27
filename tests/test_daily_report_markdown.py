@@ -88,5 +88,15 @@ class TestDailyReportMarkdown(unittest.TestCase):
         self.assertIn("| 2330 | 5 |  |", markdown)
         self.assertIn("| 2317 |  | 62 |", markdown)
 
+    def test_data_limitations_renders_correctly(self) -> None:
+        limitations = ["9999: ERROR - bad stock", "8888: ERROR - no data"]
+        data = build_daily_report_data(data_limitations=limitations)
+        markdown = render_daily_report_markdown(data)
+
+        self.assertIn("## Data Limitations", markdown)
+        self.assertIn("- 9999: ERROR - bad stock", markdown)
+        self.assertIn("- 8888: ERROR - no data", markdown)
+
+
 if __name__ == '__main__':
     unittest.main()
