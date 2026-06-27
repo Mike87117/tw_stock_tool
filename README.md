@@ -1065,20 +1065,71 @@ python walk_forward_report.py --stock 2330 --strategy all --ma-short-windows 5,1
 ## Backtest Report CLI
 
 `backtest_report.py` 提供單次歷史回測並輸出研究報告（Markdown / Excel）。
+此 CLI 的執行入口為 `backtest_report.py` 或 `tw_stock_tool/cli/backtest_report.py`。
 
-CLI 範例：
+### Important Behavior Notes
+
+1. `--stock` is required.
+2. `--strategy` is required.
+3. `--output-md` is optional.
+4. `--output-excel` is optional.
+5. If neither output flag is provided, the CLI prints a summary only and does not create report files.
+6. `--output-md` without a custom path uses `output/backtest_report.md`.
+7. `--output-excel` without a custom path uses `output/backtest_report.xlsx`.
+8. Custom paths are supported.
+9. The CLI supports `--output-dir` to change the default output directory.
+10. The report uses the existing Backtest Report exporter logic.
+11. Backtest trades 目前支援 `PnL_pct` 欄位；report exporter 也保留 legacy `PnL %` 顯示相容。
+12. The report is for research only and is not investment advice.
+13. The CLI does not place orders and does not connect to broker APIs.
+
+### Basic run without file export
+
+這會執行 Backtest 並將簡明摘要印在 stdout，不會產出任何報表檔案。
 
 ```bash
-python backtest_report.py --stock 2330 --strategy ma_cross --period 2y --output-md --output-excel
+python backtest_report.py --stock 2330 --strategy ma_cross
 ```
 
-預設輸出：
-- `output/backtest_report.md`
-- `output/backtest_report.xlsx`
+### Export Markdown report
 
-Backtest trades 目前支援 `PnL_pct` 欄位；report exporter 也保留 legacy `PnL %` 顯示相容。
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --output-md
+```
 
-注意：Backtest Report 目前是研究報告輸出，不代表投資建議。
+Default output: `output/backtest_report.md`
+
+### Export Excel report
+
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --output-excel
+```
+
+Default output: `output/backtest_report.xlsx`
+
+### Export both Markdown and Excel
+
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --output-md --output-excel
+```
+
+### Custom output paths
+
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --output-md reports/backtest.md --output-excel reports/backtest.xlsx
+```
+
+### Optional period
+
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --period 2y --output-md
+```
+
+### Force refresh
+
+```bash
+python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
+```
 
 ## 輸出檔案位置總覽
 
