@@ -225,70 +225,7 @@ def print_report_summary(
     print("=================================")
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Daily stock candidate report")
-    parser.add_argument(
-        "--stocks",
-        nargs="*",
-        help="Stock id list, for example: --stocks 2330 2317",
-    )
-    parser.add_argument("--file", help="Load stock ids from txt file")
-    parser.add_argument("--auto-stock-list", action="store_true", help="Update and use an official stock list before reporting")
-    parser.add_argument("--stock-market", choices=("all", "twse", "tpex"), default="all")
-    parser.add_argument("--stock-list-output", default="stocks.txt")
-    parser.add_argument("--allow-partial-stock-list", action="store_true")
-    parser.add_argument("--stock-limit", type=int, help="Only scan the first N collected stocks")
-    parser.add_argument("--stock-sample", type=int, help="Randomly scan N collected stocks")
-    parser.add_argument("--random-state", type=int, default=42, help="Random seed for --stock-sample")
-    parser.add_argument("--period", default=DEFAULT_PERIOD)
-    parser.add_argument("--interval", default=DEFAULT_INTERVAL)
-    parser.add_argument("--signals", nargs="+", default=list(DEFAULT_SIGNALS))
-    parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
-    parser.add_argument("--top", type=int, default=DEFAULT_TOP)
-    parser.add_argument("--force-refresh", action="store_true")
-    parser.add_argument(
-        "--auto-adjust",
-        action=argparse.BooleanOptionalAction,
-        default=DEFAULT_AUTO_ADJUST,
-        help="是否使用 yfinance 除權息調整價",
-    )
-    parser.add_argument(
-        "--output",
-        nargs="?",
-        const="",
-        help="Export Excel; omit path for default output",
-    )
-    return parser.parse_args(argv)
 
-
-def main() -> None:
-    try:
-        args = _parse_args()
-        stock_ids = collect_stock_ids(
-            args.stocks,
-            args.file,
-            auto_stock_list=args.auto_stock_list,
-            stock_market=args.stock_market,
-            stock_list_output=args.stock_list_output,
-            allow_partial_stock_list=args.allow_partial_stock_list,
-            stock_limit=args.stock_limit,
-            stock_sample=args.stock_sample,
-            random_state=args.random_state,
-        )
-        summary_df, candidates_df, _, output_path = run_daily_report(
-            stock_ids=stock_ids,
-            period=args.period,
-            interval=args.interval,
-            signals=args.signals,
-            min_score=args.min_score,
-            top=args.top,
-            force_refresh=args.force_refresh,
-            auto_adjust=args.auto_adjust,
-            output=args.output,
-        )
-        print_report_summary(summary_df, candidates_df, output_path)
-    except Exception as exc:
-        print(f"Error: {exc}")
 
 
 def _normalize_to_list_of_dicts(data: pd.DataFrame | list[dict[str, Any]] | None) -> list[dict[str, Any]]:

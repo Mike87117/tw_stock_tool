@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from typing import Callable, Iterator
 
 from tw_stock_tool.ml import ai_stock_scanner
-from tw_stock_tool.reports import daily_report
+from tw_stock_tool.cli import daily_report_cli
 from tw_stock_tool.utils import doctor
 from tw_stock_tool.cli import price_data_smoke_check
 from tw_stock_tool.cli import scan_stocks
@@ -55,7 +55,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     scan_parser.set_defaults(handler=lambda args: _dispatch_existing_main(scan_stocks.main, "scan_stocks.py", args.args))
 
     daily_parser = subparsers.add_parser("daily", help="Run daily candidate report")
-    daily_parser.set_defaults(handler=lambda args: _dispatch_existing_main(daily_report.main, "daily_report.py", args.args))
+    daily_parser.set_defaults(handler=lambda args: _dispatch_existing_main(daily_report_cli.main, "daily_report_cli.py", args.args))
 
     stock_list_parser = subparsers.add_parser("stock-list", help="Stock-list utilities")
     stock_list_subparsers = stock_list_parser.add_subparsers(dest="stock_list_command", required=True)

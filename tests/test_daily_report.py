@@ -188,44 +188,7 @@ class DailyReportTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(first), 2)
 
-    def test_parse_args_supports_auto_stock_list(self) -> None:
-        args = daily_report._parse_args([
-            "--auto-stock-list",
-            "--stock-market",
-            "tpex",
-            "--stock-list-output",
-            "stocks.txt",
-            "--allow-partial-stock-list",
-        ])
 
-        self.assertTrue(args.auto_stock_list)
-        self.assertEqual(args.stock_market, "tpex")
-        self.assertEqual(args.stock_list_output, "stocks.txt")
-        self.assertTrue(args.allow_partial_stock_list)
-
-    def test_daily_report_updater_failure_does_not_run_report(self) -> None:
-        args = daily_report._parse_args(["--auto-stock-list"])
-        with patch.object(daily_report, "_parse_args", return_value=args):
-            with patch.object(
-                daily_report.stock_list_updater_module,
-                "update_stock_list",
-                side_effect=RuntimeError("updater down"),
-            ):
-                with patch.object(daily_report, "run_daily_report") as report_mock:
-                    with patch("builtins.print"):
-                        daily_report.main()
-
-        report_mock.assert_not_called()
-
-    def test_parse_args_supports_auto_adjust(self) -> None:
-        args = daily_report._parse_args(["--file", "stocks.txt", "--auto-adjust"])
-
-        self.assertTrue(args.auto_adjust)
-
-    def test_parse_args_supports_no_auto_adjust(self) -> None:
-        args = daily_report._parse_args(["--file", "stocks.txt", "--no-auto-adjust"])
-
-        self.assertFalse(args.auto_adjust)
 
 
 if __name__ == "__main__":
