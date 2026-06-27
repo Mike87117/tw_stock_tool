@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import load_workbook
 
-import daily_report
+from tw_stock_tool.reports import daily_report
 
 
 def _ranking_df() -> pd.DataFrame:

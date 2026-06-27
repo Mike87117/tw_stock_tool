@@ -92,7 +92,7 @@ Broker Interface
 - Phase 5.3：完成 (Daily Report Markdown exporter)
 - Phase 5.4：完成 (Daily Report CLI)
 - Phase 5.5：完成 (Daily Report docs and smoke tests)
-- Phase 5.6：Daily Report MVP final audit / cleanup (尚未開始)
+- Phase 5.6：完成 (Daily Report MVP final audit / cleanup)
 
 ## 3. 台股資料取得
 
