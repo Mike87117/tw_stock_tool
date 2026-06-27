@@ -35,6 +35,37 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         args = _parse_args()
         self.assertEqual(args.output_md, "custom.md")
 
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross", "--ma-short-windows", "5, 10, 20", "--ma-long-windows", "30, 60"])
+    def test_argument_parsing_custom_ranges_ma(self):
+        args = _parse_args()
+        self.assertEqual(args.ma_short_windows, (5, 10, 20))
+        self.assertEqual(args.ma_long_windows, (30, 60))
+
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "rsi", "--rsi-buy-below", "25,35", "--rsi-sell-above", "65,75"])
+    def test_argument_parsing_custom_ranges_rsi(self):
+        args = _parse_args()
+        self.assertEqual(args.rsi_buy_below, (25, 35))
+        self.assertEqual(args.rsi_sell_above, (65, 75))
+
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "score", "--score-buy", "4,6", "--score-sell=-2,-4"])
+    def test_argument_parsing_custom_ranges_score_negative(self):
+        args = _parse_args()
+        self.assertEqual(args.score_buy, (4, 6))
+        self.assertEqual(args.score_sell, (-2, -4))
+
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "all", "--ma-short-windows", "5", "--rsi-buy-below", "20", "--score-sell=-5"])
+    def test_argument_parsing_custom_ranges_multiple(self):
+        args = _parse_args()
+        self.assertEqual(args.ma_short_windows, (5,))
+        self.assertEqual(args.rsi_buy_below, (20,))
+        self.assertEqual(args.score_sell, (-5,))
+
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross", "--ma-short-windows", "5,a,20"])
+    def test_argument_parsing_invalid_range_raises_error(self):
+        with self.assertRaises(SystemExit) as cm:
+            _parse_args()
+        self.assertIsNotNone(cm.exception.code)
+
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_excel")
@@ -85,7 +116,7 @@ class ParameterSweepReportCLITest(unittest.TestCase):
     @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross"])
     def test_no_output_flags_prints_summary(self, mock_export_excel, mock_export_md, mock_run_sweep):
         mock_run_sweep.return_value = self.mock_sweep_df
-        
+
         import io
         captured_output = io.StringIO()
         sys.stdout = captured_output
@@ -103,6 +134,34 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         self.assertIn("Total Rows: 2", out)
         self.assertIn("Best Strategy: ma_cross", out)
         self.assertIn("Best Parameters: short=10", out)
+
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_excel")
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "all", "--ma-short-windows", "2,3", "--score-sell=-2"])
+    def test_run_sweep_called_with_custom_ranges(self, mock_export_excel, mock_export_md, mock_run_sweep):
+        mock_run_sweep.return_value = self.mock_sweep_df
+
+        import io
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        try:
+            main()
+        finally:
+            sys.stdout = sys.__stdout__
+
+        mock_run_sweep.assert_called_once_with(
+            stock_id="2330",
+            strategy="all",
+            period="1y",
+            force_refresh=False,
+            ma_short_windows=(2, 3),
+            ma_long_windows=None,
+            rsi_buy_below=None,
+            rsi_sell_above=None,
+            score_buy=None,
+            score_sell=(-2,)
+        )
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
