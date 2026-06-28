@@ -1,4 +1,4 @@
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 import sys
 import unittest
@@ -91,8 +91,6 @@ class TwStockCliTest(unittest.TestCase):
         self.assertNotEqual(ctx.exception.code, 0)
 
     def test_top_level_help_exits_successfully(self) -> None:
-        from contextlib import redirect_stdout
-
         out = StringIO()
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
@@ -109,8 +107,6 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("ai-scan", output)
 
     def test_stock_list_help_exits_successfully(self) -> None:
-        from contextlib import redirect_stdout
-
         out = StringIO()
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
@@ -123,8 +119,6 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("smoke-check", output)
 
     def test_stock_list_update_help_exits_successfully(self) -> None:
-        from contextlib import redirect_stdout
-
         out = StringIO()
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
@@ -134,8 +128,6 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("usage:", out.getvalue())
 
     def test_stock_list_smoke_check_help_exits_successfully(self) -> None:
-        from contextlib import redirect_stdout
-
         out = StringIO()
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
@@ -143,6 +135,48 @@ class TwStockCliTest(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())
+
+    def test_pyproject_twstock_entrypoint_targets_unified_cli_main(self) -> None:
+        import tomllib
+        import importlib
+        from pathlib import Path
+
+        repo_root = Path(__file__).parent.parent
+        pyproject_path = repo_root / "pyproject.toml"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+
+        twstock_target = data.get("project", {}).get("scripts", {}).get("twstock")
+        self.assertEqual(twstock_target, "tw_stock_tool.cli.twstock_cli:main")
+
+        module_name, func_name = twstock_target.split(":")
+        module = importlib.import_module(module_name)
+        target_func = getattr(module, func_name)
+        self.assertTrue(callable(target_func))
+
+    def test_root_twstock_cli_wrapper_reexports_package_cli_main(self) -> None:
+        import importlib
+        import tw_stock_tool.cli.twstock_cli as package_twstock_cli
+        from pathlib import Path
+
+        repo_root = Path(__file__).parent.parent
+        sys.path.insert(0, str(repo_root))
+        try:
+            root_twstock_cli = importlib.import_module("twstock_cli")
+            self.assertIs(root_twstock_cli.main, package_twstock_cli.main)
+        finally:
+            sys.path.pop(0)
+
+    def test_root_twstock_cli_wrapper_executes_package_main_when_run_as_script(self) -> None:
+        import runpy
+        from pathlib import Path
+
+        repo_root = Path(__file__).parent.parent
+        script_path = repo_root / "twstock_cli.py"
+
+        with patch("tw_stock_tool.cli.twstock_cli.main") as mock_main:
+            runpy.run_path(str(script_path), run_name="__main__")
+            mock_main.assert_called_once_with()
 
 
 if __name__ == "__main__":
