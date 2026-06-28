@@ -114,6 +114,7 @@ python doctor.py --live
 | twstock：清除快取 | `twstock cache --clear` |
 | twstock：單股分析 | `twstock analyze --stock 2330 --period 2y` |
 | twstock：策略比較 | `twstock strategy-compare --stock 2330 --period 2y` |
+| twstock：Parameter Sweep | `twstock parameter-sweep --stock 2330 --period 2y` |
 | twstock：檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
 | twstock：Benchmark | `twstock benchmark --file stocks.txt --workers 8 --repeat 3` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
@@ -150,6 +151,7 @@ python gui_app.py
 twstock doctor
 twstock analyze --stock 2330 --period 2y
 twstock strategy-compare --stock 2330 --period 2y
+twstock parameter-sweep --stock 2330 --period 2y
 twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md
 twstock stock-list update --market all --output stocks.txt
