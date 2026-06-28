@@ -11,6 +11,7 @@ import sys
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
+from tw_stock_tool.cli import main as analyze_cli
 from tw_stock_tool.cli import benchmark
 from tw_stock_tool.ml import ai_stock_scanner
 from tw_stock_tool.cli import clean_stocks
@@ -89,6 +90,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     benchmark_parser = subparsers.add_parser("benchmark", help="Run multi-stock scanner benchmark")
     benchmark_parser.set_defaults(handler=lambda args: _dispatch_existing_main(benchmark.main, "benchmark.py", args.args))
+
+    analyze_parser = subparsers.add_parser("analyze", help="Run single-stock analysis")
+    analyze_parser.set_defaults(handler=lambda args: _dispatch_existing_main(analyze_cli.main, "main.py", args.args))
 
     args, passthrough_args = parser.parse_known_args(argv)
     args.args = passthrough_args
