@@ -148,6 +148,7 @@ twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md
 twstock stock-list update --market all --output stocks.txt
 twstock stock-list smoke-check
+twstock stock-list clean --file stocks.txt --output --write-clean-file
 twstock price-smoke-check
 twstock ai-scan --auto-stock-list --stock-limit 20 --output
 twstock cache --summary

@@ -38,6 +38,18 @@ class TwStockCliTest(unittest.TestCase):
 
         mocked.assert_called_once_with()
 
+    def test_stock_list_clean_subcommand_dispatches_to_clean_stocks(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.clean_stocks, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main(["stock-list", "clean", "--file", "stocks.txt", "--output", "--write-clean-file"])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], ["clean_stocks.py", "--file", "stocks.txt", "--output", "--write-clean-file"])
+
     def test_price_smoke_check_dispatches_to_price_main(self) -> None:
         with patch.object(twstock_cli.price_data_smoke_check, "main") as mocked:
             twstock_cli.main(["price-smoke-check"])
@@ -155,6 +167,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("usage:", output)
         self.assertIn("update", output)
         self.assertIn("smoke-check", output)
+        self.assertIn("clean", output)
 
     def test_stock_list_update_help_exits_successfully(self) -> None:
         out = StringIO()
@@ -170,6 +183,15 @@ class TwStockCliTest(unittest.TestCase):
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
                 twstock_cli.main(["stock-list", "smoke-check", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
+
+    def test_stock_list_clean_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["stock-list", "clean", "--help"])
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())

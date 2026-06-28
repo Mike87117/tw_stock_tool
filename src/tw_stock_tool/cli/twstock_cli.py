@@ -13,6 +13,7 @@ from typing import Callable, Iterator
 
 from tw_stock_tool.cli import benchmark
 from tw_stock_tool.ml import ai_stock_scanner
+from tw_stock_tool.cli import clean_stocks
 from tw_stock_tool.cli import daily_report_cli
 from tw_stock_tool.utils import doctor
 from tw_stock_tool.cli import price_data_smoke_check
@@ -67,6 +68,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     smoke_parser = stock_list_subparsers.add_parser("smoke-check", help="Smoke check official stock-list sources")
     smoke_parser.set_defaults(handler=lambda args: _run_stock_list_smoke_check(args.args))
+
+    clean_parser = stock_list_subparsers.add_parser("clean", help="Clean stock list")
+    clean_parser.set_defaults(handler=lambda args: _dispatch_existing_main(clean_stocks.main, "clean_stocks.py", args.args))
 
     price_parser = subparsers.add_parser("price-smoke-check", help="Smoke check price data sources")
     price_parser.set_defaults(
