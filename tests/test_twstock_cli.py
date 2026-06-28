@@ -9,11 +9,16 @@ import twstock_cli
 
 class TwStockCliTest(unittest.TestCase):
     def test_doctor_subcommand_dispatches_to_doctor_main(self) -> None:
-        with patch.object(twstock_cli.doctor, "main") as mocked:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.doctor, "main", side_effect=fake_main) as mocked:
             twstock_cli.main(["doctor", "--live"])
 
         mocked.assert_called_once_with()
-        self.assertEqual(sys.argv[0], sys.argv[0])
+        self.assertEqual(captured[0], ["doctor.py", "--live"])
 
     def test_stock_list_update_dispatches_to_updater_main(self) -> None:
         captured: list[list[str]] = []
@@ -84,6 +89,60 @@ class TwStockCliTest(unittest.TestCase):
                 twstock_cli.main(["unknown"])
 
         self.assertNotEqual(ctx.exception.code, 0)
+
+    def test_top_level_help_exits_successfully(self) -> None:
+        from contextlib import redirect_stdout
+
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        output = out.getvalue()
+        self.assertIn("usage:", output)
+        self.assertIn("doctor", output)
+        self.assertIn("scan", output)
+        self.assertIn("daily", output)
+        self.assertIn("stock-list", output)
+        self.assertIn("price-smoke-check", output)
+        self.assertIn("ai-scan", output)
+
+    def test_stock_list_help_exits_successfully(self) -> None:
+        from contextlib import redirect_stdout
+
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["stock-list", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        output = out.getvalue()
+        self.assertIn("usage:", output)
+        self.assertIn("update", output)
+        self.assertIn("smoke-check", output)
+
+    def test_stock_list_update_help_exits_successfully(self) -> None:
+        from contextlib import redirect_stdout
+
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["stock-list", "update", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
+
+    def test_stock_list_smoke_check_help_exits_successfully(self) -> None:
+        from contextlib import redirect_stdout
+
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["stock-list", "smoke-check", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
 
 
 if __name__ == "__main__":
