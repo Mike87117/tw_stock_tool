@@ -131,6 +131,18 @@ class TwStockCliTest(unittest.TestCase):
         mocked.assert_called_once_with()
         self.assertEqual(captured[0], ["benchmark.py", "--file", "stocks.txt", "--workers", "8", "--repeat", "3"])
 
+    def test_analyze_subcommand_dispatches_to_analyze_cli(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.analyze_cli, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main(["analyze", "--stock", "2330", "--period", "2y"])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], ["main.py", "--stock", "2330", "--period", "2y"])
+
     def test_unknown_subcommand_shows_error(self) -> None:
         with redirect_stderr(StringIO()):
             with self.assertRaises(SystemExit) as ctx:
@@ -155,6 +167,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("ai-scan", output)
         self.assertIn("cache", output)
         self.assertIn("benchmark", output)
+        self.assertIn("analyze", output)
 
     def test_stock_list_help_exits_successfully(self) -> None:
         out = StringIO()
@@ -210,6 +223,15 @@ class TwStockCliTest(unittest.TestCase):
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
                 twstock_cli.main(["benchmark", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
+
+    def test_analyze_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["analyze", "--help"])
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())
