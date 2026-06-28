@@ -43,6 +43,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     
     # Output
     parser.add_argument("--output-md", nargs="?", const="", default=None)
+    parser.add_argument("--output-excel", nargs="?", const="", default=None)
     parser.add_argument("--output-dir", default="output")
     return parser.parse_args(argv)
 
@@ -76,7 +77,7 @@ def main() -> None:
             top=args.top,
             force_refresh=args.force_refresh,
             auto_adjust=args.auto_adjust,
-            output=None,
+            output=args.output_excel,
             progress=True,
         )
         

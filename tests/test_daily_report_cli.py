@@ -145,6 +145,40 @@ class TestDailyReportCli(unittest.TestCase):
             self.assertNotIn(word.lower(), written_content.lower())
 
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_report")
+    @patch("tw_stock_tool.cli.daily_report_cli.build_data_limitations_from_ranking")
+    @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data")
+    @patch("tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown")
+    def test_e2e_mvp_execution_output_excel(self, mock_render, mock_build, mock_build_limitations, mock_run_daily, mock_open, mock_mkdir, mock_collect):
+        mock_collect.return_value = ["2330"]
+        summary_df = pd.DataFrame([{"Stocks Scanned": 1}])
+        candidates_df = pd.DataFrame([{"Stock": "2330", "Score": 5}])
+        mock_run_daily.return_value = (summary_df, candidates_df, pd.DataFrame(), None)
+        mock_build_limitations.return_value = []
+        mock_build.return_value = {"dummy": "data"}
+        mock_render.return_value = "# Markdown Report"
+
+        test_args = ["--stocks", "2330", "--output-excel", "custom_excel.xlsx"]
+        with patch.object(sys, "argv", ["daily_report_cli.py"] + test_args):
+            main()
+
+        # output_excel should be passed to run_daily_report
+        mock_run_daily.assert_called_once_with(
+            stock_ids=["2330"],
+            period='1y',
+            interval='1d',
+            signals=['BUY', 'WATCH'],
+            min_score=4.0,
+            top=20,
+            force_refresh=False,
+            auto_adjust=False,
+            output="custom_excel.xlsx",
+            progress=True
+        )
+
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
     def test_no_stocks_exits(self, mock_collect):
         mock_collect.return_value = []
         with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks"]):
