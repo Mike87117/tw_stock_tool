@@ -1,7 +1,7 @@
-# Phase 6.1 Data Reliability Audit
+# Phase 6 Data Reliability Final Audit
 
 ## 1. Purpose
-This document maps out the current data failure modes, fallback behaviors, and reliability risks for the Daily Report MVP. It identifies how the system currently behaves when confronted with missing data, network timeouts, invalid stock IDs, and partial execution failures. The goal is to provide a baseline for improving the stability of the daily scan run in subsequent Phase 6 milestones.
+This document records the final Phase 6 data reliability behavior for the Daily Report MVP. It maps out the completed reliability improvements from Phase 6.1 through Phase 6.6, remaining known risks, and out-of-scope boundaries. It serves as a comprehensive reference for how the system behaves when confronted with missing data, network timeouts, invalid stock IDs, and partial execution failures.
 
 ## 2. Current Daily Run Data Flow
 1. **Stock List Update (`stock_list_updater.py`)**: Fetches official TWSE and TPEx stock lists to generate a master universe of common stocks.
@@ -53,12 +53,13 @@ This document maps out the current data failure modes, fallback behaviors, and r
 - **Daily Report failure visibility**: Phase 6.4 surfaces failed scan rows in the Markdown "Data Limitations" section. Remaining risk is that very large failure sets are summarized after the configured display limit, so users may need to inspect full scan outputs for exhaustive details.
 - **API Rate Limiting**: The TWSE/TPEx fallbacks use standard requests without delays between them. A large batch of `yfinance` failures could trigger rate-limiting on the official servers.
 
-## 10. Phase 6 Follow-up Candidates
-- **Phase 6.2 (Completed)**: Price data fallback and cache behavior cleanup. Cache freshness is now timezone-aware and accounts for market close times.
-- **Phase 6.3 (Completed)**: Stock list reliability and invalid-symbol handling. Includes `--add-suffix`, `sys.stderr` warnings on partial updates, and strictly rejecting invalid alphanumeric strings.
-- **Phase 6.4 (Completed)**: Daily Report partial-failure behavior and user-facing warnings. Explicitly pass `ranking_df` error rows into `build_daily_report_data` to populate "Data Limitations".
-- **Phase 6.5 (Completed)**: Data reliability tests and documentation.
-- **Phase 6.6**: Final data reliability cleanup or next planned features according to roadmap.
+## 10. Phase 6 Completion Summary
+- Phase 6.1 (Completed): Data reliability audit / failure-mode map.
+- Phase 6.2 (Completed): Price data fallback and cache behavior cleanup.
+- Phase 6.3 (Completed): Stock list reliability and invalid-symbol handling.
+- Phase 6.4 (Completed): Daily Report partial-failure behavior and user-facing warnings.
+- Phase 6.5 (Completed): Data reliability tests and documentation.
+- Phase 6.6 (Completed): Final data reliability cleanup / final audit.
 
 ## 11. Out of Scope
 The following are strictly out of scope for the Daily Report MVP and Phase 6 data reliability efforts:
@@ -73,9 +74,11 @@ The following are strictly out of scope for the Daily Report MVP and Phase 6 dat
 - Integrating deep-dive backtest, parameter sweep, or walk-forward engines into the Daily Report CLI.
 - Live-network testing.
 
-## 12. Acceptance Criteria for Phase 6.1
-- Data failure modes are documented in this file.
-- No code behavior is changed.
-- No live-network tests are added.
-- Existing tests pass.
-- No broker/trading/prediction features are introduced.
+## 12. Final Acceptance Criteria for Phase 6
+- data failure modes are documented
+- cache freshness and fallback behavior are documented
+- stock list partial-update behavior is documented
+- Daily Report failed-stock visibility is documented
+- offline reliability tests cover key fallback and cache failure paths
+- no live-network tests are added to unittest / CI
+- no broker / trading / order execution / prediction features are introduced

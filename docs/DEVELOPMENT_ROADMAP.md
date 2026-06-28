@@ -98,6 +98,7 @@ Broker Interface
 - Phase 6.3：完成 (Stock list reliability and invalid-symbol handling)
 - Phase 6.4：完成 (Daily Report partial-failure behavior and user-facing warnings)
 - Phase 6.5：完成 (Data reliability tests and documentation)
+- Phase 6.6：完成 (Final data reliability cleanup / final audit)
 
 ## 3. 台股資料取得
 
