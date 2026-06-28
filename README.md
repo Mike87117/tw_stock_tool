@@ -87,8 +87,8 @@ python doctor.py --live
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
 | 自動更新後多股票掃描 | `python scan_stocks.py --auto-stock-list` |
 | 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
-| 每日候選股票報告 | `twstock daily --file stocks.txt --output-md` |
-| 自動更新後每日候選股票報告 | `twstock daily --auto-stock-list --output-md` |
+| 每日候選股票報告 | `twstock daily --file stocks.txt --output-md --output-excel` |
+| 自動更新後每日候選股票報告 | `twstock daily --auto-stock-list --output-md --output-excel` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
 | Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
 | Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
@@ -656,10 +656,10 @@ CLI 範例（基本使用）：
 twstock daily --stocks 2330 2317
 ```
 
-CLI 範例（自動讀取檔案）：
+CLI 範例（自動讀取檔案並同時匯出 Markdown 與 Excel）：
 
 ```bash
-twstock daily --file stocks.txt --stock-limit 20 --output-md
+twstock daily --file stocks.txt --stock-limit 20 --output-md --output-excel
 ```
 
 CLI 範例（自動更新台股全市場清單）：
@@ -668,7 +668,9 @@ CLI 範例（自動更新台股全市場清單）：
 twstock daily --auto-stock-list --stock-market twse --stock-limit 50 --output-md
 ```
 
-Markdown 輸出行為：
+Markdown 與 Excel 輸出行為：
+
+- 若指定 `--output-excel`，會匯出 Excel 格式的報告檔案，供進一步研究分析使用。
 
 - 若未指定 `--output-md`，預設會輸出到 `output/daily_report.md`。
 - 若指定 `--output-md` 但未提供路徑：
@@ -1207,7 +1209,7 @@ python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --out
 | `scan_stocks.py` | 錯誤紀錄 | `output/scan_errors.log` | 需使用 `--log-errors`。 |
 | `clean_stocks.py` | 股票清單檢查 Excel | `output/clean_stocks_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
 | `clean_stocks.py` | 有效股票清單 | `output/stocks_clean.txt` | 使用 `--write-clean-file`；只包含可正常取得資料的股票。 |
-| `twstock daily` | 每日候選清單報告 | `output/daily_report.md` | 使用 `--output-md` 或 `--output-dir`；也可指定自訂路徑。 |
+| `twstock daily` | 每日候選清單報告 | `output/daily_report.md`, `output/daily_report.xlsx` | 使用 `--output-md`、`--output-excel` 或 `--output-dir`；也可指定自訂路徑。 |
 | `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 需搭配 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep Excel | `output/{stock}_parameter_sweep.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
