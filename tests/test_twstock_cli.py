@@ -83,6 +83,30 @@ class TwStockCliTest(unittest.TestCase):
         mocked.assert_called_once_with()
         self.assertEqual(captured[0], ["ai_stock_scanner.py", "--auto-stock-list", "--stock-limit", "20"])
 
+    def test_cache_subcommand_dispatches_to_cache_manager(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.cache_manager, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main(["cache", "--summary"])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], ["cache_manager.py", "--summary"])
+
+    def test_cache_clear_subcommand_dispatches_to_cache_manager(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.cache_manager, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main(["cache", "--clear"])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], ["cache_manager.py", "--clear"])
+
     def test_unknown_subcommand_shows_error(self) -> None:
         with redirect_stderr(StringIO()):
             with self.assertRaises(SystemExit) as ctx:
@@ -105,6 +129,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("stock-list", output)
         self.assertIn("price-smoke-check", output)
         self.assertIn("ai-scan", output)
+        self.assertIn("cache", output)
 
     def test_stock_list_help_exits_successfully(self) -> None:
         out = StringIO()
@@ -132,6 +157,15 @@ class TwStockCliTest(unittest.TestCase):
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
                 twstock_cli.main(["stock-list", "smoke-check", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
+
+    def test_cache_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["cache", "--help"])
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())

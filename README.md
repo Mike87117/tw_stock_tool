@@ -109,6 +109,9 @@ python doctor.py --live
 | twstock：環境檢查 | `twstock doctor` |
 | twstock：多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
 | twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output-md` |
+| twstock：查看快取摘要 | `twstock cache --summary` |
+| twstock：列出快取檔案 | `twstock cache --list` |
+| twstock：清除快取 | `twstock cache --clear` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
 ### 更新股票清單
@@ -147,6 +150,9 @@ twstock stock-list update --market all --output stocks.txt
 twstock stock-list smoke-check
 twstock price-smoke-check
 twstock ai-scan --auto-stock-list --stock-limit 20 --output
+twstock cache --summary
+twstock cache --list
+twstock cache --clear
 
 python twstock_cli.py doctor
 python twstock_cli.py scan --auto-stock-list --stock-limit 50

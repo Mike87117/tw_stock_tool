@@ -102,6 +102,7 @@ Broker Interface
 - Phase 7.1：完成 (README / command documentation release-readiness polish)
 - Phase 7.2：完成 (Unified CLI help / usage test hardening)
 - Phase 7.3：完成 (Unified CLI entrypoint / wrapper smoke tests)
+- Phase 7.4：完成 (Unified CLI cache subcommand)
 
 ## 3. 台股資料取得
 

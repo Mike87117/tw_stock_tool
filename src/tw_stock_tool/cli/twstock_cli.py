@@ -17,6 +17,7 @@ from tw_stock_tool.utils import doctor
 from tw_stock_tool.cli import price_data_smoke_check
 from tw_stock_tool.cli import scan_stocks
 from tw_stock_tool.cli import stock_list_smoke_check
+from tw_stock_tool.data import cache_manager
 from tw_stock_tool.data import stock_list_updater
 
 
@@ -77,6 +78,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     ai_scan_parser = subparsers.add_parser("ai-scan", help="Run multi-stock AI baseline scanner")
     ai_scan_parser.set_defaults(handler=lambda args: _dispatch_existing_main(ai_stock_scanner.main, "ai_stock_scanner.py", args.args))
+
+    cache_parser = subparsers.add_parser("cache", help="Manage price data cache")
+    cache_parser.set_defaults(handler=lambda args: _dispatch_existing_main(cache_manager.main, "cache_manager.py", args.args))
 
     args, passthrough_args = parser.parse_known_args(argv)
     args.args = passthrough_args
