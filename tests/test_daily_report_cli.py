@@ -152,5 +152,35 @@ class TestDailyReportCli(unittest.TestCase):
                 main()
         self.assertEqual(cm.exception.code, 1)
 
+    @patch("tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown")
+    @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data")
+    @patch("tw_stock_tool.cli.daily_report_cli.build_data_limitations_from_ranking")
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_report")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_daily_report_cli_write_failure(self, mock_open, mock_mkdir, mock_collect, mock_run_daily, mock_build_limitations, mock_build, mock_render):
+        from io import StringIO
+        mock_collect.return_value = ["2330"]
+        mock_run_daily.return_value = (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None)
+        mock_build_limitations.return_value = []
+        mock_build.return_value = {}
+        mock_render.return_value = "# Report"
+        
+        mock_open.side_effect = PermissionError("locked")
+
+        test_args = ["--stocks", "2330", "--output-md"]
+        captured_output = StringIO()
+        
+        with patch.object(sys, "argv", ["daily_report_cli.py"] + test_args):
+            with patch("sys.stdout", captured_output):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                    
+        self.assertEqual(cm.exception.code, 1)
+        output_str = captured_output.getvalue()
+        self.assertIn("Error:", output_str)
+        self.assertIn("locked", output_str)
+
 if __name__ == "__main__":
     unittest.main()

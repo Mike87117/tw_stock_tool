@@ -110,6 +110,19 @@ class StrategyCompareTest(unittest.TestCase):
         # executes at day 4 close (130). Same-day execution would return 20%.
         self.assertEqual(result.loc[0, "Total Return %"], 18.0)
 
+    @patch("pandas.DataFrame.to_excel")
+    def test_export_strategy_compare_permission_error(self, mock_to_excel) -> None:
+        from tw_stock_tool.reports.report import ReportError
+        from pathlib import Path
+        mock_to_excel.side_effect = PermissionError("locked")
+        
+        df = pd.DataFrame([{"Strategy": "ma_cross", "Total Return %": 10.0}])
+        
+        with self.assertRaises(ReportError) as cm:
+            strategy_compare.export_strategy_compare(df, Path("test.xlsx"))
+            
+        self.assertIn("may be open", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

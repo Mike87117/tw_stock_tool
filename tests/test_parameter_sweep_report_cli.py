@@ -220,6 +220,26 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         mock_export_md.assert_not_called()
         mock_export_excel.assert_not_called()
 
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross", "--output-md"])
+    def test_parameter_sweep_export_failure(self, mock_export_md, mock_run_sweep):
+        import io
+        mock_run_sweep.return_value = self.mock_sweep_df
+        mock_export_md.side_effect = PermissionError("locked")
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        try:
+            with self.assertRaises(SystemExit) as cm:
+                main()
+        finally:
+            sys.stdout = sys.__stdout__
+
+        self.assertEqual(cm.exception.code, 1)
+        output_str = captured_output.getvalue()
+        self.assertIn("Error:", output_str)
+        self.assertIn("locked", output_str)
 
 if __name__ == "__main__":
     unittest.main()
