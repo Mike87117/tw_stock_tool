@@ -11,6 +11,7 @@ import sys
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
+from tw_stock_tool.cli import benchmark
 from tw_stock_tool.ml import ai_stock_scanner
 from tw_stock_tool.cli import daily_report_cli
 from tw_stock_tool.utils import doctor
@@ -81,6 +82,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     cache_parser = subparsers.add_parser("cache", help="Manage price data cache")
     cache_parser.set_defaults(handler=lambda args: _dispatch_existing_main(cache_manager.main, "cache_manager.py", args.args))
+
+    benchmark_parser = subparsers.add_parser("benchmark", help="Run multi-stock scanner benchmark")
+    benchmark_parser.set_defaults(handler=lambda args: _dispatch_existing_main(benchmark.main, "benchmark.py", args.args))
 
     args, passthrough_args = parser.parse_known_args(argv)
     args.args = passthrough_args

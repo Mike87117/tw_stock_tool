@@ -153,6 +153,7 @@ twstock ai-scan --auto-stock-list --stock-limit 20 --output
 twstock cache --summary
 twstock cache --list
 twstock cache --clear
+twstock benchmark --file stocks.txt --workers 8 --repeat 3
 
 python twstock_cli.py doctor
 python twstock_cli.py scan --auto-stock-list --stock-limit 50
