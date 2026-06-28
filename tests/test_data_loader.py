@@ -419,6 +419,38 @@ class DataLoaderTest(unittest.TestCase):
         except Exception as e:
             self.fail(f"Valid stock IDs raised an exception: {e}")
 
+    def test_yfinance_cache_write_failure_is_non_fatal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=_download_df()):
+                    with patch.object(data_loader, "_write_cache", side_effect=Exception("Write error")):
+                        df, symbol = data_loader.download_tw_stock("2330", period="1y")
+
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
+
+    def test_official_fallback_cache_write_failure_is_non_fatal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(data_loader, "_download_official_stock", return_value=_download_df()):
+                        with patch.object(data_loader, "_write_cache", side_effect=Exception("Write error")):
+                            df, symbol = data_loader.download_tw_stock("2888", period="1mo", auto_adjust=False)
+
+        self.assertEqual(symbol, "2888.TW")
+        self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
+
+    def test_official_fallback_interval_limitation_is_in_error_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with self.assertRaises(data_loader.DataLoaderError) as context:
+                        data_loader.download_tw_stock("2888", period="1mo", interval="1wk", auto_adjust=False)
+
+        message = str(context.exception)
+        self.assertIn("1d", message)
+        self.assertIn("interval", message.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

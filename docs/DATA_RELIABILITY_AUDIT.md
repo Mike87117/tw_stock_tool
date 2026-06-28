@@ -42,10 +42,12 @@ This document maps out the current data failure modes, fallback behaviors, and r
 
 ## 8. Current Test Coverage
 - **Offline test coverage**: Existing tests extensively cover argument parsing, basic `daily_report` behavior, and formatting. Mocking is used in `tests/test_data_loader.py` to prevent network calls.
-- **Possible offline tests for later phases**:
-  - Phase 6.4 adds offline coverage for rendering ranking_df Status="ERROR" rows in the Markdown "Data Limitations" section.
-  - Test that an empty DataFrame from `yfinance` properly triggers the TWSE fallback.
-  - Test cache read failures gracefully falling back to a network call.
+  Offline coverage now includes:
+  - yfinance empty result triggering official fallback
+  - cache read failure falling back to download
+  - invalid stock ID validation
+  - Daily Report Data Limitations rendering failed scan rows
+  - cache write failure being non-fatal for successful downloads
 
 ## 9. Reliability Risks
 - **Daily Report failure visibility**: Phase 6.4 surfaces failed scan rows in the Markdown "Data Limitations" section. Remaining risk is that very large failure sets are summarized after the configured display limit, so users may need to inspect full scan outputs for exhaustive details.
@@ -55,7 +57,8 @@ This document maps out the current data failure modes, fallback behaviors, and r
 - **Phase 6.2 (Completed)**: Price data fallback and cache behavior cleanup. Cache freshness is now timezone-aware and accounts for market close times.
 - **Phase 6.3 (Completed)**: Stock list reliability and invalid-symbol handling. Includes `--add-suffix`, `sys.stderr` warnings on partial updates, and strictly rejecting invalid alphanumeric strings.
 - **Phase 6.4 (Completed)**: Daily Report partial-failure behavior and user-facing warnings. Explicitly pass `ranking_df` error rows into `build_daily_report_data` to populate "Data Limitations".
-- **Phase 6.5: Data reliability tests and documentation**: Fill offline test gaps.
+- **Phase 6.5 (Completed)**: Data reliability tests and documentation.
+- **Phase 6.6**: Final data reliability cleanup or next planned features according to roadmap.
 
 ## 11. Out of Scope
 The following are strictly out of scope for the Daily Report MVP and Phase 6 data reliability efforts:
