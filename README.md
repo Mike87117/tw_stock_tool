@@ -9,9 +9,16 @@
 
 - 單股分析
 - 多股票掃描
-- Daily Watchlist / 股票雷達
-- Backtest Report Markdown / Excel exporter
-- Backtest Report CLI
+- Daily Report
+- Backtest Report
+- Parameter Sweep Report
+- Walk Forward Report
+- Stock list updater / smoke check
+- Cache manager
+- Benchmark
+- ML dataset / baseline research tools
+- 統一 CLI：twstock
+- 本機 GUI 原型
 
 ## CI
 
@@ -133,6 +140,14 @@ python gui_app.py
 原本的 `main.py`、`scan_stocks.py` 等既有 CLI 檔案仍可直接使用。Daily Report 請使用統一入口 `twstock daily` 或 `python twstock_cli.py daily`。
 
 ```bash
+twstock doctor
+twstock scan --auto-stock-list --stock-limit 50
+twstock daily --auto-stock-list --stock-limit 50 --output-md
+twstock stock-list update --market all --output stocks.txt
+twstock stock-list smoke-check
+twstock price-smoke-check
+twstock ai-scan --auto-stock-list --stock-limit 20 --output
+
 python twstock_cli.py doctor
 python twstock_cli.py scan --auto-stock-list --stock-limit 50
 python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output-md
