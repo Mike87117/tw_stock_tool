@@ -112,6 +112,10 @@ python doctor.py --live
 | twstock：查看快取摘要 | `twstock cache --summary` |
 | twstock：列出快取檔案 | `twstock cache --list` |
 | twstock：清除快取 | `twstock cache --clear` |
+| twstock：單股分析 | `twstock analyze --stock 2330 --period 2y` |
+| twstock：策略比較 | `twstock strategy-compare --stock 2330 --period 2y` |
+| twstock：檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
+| twstock：Benchmark | `twstock benchmark --file stocks.txt --workers 8 --repeat 3` |
 | 執行全部測試 | `python -m unittest discover -s tests` |
 
 ### 更新股票清單
@@ -144,6 +148,8 @@ python gui_app.py
 
 ```bash
 twstock doctor
+twstock analyze --stock 2330 --period 2y
+twstock strategy-compare --stock 2330 --period 2y
 twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md
 twstock stock-list update --market all --output stocks.txt
@@ -155,7 +161,6 @@ twstock cache --summary
 twstock cache --list
 twstock cache --clear
 twstock benchmark --file stocks.txt --workers 8 --repeat 3
-twstock analyze --stock 2330 --period 2y
 
 python twstock_cli.py doctor
 python twstock_cli.py scan --auto-stock-list --stock-limit 50
