@@ -45,22 +45,32 @@ class TestBacktestReportCLI(unittest.TestCase):
             output_dir="output",
             force_refresh=False,
             short_window=5,
-            long_window=20
+            long_window=20,
+            rsi_buy_below=30.0,
+            rsi_sell_above=70.0,
+            score_buy=None,
+            score_sell=None,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None
         )
         mock_run.return_value = {"Total Return %": 5.0}
-        
+
         mock_strat = MagicMock()
         mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
         with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"ma_cross_strategy": mock_strat}):
             main()
-        
+
         mock_export_md.assert_called_once()
         mock_export_excel.assert_called_once()
-        
+
         # Verify default paths
         md_path = mock_export_md.call_args[0][1]
         self.assertEqual(Path(md_path).parts[-2:], ("output", "backtest_report.md"))
-        
+
         ex_path = mock_export_excel.call_args[0][1]
         self.assertEqual(Path(ex_path).parts[-2:], ("output", "backtest_report.xlsx"))
 
@@ -80,18 +90,28 @@ class TestBacktestReportCLI(unittest.TestCase):
             output_dir="output",
             force_refresh=False,
             short_window=5,
-            long_window=20
+            long_window=20,
+            rsi_buy_below=30.0,
+            rsi_sell_above=70.0,
+            score_buy=None,
+            score_sell=None,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None
         )
         mock_run.return_value = {"Total Return %": 5.0}
-        
+
         mock_strat = MagicMock()
         mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
         with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"ma_cross_strategy": mock_strat}):
             main()
-        
+
         mock_export_md.assert_called_once()
         mock_export_excel.assert_called_once()
-        
+
         self.assertEqual(mock_export_md.call_args[0][1], "output/custom.md")
         self.assertEqual(mock_export_excel.call_args[0][1], "output/custom.xlsx")
 
@@ -111,15 +131,25 @@ class TestBacktestReportCLI(unittest.TestCase):
             output_dir="output",
             force_refresh=False,
             short_window=5,
-            long_window=20
+            long_window=20,
+            rsi_buy_below=30.0,
+            rsi_sell_above=70.0,
+            score_buy=None,
+            score_sell=None,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None
         )
         mock_run.return_value = {"Total Return %": 5.0}
-        
+
         mock_strat = MagicMock()
         mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
         with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"ma_cross_strategy": mock_strat}):
             main()
-        
+
         mock_export_md.assert_not_called()
         mock_export_excel.assert_not_called()
 
@@ -136,13 +166,23 @@ class TestBacktestReportCLI(unittest.TestCase):
             output_dir="output",
             force_refresh=False,
             short_window=5,
-            long_window=20
+            long_window=20,
+            rsi_buy_below=30.0,
+            rsi_sell_above=70.0,
+            score_buy=None,
+            score_sell=None,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None
         )
         mock_analyze.side_effect = Exception("Network Error")
-        
+
         with self.assertRaises(SystemExit) as cm:
             main()
-            
+
         self.assertEqual(cm.exception.code, 1)
 
     @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
@@ -161,14 +201,128 @@ class TestBacktestReportCLI(unittest.TestCase):
             output_dir="output",
             force_refresh=False,
             short_window=5,
-            long_window=20
+            long_window=20,
+            rsi_buy_below=30.0,
+            rsi_sell_above=70.0,
+            score_buy=None,
+            score_sell=None,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None
         )
-        
+
         with self.assertRaises(SystemExit) as cm:
             main()
-            
+
         self.assertEqual(cm.exception.code, 1)
         mock_analyze.assert_not_called()
         mock_run.assert_not_called()
         mock_export_md.assert_not_called()
         mock_export_excel.assert_not_called()
+
+    @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_report.run_backtest")
+    @patch("tw_stock_tool.cli.backtest_report._parse_args")
+    def test_main_passes_rsi_params(self, mock_parse, mock_run, mock_analyze):
+        mock_parse.return_value = MagicMock(
+            stock="2330", strategy="rsi_strategy", period="1y",
+            initial_capital=100000, output_md=None, output_excel=None, output_dir="output", force_refresh=False,
+            short_window=5, long_window=20, rsi_buy_below=25.0, rsi_sell_above=75.0,
+            score_buy=None, score_sell=None, fee_rate=0.0, tax_rate=0.0, position_size=1.0,
+            stop_loss_pct=None, take_profit_pct=None, max_hold_days=None
+        )
+        mock_run.return_value = {"Total Return %": 5.0}
+
+        mock_strat = MagicMock()
+        mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
+        with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"rsi_strategy": mock_strat}):
+            main()
+
+        mock_strat.assert_called_once()
+        self.assertEqual(mock_strat.call_args[1]["buy_below"], 25.0)
+        self.assertEqual(mock_strat.call_args[1]["sell_above"], 75.0)
+
+    @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_report.run_backtest")
+    @patch("tw_stock_tool.cli.backtest_report._parse_args")
+    def test_main_passes_score_params(self, mock_parse, mock_run, mock_analyze):
+        mock_parse.return_value = MagicMock(
+            stock="2330", strategy="score_strategy", period="1y",
+            initial_capital=100000, output_md=None, output_excel=None, output_dir="output", force_refresh=False,
+            short_window=5, long_window=20, rsi_buy_below=30.0, rsi_sell_above=70.0,
+            score_buy=4.5, score_sell=-1.5, fee_rate=0.0, tax_rate=0.0, position_size=1.0,
+            stop_loss_pct=None, take_profit_pct=None, max_hold_days=None
+        )
+        mock_run.return_value = {"Total Return %": 5.0}
+
+        mock_strat = MagicMock()
+        mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
+        with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"score_strategy": mock_strat}):
+            main()
+
+        mock_strat.assert_called_once()
+        self.assertEqual(mock_strat.call_args[1]["buy_score"], 4.5)
+        self.assertEqual(mock_strat.call_args[1]["sell_score"], -1.5)
+
+    @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_report.run_backtest")
+    @patch("tw_stock_tool.cli.backtest_report._parse_args")
+    def test_main_passes_backtest_engine_params(self, mock_parse, mock_run, mock_analyze):
+        mock_parse.return_value = MagicMock(
+            stock="2330", strategy="ma_cross", period="1y",
+            initial_capital=200000, output_md=None, output_excel=None, output_dir="output", force_refresh=False,
+            short_window=5, long_window=20, rsi_buy_below=30.0, rsi_sell_above=70.0,
+            score_buy=None, score_sell=None, fee_rate=0.001, tax_rate=0.002, position_size=0.5,
+            stop_loss_pct=0.1, take_profit_pct=0.2, max_hold_days=10
+        )
+        mock_run.return_value = {"Total Return %": 5.0}
+
+        mock_strat = MagicMock()
+        mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
+        with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"ma_cross_strategy": mock_strat}):
+            main()
+
+        mock_run.assert_called_once()
+        bt_kwargs = mock_run.call_args[1]
+        self.assertEqual(bt_kwargs["initial_capital"], 200000)
+        self.assertEqual(bt_kwargs["fee_rate"], 0.001)
+        self.assertEqual(bt_kwargs["tax_rate"], 0.002)
+        self.assertEqual(bt_kwargs["position_size"], 0.5)
+        self.assertEqual(bt_kwargs["stop_loss_pct"], 0.1)
+        self.assertEqual(bt_kwargs["take_profit_pct"], 0.2)
+        self.assertEqual(bt_kwargs["max_hold_days"], 10)
+
+    @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_report.run_backtest")
+    @patch("tw_stock_tool.cli.backtest_report.export_backtest_report_markdown")
+    @patch("tw_stock_tool.cli.backtest_report._parse_args")
+    def test_main_report_parameters_include_nested_metadata(self, mock_parse, mock_export_md, mock_run, mock_analyze):
+        mock_parse.return_value = MagicMock(
+            stock="2330", strategy="ma_cross", period="1y",
+            initial_capital=100000, output_md="output.md", output_excel=None, output_dir="output", force_refresh=False,
+            short_window=5, long_window=20, rsi_buy_below=30.0, rsi_sell_above=70.0,
+            score_buy=None, score_sell=None, fee_rate=0.001425, tax_rate=0.003, position_size=1.0,
+            stop_loss_pct=None, take_profit_pct=None, max_hold_days=None
+        )
+        mock_run.return_value = {"Total Return %": 5.0}
+
+        mock_strat = MagicMock()
+        mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
+        with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"ma_cross_strategy": mock_strat}):
+            main()
+
+        mock_export_md.assert_called_once()
+        result_passed = mock_export_md.call_args[0][0]
+        self.assertIn("Parameters", result_passed)
+        params = result_passed["Parameters"]
+
+        self.assertIn("strategy", params)
+        self.assertIn("backtest", params)
+
+        self.assertEqual(params["strategy"]["short_window"], 5)
+        self.assertEqual(params["strategy"]["long_window"], 20)
+        self.assertEqual(params["backtest"]["initial_capital"], 100000)
+        self.assertEqual(params["backtest"]["fee_rate"], 0.001425)

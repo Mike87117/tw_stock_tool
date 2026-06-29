@@ -127,6 +127,14 @@ Broker Interface
   - Confirmed scope was limited to: `src/tw_stock_tool/backtesting/strategy_compare.py`, `tests/test_strategy_compare.py`, `README.md`.
   - Confirmed: working tree clean, `git diff --check` clean, `--output-excel` exists, `--output` remains, both flags together fail clearly, `export_strategy_compare()` unchanged, Excel sheet name remains `Strategy_Compare`, strategy/backtest logic unchanged, README matches runtime, `twstock_cli.py` and root wrappers untouched.
   - Targeted tests passed (8 Strategy Compare tests, 33 unified CLI tests).
+- Phase 13.1：完成 (Backtest Fill Model Consistency Audit)
+- Phase 13.2：完成 (Backtest Fill Model Consistency Patch)
+  - Aligned backtest fill model with `next_bar_open` for standard signals.
+- Phase 13.2.1：完成 (Backtest Next-Bar-Open Full Suite Compatibility Fix)
+  - Updated mock test fixtures and preserved `Open` column across strategies.
+- Phase 13.3：完成 (Backtest Report CLI Parameter Exposure Audit)
+- Phase 13.4：完成 (Backtest Report CLI Parameter Exposure Patch)
+  - Exposed RSI, Score, and engine parameters in `backtest_report.py`.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。
