@@ -11,7 +11,7 @@ The first version of the Daily Report MVP will include:
 - **Watchlist Candidates for Further Review:** Filtered list of stocks meeting predefined research criteria.
 - **Basic Technical Indicators Summary:** Inclusion of indicators already available from the existing scanner.
 - **Risk / Limitation Notes:** Clear disclaimers that this is research only.
-- **Output Format:** Markdown report initially.
+- **Output Format:** Markdown report and Excel export for further offline research.
 
 ## 3. Out of Scope
 The following are explicitly excluded from the MVP:
@@ -56,13 +56,13 @@ The MVP will draw from:
 - **Phase 5.3:** Daily Report Markdown exporter
 - **Phase 5.4:** Daily Report CLI
 - **Phase 5.5:** Daily Report docs and smoke tests
-- **Phase 5.6:** Daily Report MVP final audit / cleanup *(Current Phase)*
+- **Phase 5.6:** Daily Report MVP final audit / cleanup
 
 ## 8. Acceptance Criteria
 The MVP is considered complete when:
 - It works purely from existing data/scanner outputs.
 - It does not require broker or API keys.
 - It does not make or imply investment recommendations.
-- It produces deterministic Markdown output.
+- It supports Markdown and Excel export paths.
 - It has test coverage for the builder, exporter, and CLI.
 - It handles empty or partial data gracefully (e.g., no candidates found).

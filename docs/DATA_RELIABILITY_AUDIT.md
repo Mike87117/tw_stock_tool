@@ -7,7 +7,7 @@ This document records the final Phase 6 data reliability behavior for the Daily 
 1. **Stock List Update (`stock_list_updater.py`)**: Fetches official TWSE and TPEx stock lists to generate a master universe of common stocks.
 2. **Scanner Execution (`scanner.py`)**: Dispatches the stock list to a thread pool (`ThreadPoolExecutor`). Each thread calls `data_loader.py`.
 3. **Data Loading (`data_loader.py`)**: Checks the local cache first. If the cache misses, it attempts to download via `yfinance`. If `yfinance` fails or returns empty data (and `auto_adjust` is false), it falls back to the official TWSE/TPEx monthly endpoints.
-4. **Report Building (`daily_report.py`)**: Aggregates the results, computes candidates, and exports them to Markdown (via `daily_report_cli.py`).
+4. **Report Building (`daily_report.py`)**: Aggregates the results, computes candidates, and exports them to Markdown and Excel (via `daily_report_cli.py`).
 
 ## 3. Price Data Failure Modes
 - **yfinance behavior**: `yfinance` outputs are suppressed using a global `console_io_lock`. If it returns an empty DataFrame or fails completely, the error is caught, appended to an error tracking list, and the system proceeds to the next candidate fallback.
@@ -37,7 +37,7 @@ This document records the final Phase 6 data reliability behavior for the Daily 
 - **Empty data cache corruption**: If a network download succeeds but returns unusable data, it shouldn't be written to cache because `_prepare_ohlcv` raises an error before `_write_cache` is called.
 
 ## 7. Daily Report Partial-Failure Behavior
-- **Empty candidates / partial failures**: If some stocks fail during the scan, they end up in `ranking_df` with `Status="ERROR"`. These failed stocks are now explicitly included in the "Data Limitations" section of the final Markdown report to provide user visibility.
+- **Empty candidates / partial failures**: If some stocks fail during the scan, they end up in `ranking_df` with `Status="ERROR"`. These failed stocks are now explicitly included in the "Data Limitations" section of the final report to provide user visibility.
 - **Total failure**: If all stocks fail, the report still generates but lists 0 candidates. 
 
 ## 8. Current Test Coverage
@@ -70,7 +70,7 @@ The following are strictly out of scope for the Daily Report MVP and Phase 6 dat
 - Investment recommendation wording or AI/ML prediction
 - New data providers
 - Real-time alerting or scheduler/automation
-- GUI changes or Excel exporter restoration
+- GUI changes or Excel exporter restoration (Note: Excel export was later restored in Phase 10 via `--output-excel`)
 - Integrating deep-dive backtest, parameter sweep, or walk-forward engines into the Daily Report CLI.
 - Live-network testing.
 
