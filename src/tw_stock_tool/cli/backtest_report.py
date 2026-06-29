@@ -133,13 +133,18 @@ def main() -> None:
         start_date = df_exec.index[0].strftime('%Y-%m-%d') if not df_exec.empty else "N/A"
         end_date = df_exec.index[-1].strftime('%Y-%m-%d') if not df_exec.empty else "N/A"
 
+        report_params = {
+            "strategy": params,
+            "backtest": bt_params,
+        }
+
         result = _normalize_result(
             raw_result=raw_result,
             stock=args.stock,
             strategy=args.strategy,
             start_date=start_date,
             end_date=end_date,
-            parameters=params,
+            parameters=report_params,
         )
 
         out_dir = Path(args.output_dir)
