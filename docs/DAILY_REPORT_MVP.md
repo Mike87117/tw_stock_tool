@@ -63,6 +63,6 @@ The MVP is considered complete when:
 - It works purely from existing data/scanner outputs.
 - It does not require broker or API keys.
 - It does not make or imply investment recommendations.
-- It produces deterministic Markdown and Excel output.
+- It supports Markdown and Excel export paths.
 - It has test coverage for the builder, exporter, and CLI.
 - It handles empty or partial data gracefully (e.g., no candidates found).
