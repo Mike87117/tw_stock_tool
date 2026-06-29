@@ -96,7 +96,7 @@ class StrategyCompareTest(unittest.TestCase):
     def test_parse_args_fails_when_both_outputs_provided(self) -> None:
         import io
         from contextlib import redirect_stderr
-        
+
         f = io.StringIO()
         with redirect_stderr(f):
             with self.assertRaises(SystemExit):
