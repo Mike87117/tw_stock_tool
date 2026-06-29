@@ -188,7 +188,7 @@ Broker Interface
 標準化方向：
 
 - 統一策略訊號語意為 `entry_signal` / `exit_signal`。
-- 預設成交模型為 `next_bar_open`。
+- 預設成交模型為 `next_bar_open`（實作與測試已對齊，這是純研究用的回測假設，不代表實際交易執行的保證）。
 - 不允許同一根 bar 產生訊號又在同一根 bar 成交。
 - 記錄完整 Trade Log。
 - 保留交易成本、稅、滑價等設定。
