@@ -786,8 +786,11 @@ python strategy_compare.py --stock 2330 --period 2y
 python strategy_compare.py --stock 2330 --period 2y --ma-short 10 --ma-long 30
 python strategy_compare.py --stock 2330 --period 2y --rsi-buy-below 35 --rsi-sell-above 75
 python strategy_compare.py --stock 2330 --period 2y --score-buy 5 --score-sell -3
-python strategy_compare.py --stock 2330 --period 2y --output
+python strategy_compare.py --stock 2330 --period 2y --output-excel
 ```
+
+- `--output-excel`: 匯出 Excel 報告（推薦使用）。
+- `--output`: 保留作為向下相容的別名。
 
 目前策略：
 
@@ -1210,7 +1213,7 @@ python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --out
 | `clean_stocks.py` | 股票清單檢查 Excel | `output/clean_stocks_report.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
 | `clean_stocks.py` | 有效股票清單 | `output/stocks_clean.txt` | 使用 `--write-clean-file`；只包含可正常取得資料的股票。 |
 | `twstock daily` | 每日候選清單報告 | `output/daily_report.md`, `output/daily_report.xlsx` | 使用 `--output-md`、`--output-excel` 或 `--output-dir`；也可指定自訂路徑。 |
-| `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 需搭配 `--output`；也可指定自訂路徑。 |
+| `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 優先使用 `--output-excel`（舊版 `--output` 仍可作為相容別名）；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep Excel | `output/{stock}_parameter_sweep.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
 | `walk_forward.py` | Walk Forward Excel | `output/{stock}_walk_forward.xlsx` | 使用 `--output`；也可指定自訂路徑。 |

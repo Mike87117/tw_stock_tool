@@ -78,6 +78,31 @@ class StrategyCompareTest(unittest.TestCase):
         self.assertEqual(args.score_buy, 4)
         self.assertEqual(args.score_sell, -2)
 
+    def test_parse_args_accepts_output_excel(self) -> None:
+        args = strategy_compare._parse_args(["--stock", "2330", "--output-excel"])
+        self.assertEqual(args.output_excel, "")
+        self.assertIsNone(getattr(args, "output", None))
+
+    def test_parse_args_accepts_output_excel_custom_path(self) -> None:
+        args = strategy_compare._parse_args(["--stock", "2330", "--output-excel", "custom.xlsx"])
+        self.assertEqual(args.output_excel, "custom.xlsx")
+        self.assertIsNone(getattr(args, "output", None))
+
+    def test_parse_args_accepts_legacy_output(self) -> None:
+        args = strategy_compare._parse_args(["--stock", "2330", "--output"])
+        self.assertEqual(args.output, "")
+        self.assertIsNone(getattr(args, "output_excel", None))
+
+    def test_parse_args_fails_when_both_outputs_provided(self) -> None:
+        import io
+        from contextlib import redirect_stderr
+
+        f = io.StringIO()
+        with redirect_stderr(f):
+            with self.assertRaises(SystemExit):
+                strategy_compare._parse_args(["--stock", "2330", "--output", "--output-excel"])
+        self.assertIn("Only one of --output or --output-excel may be used.", f.getvalue())
+
     def test_compare_strategies_uses_next_day_backtest_execution(self) -> None:
         signal_df = pd.DataFrame(
             {
