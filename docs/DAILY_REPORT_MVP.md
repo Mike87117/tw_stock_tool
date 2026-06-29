@@ -26,7 +26,6 @@ The following are explicitly excluded from the MVP:
 - Guaranteed profit wording
 - Real-time alerting
 - Portfolio optimization
-- Optional Excel export is not part of the current Daily Report MVP and may be considered separately in a future phase.
 
 ## 4. Proposed Input Sources
 The MVP will draw from:
@@ -36,10 +35,11 @@ The MVP will draw from:
 - optional precomputed external summary data only when passed explicitly to the builder in future phases
 
 ## 5. Proposed Output Format
-- **Current MVP Output:** Markdown report.
+- **Markdown Export:** Supported via `--output-md`.
   - Default path: `output/daily_report.md`
+- **Excel Export:** Supported via `--output-excel` for further offline research.
+  - Default path: `output/daily_report.xlsx`
 - **Console Summary:** Optional standard output summary of the run.
-- Excel export is not part of the current Daily Report MVP and may be considered separately in a future phase.
 
 ## 6. Suggested Report Sections
 1. **Report Metadata:** Date, time, execution context.
