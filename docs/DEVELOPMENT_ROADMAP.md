@@ -103,6 +103,11 @@ Broker Interface
 - Phase 7.2：完成 (Unified CLI help / usage test hardening)
 - Phase 7.3：完成 (Unified CLI entrypoint / wrapper smoke tests)
 - Phase 7.4：完成 (Unified CLI cache subcommand)
+- Phase 8：完成 (Release baseline / v0.1.0 / GitHub Release readiness)
+- Phase 9：完成 (Report workflow cleanup / generated output ignore rules / report workflow error handling tests)
+- Phase 10：完成 (Daily Report CLI polish / twstock daily --output-excel)
+- Phase 11.1：完成 (Documentation consolidation audit)
+- Phase 11.2：完成 (Docs-only consolidation patch)
 
 ## 3. 台股資料取得
 
