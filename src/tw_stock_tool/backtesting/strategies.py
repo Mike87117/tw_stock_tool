@@ -6,7 +6,10 @@ def _with_signal(df: pd.DataFrame, signal: pd.Series) -> pd.DataFrame:
     out["Signal"] = signal
     out["entry_signal"] = (signal == "BUY")
     out["exit_signal"] = (signal == "SELL")
-    return out[["Close", "Signal", "entry_signal", "exit_signal"]]
+    cols = ["Close", "Signal", "entry_signal", "exit_signal"]
+    if "Open" in out.columns:
+        cols.insert(0, "Open")
+    return out[cols]
 
 
 def score_strategy(

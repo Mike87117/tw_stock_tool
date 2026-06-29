@@ -10,6 +10,7 @@ from analysis import StockAnalysis
 def _fake_analysis() -> StockAnalysis:
     signal_df = pd.DataFrame(
         {
+            "Open": [9.0, 11.0, 7.0],
             "Close": [10.0, 12.0, 8.0],
             "Signal": ["HOLD", "BUY", "SELL"],
             "Score": [0.0, 5.0, -3.0],
@@ -43,7 +44,7 @@ class StrategyCompareTest(unittest.TestCase):
         ) -> pd.DataFrame:
             captured["buy_score"] = buy_score
             captured["sell_score"] = sell_score
-            return df[["Close", "Signal"]].copy()
+            return df[["Open", "Close", "Signal"]].copy()
 
         fake_result = {
             "Total Return %": 1.0,
@@ -106,6 +107,7 @@ class StrategyCompareTest(unittest.TestCase):
     def test_compare_strategies_uses_next_day_backtest_execution(self) -> None:
         signal_df = pd.DataFrame(
             {
+                "Open": [100.0, 110.0, 120.0, 130.0],
                 "Close": [100.0, 110.0, 120.0, 130.0],
                 "Signal": ["BUY", "HOLD", "SELL", "HOLD"],
             },
@@ -122,7 +124,7 @@ class StrategyCompareTest(unittest.TestCase):
         )
 
         def passthrough_strategy(df: pd.DataFrame, **_: object) -> pd.DataFrame:
-            return df[["Close", "Signal"]].copy()
+            return df[["Open", "Close", "Signal"]].copy()
 
         with patch.object(strategy_compare, "STRATEGIES", {"score_strategy": passthrough_strategy}):
             with patch.object(strategy_compare, "analyze_stock", return_value=analysis):
@@ -131,8 +133,8 @@ class StrategyCompareTest(unittest.TestCase):
                         with patch.object(strategy_compare, "TAX_RATE", 0):
                             result = strategy_compare.compare_strategies("2330")
 
-        # BUY at day 1 executes at day 2 close (110), then SELL at day 3
-        # executes at day 4 close (130). Same-day execution would return 20%.
+        # BUY at day 1 executes at day 2 open (110), then SELL at day 3
+        # executes at day 4 open (130). Same-day execution would return 20%.
         self.assertEqual(result.loc[0, "Total Return %"], 18.0)
 
     @patch("pandas.DataFrame.to_excel")
