@@ -108,7 +108,25 @@ Broker Interface
 - Phase 10：完成 (Daily Report CLI polish / twstock daily --output-excel)
 - Phase 11.1：完成 (Documentation consolidation audit)
 - Phase 11.2：完成 (Docs-only consolidation patch)
-
+- Phase 12.1：完成 (CLI Consistency Audit)
+  - Read-only audit of CLI and report flag consistency.
+  - Confirmed existing runtime and docs were generally aligned.
+  - Identified Strategy Compare as the narrow inconsistency (used legacy `--output` for Excel output, unlike newer `--output-excel` CLIs).
+  - Recommended narrow compatibility patch: add `--output-excel`, keep `--output` as backward-compatible alias, do not change strategy logic or Excel export behavior.
+- Phase 12.2：完成 (Strategy Compare `--output-excel` Compatibility Patch)
+  - Runtime patch completed and merged.
+  - Added `--output-excel` to Strategy Compare.
+  - Preserved legacy `--output` as a backward-compatible alias.
+  - Added clear conflict handling when both flags are supplied.
+  - Preserved default and custom output path behavior.
+  - Did not change: strategy comparison logic, backtest logic, Excel exporter behavior, or Excel sheet name `Strategy_Compare`.
+  - Tests passed: `tests.test_strategy_compare`, `tests.test_twstock_cli`, and full test suite (491 tests).
+- Phase 12.3：完成 (Strategy Compare CLI Consistency Closeout Audit)
+  - Closeout audit passed.
+  - Confirmed main HEAD: `3cf607701a9fcc6949a7914343cd60d55b3a975a`.
+  - Confirmed scope was limited to: `src/tw_stock_tool/backtesting/strategy_compare.py`, `tests/test_strategy_compare.py`, `README.md`.
+  - Confirmed: working tree clean, `git diff --check` clean, `--output-excel` exists, `--output` remains, both flags together fail clearly, `export_strategy_compare()` unchanged, Excel sheet name remains `Strategy_Compare`, strategy/backtest logic unchanged, README matches runtime, `twstock_cli.py` and root wrappers untouched.
+  - Targeted tests passed (8 Strategy Compare tests, 33 unified CLI tests).
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。
