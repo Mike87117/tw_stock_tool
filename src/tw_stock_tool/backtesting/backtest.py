@@ -26,8 +26,8 @@ def _validate_inputs(df: pd.DataFrame, position_size: float) -> None:
         raise BacktestError("無資料可回測。")
     if not 0 < position_size <= 1:
         raise BacktestError("position_size 必須大於 0 且小於等於 1。")
-    if "Close" not in df.columns:
-        raise BacktestError("回測資料缺少欄位: ['Close']")
+    if "Close" not in df.columns or "Open" not in df.columns:
+        raise BacktestError("回測資料缺少欄位: ['Open', 'Close']")
     
     from tw_stock_tool.backtesting.signals import has_legacy_signal, has_standard_signals
     if not has_legacy_signal(df) and not has_standard_signals(df):
@@ -73,14 +73,12 @@ def run_backtest(
     invested_days = 0
     pending_order: str | None = None
 
-    def close_position(exit_pos: int, exit_reason: str) -> None:
+    def close_position(exit_pos: int, exit_reason: str, exit_price: float) -> None:
         nonlocal cash, shares, entry_cost, entry_date, entry_price, entry_pos
 
         if shares <= 0 or entry_pos is None:
             return
 
-        row = df.iloc[exit_pos]
-        exit_price = float(row["Close"])
         gross = shares * exit_price
         fee = gross * fee_rate
         tax = gross * tax_rate
@@ -110,44 +108,47 @@ def run_backtest(
         entry_date = None
         entry_pos = None
 
-    def open_position(entry_execution_pos: int) -> None:
+    def open_position(entry_execution_pos: int, entry_execution_price: float) -> None:
         nonlocal cash, shares, entry_cost, entry_date, entry_price, entry_pos
 
         if shares > 0:
             return
 
-        price = float(df.iloc[entry_execution_pos]["Close"])
         invest_cash = cash * position_size
-        affordable = int(invest_cash // (price * (1 + fee_rate)))
+        affordable = int(invest_cash // (entry_execution_price * (1 + fee_rate)))
         if affordable <= 0:
             return
 
-        gross = affordable * price
+        gross = affordable * entry_execution_price
         fee = gross * fee_rate
         total_cost = gross + fee
         cash -= total_cost
         shares = affordable
         entry_cost = total_cost
-        entry_price = price
+        entry_price = entry_execution_price
         entry_date = df.index[entry_execution_pos]
         entry_pos = entry_execution_pos
 
     for pos, (_, row) in enumerate(df_exec.iterrows()):
-        price = float(row["Close"])
+        close_price = float(row["Close"])
+        open_price = float(row["Open"]) if "Open" in row else float('nan')
         entry_sig = row.get("entry_signal", False)
         exit_sig = row.get("exit_signal", False)
 
-        # Execute yesterday's signal at today's close to avoid look-ahead bias.
+        # Execute yesterday's signal at today's open to avoid look-ahead bias.
         if pending_order:
-            if pending_order == "BUY" and shares == 0:
-                open_position(pos)
-            elif pending_order.startswith("SELL") and shares > 0:
-                close_position(pos, pending_order)
+            if pd.isna(open_price) or open_price <= 0:
+                pass  # Skip execution safely if missing or invalid open price
+            else:
+                if pending_order == "BUY" and shares == 0:
+                    open_position(pos, open_price)
+                elif pending_order.startswith("SELL") and shares > 0:
+                    close_position(pos, pending_order, open_price)
             pending_order = None
 
         if shares > 0 and entry_pos is not None:
             invested_days += 1
-            change_pct = _ratio(price - entry_price, entry_price) * 100
+            change_pct = _ratio(close_price - entry_price, entry_price) * 100
             current_hold_days = _hold_days(df.index, entry_pos, pos)
             if stop_loss_pct is not None and change_pct <= -abs(stop_loss_pct):
                 pending_order = "SELL_STOP_LOSS"
@@ -160,10 +161,12 @@ def run_backtest(
         elif entry_sig:
             pending_order = "BUY"
 
-        equity_curve.append(cash + shares * price)
+        equity_curve.append(cash + shares * close_price)
 
     if shares > 0:
-        close_position(len(df) - 1, "SELL_EOD")
+        last_price = float(df.iloc[-1]["Close"])
+        if not (pd.isna(last_price) or last_price <= 0):
+            close_position(len(df) - 1, "SELL_EOD", last_price)
         equity_curve[-1] = cash
 
     equity = pd.Series(equity_curve, index=df.index, name="Equity")
