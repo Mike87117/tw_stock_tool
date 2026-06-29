@@ -112,7 +112,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--score-sell", type=float, help="SELL threshold for score_strategy")
     parser.add_argument("--force-refresh", action="store_true")
     parser.add_argument("--output", nargs="?", const="", help="Export Excel; omit path for default output")
-    return parser.parse_args(argv)
+    parser.add_argument("--output-excel", nargs="?", const="", help="Export Excel; omit path for default output")
+    args = parser.parse_args(argv)
+    if getattr(args, "output", None) is not None and getattr(args, "output_excel", None) is not None:
+        parser.error("Only one of --output or --output-excel may be used.")
+    return args
 
 
 def main() -> None:
@@ -135,11 +139,13 @@ def main() -> None:
         )
         print(result.to_string(index=False))
 
-        if args.output is not None:
+        final_output = args.output if args.output is not None else args.output_excel
+
+        if final_output is not None:
             output_path = (
                 OUTPUT_DIR / f"{args.stock}_strategy_compare.xlsx"
-                if args.output == ""
-                else Path(args.output)
+                if final_output == ""
+                else Path(final_output)
             )
             path = export_strategy_compare(result, output_path)
             print(f"\nStrategy comparison exported: {path}")
