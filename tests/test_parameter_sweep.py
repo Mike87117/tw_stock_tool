@@ -13,6 +13,7 @@ from analysis import StockAnalysis
 def _sample_signal_df() -> pd.DataFrame:
     return pd.DataFrame(
         {
+            "Open": [9.0, 10.0, 11.0, 10.0, 12.0],
             "Close": [10.0, 11.0, 12.0, 11.0, 13.0],
             "Signal": ["HOLD", "BUY", "HOLD", "SELL", "HOLD"],
             "Score": [0.0, 5.0, 2.0, -3.0, 1.0],
@@ -338,6 +339,7 @@ class ParameterSweepTest(unittest.TestCase):
     def test_parameter_sweep_uses_next_day_backtest_execution(self) -> None:
         signal_df = pd.DataFrame(
             {
+                "Open": [100.0, 110.0, 120.0, 130.0],
                 "Close": [100.0, 110.0, 120.0, 130.0],
                 "Signal": ["HOLD", "HOLD", "HOLD", "HOLD"],
                 "Score": [5.0, 0.0, -3.0, 0.0],
@@ -366,7 +368,7 @@ class ParameterSweepTest(unittest.TestCase):
 
         target = result[result["Parameters"] == "buy_score=4, sell_score=-2"].iloc[0]
         # Score creates BUY on day 1 and SELL on day 3. run_backtest must
-        # execute those orders at day 2 and day 4 closes, yielding 18%.
+        # execute those orders at day 2 and day 4 opens (which we mocked to match close), yielding 18%.
         self.assertEqual(target["Total Return %"], 18.0)
 
     def test_invalid_position_size_raises(self) -> None:

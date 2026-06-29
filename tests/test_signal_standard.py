@@ -126,6 +126,7 @@ class TestSignalStandard(unittest.TestCase):
 
         df = pd.DataFrame(
             {
+                "Open": [99, 105, 119, 125],
                 "Close": [100, 110, 120, 130],
                 "entry_signal": [True, False, False, False],
                 "exit_signal": [False, False, True, False],
@@ -138,14 +139,15 @@ class TestSignalStandard(unittest.TestCase):
         self.assertEqual(len(trades), 1)
         self.assertEqual(trades.iloc[0]["Entry Date"], df.index[1])
         self.assertEqual(trades.iloc[0]["Exit Date"], df.index[3])
-        self.assertEqual(trades.iloc[0]["Entry Price"], 110)
-        self.assertEqual(trades.iloc[0]["Exit Price"], 130)
+        self.assertEqual(trades.iloc[0]["Entry Price"], 105)
+        self.assertEqual(trades.iloc[0]["Exit Price"], 125)
     def test_run_backtest_legacy_and_standard_signals_match(self):
         from backtest import run_backtest
 
         index = pd.date_range("2024-01-01", periods=5, freq="D")
         legacy_df = pd.DataFrame(
             {
+                "Open": [99, 109, 119, 129, 139],
                 "Close": [100, 110, 120, 130, 140],
                 "Signal": ["BUY", "HOLD", "SELL", "HOLD", "HOLD"],
             },
@@ -153,6 +155,7 @@ class TestSignalStandard(unittest.TestCase):
         )
         standard_df = pd.DataFrame(
             {
+                "Open": [99, 109, 119, 129, 139],
                 "Close": [100, 110, 120, 130, 140],
                 "entry_signal": [True, False, False, False, False],
                 "exit_signal": [False, False, True, False, False],
