@@ -191,6 +191,9 @@ class WalkForwardTest(unittest.TestCase):
                     take_profit_pct=None,
                     max_hold_days=None,
                     position_size=1.0,
+                    initial_capital=100000.0,
+                    fee_rate=0.001425,
+                    tax_rate=0.003,
                 )
 
         self.assertEqual(result["Parameters"], "buy_score=4, sell_score=-2")
@@ -236,6 +239,51 @@ class WalkForwardTest(unittest.TestCase):
         # Verify custom ranges didn't fail
         for param in df["Parameters"]:
             self.assertTrue("short_window=2" in param or "short_window=3" in param)
+
+    @mock.patch("src.tw_stock_tool.backtesting.walk_forward.analyze_stock")
+    @mock.patch.object(walk_forward, "run_backtest")
+    @mock.patch("src.tw_stock_tool.backtesting.walk_forward._build_strategy_df")
+    def test_run_walk_forward_engine_params_passthrough(
+        self, mock_build_strategy: mock.MagicMock, mock_run_backtest: mock.MagicMock, mock_analyze: mock.MagicMock
+    ) -> None:
+        mock_analyze.return_value.signal_df = self._sample_df(rows=200)
+        mock_build_strategy.return_value = pd.DataFrame({"Close": [1], "Signal": [1]})
+
+        mock_run_backtest.return_value = {
+            "Total Return %": 10.0,
+            "CAGR %": 10.0,
+            "Trade Count": 2,
+            "Win Rate %": 50.0,
+            "Max Drawdown %": -5.0,
+            "Profit Factor": 1.5,
+            "Sharpe Ratio": 1.0,
+            "Sortino Ratio": 1.0,
+        }
+
+        df = walk_forward.run_walk_forward(
+            stock_id="2330",
+            strategy="ma_cross",
+            train_days=50,
+            test_days=20,
+            initial_capital=99999.0,
+            fee_rate=0.01,
+            tax_rate=0.02,
+            position_size=0.5,
+            stop_loss_pct=0.05,
+            take_profit_pct=0.1,
+            max_hold_days=10,
+        )
+
+        self.assertTrue(mock_run_backtest.called)
+        # Check the last call to ensure parameters were passed
+        _, kwargs = mock_run_backtest.call_args
+        self.assertEqual(kwargs["initial_capital"], 99999.0)
+        self.assertEqual(kwargs["fee_rate"], 0.01)
+        self.assertEqual(kwargs["tax_rate"], 0.02)
+        self.assertEqual(kwargs["position_size"], 0.5)
+        self.assertEqual(kwargs["stop_loss_pct"], 0.05)
+        self.assertEqual(kwargs["take_profit_pct"], 0.1)
+        self.assertEqual(kwargs["max_hold_days"], 10)
 
     def test_export_excel_contains_required_sheets(self) -> None:
         detail = pd.DataFrame(

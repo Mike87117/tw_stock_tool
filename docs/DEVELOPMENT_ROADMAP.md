@@ -140,6 +140,8 @@ Broker Interface
   - Added `twstock backtest-report` through unified CLI.
 - Phase 14.1：完成 (Parameter Sweep & Walk Forward Parameter Consistency Audit)
 - Phase 14.2：完成 (Parameter Sweep CLI & Metadata Patch)
+- Phase 14.3：完成 (Walk Forward Parameter Consistency Audit)
+- Phase 14.4：完成 (Walk Forward Engine Params & Metadata Patch)
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。

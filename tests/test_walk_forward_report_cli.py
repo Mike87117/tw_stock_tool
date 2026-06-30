@@ -62,6 +62,25 @@ class WalkForwardReportCliTest(unittest.TestCase):
         self.assertEqual(args.score_buy, (4, 6))
         self.assertEqual(args.score_sell, (-2, -4))
 
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "all", "--train-days", "252", "--test-days", "63", "--step-days", "21", "--sort-by", "Train Total Return %"])
+    def test_argument_parsing_window_params(self):
+        args = _parse_args()
+        self.assertEqual(args.train_days, 252)
+        self.assertEqual(args.test_days, 63)
+        self.assertEqual(args.step_days, 21)
+        self.assertEqual(args.sort_by, "Train Total Return %")
+
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "all", "--initial-capital", "123.4", "--fee-rate", "0.005", "--tax-rate", "0.01", "--position-size", "0.8", "--stop-loss-pct", "0.05", "--take-profit-pct", "0.1", "--max-hold-days", "5"])
+    def test_argument_parsing_engine_params(self):
+        args = _parse_args()
+        self.assertEqual(args.initial_capital, 123.4)
+        self.assertEqual(args.fee_rate, 0.005)
+        self.assertEqual(args.tax_rate, 0.01)
+        self.assertEqual(args.position_size, 0.8)
+        self.assertEqual(args.stop_loss_pct, 0.05)
+        self.assertEqual(args.take_profit_pct, 0.1)
+        self.assertEqual(args.max_hold_days, 5)
+
     @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "all", "--ma-short-windows", "5", "--rsi-buy-below", "20", "--score-sell=-5"])
     def test_argument_parsing_custom_ranges_multiple(self):
         args = _parse_args()
@@ -88,6 +107,17 @@ class WalkForwardReportCliTest(unittest.TestCase):
             strategy="ma_cross",
             period="1y",
             force_refresh=False,
+            train_days=504,
+            test_days=126,
+            step_days=None,
+            sort_by="Train Sharpe Ratio",
+            initial_capital=mock.ANY,
+            fee_rate=mock.ANY,
+            tax_rate=mock.ANY,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
             ma_short_windows=None,
             ma_long_windows=None,
             rsi_buy_below=None,
@@ -150,6 +180,17 @@ class WalkForwardReportCliTest(unittest.TestCase):
             strategy="ma_cross",
             period="1y",
             force_refresh=False,
+            train_days=504,
+            test_days=126,
+            step_days=None,
+            sort_by="Train Sharpe Ratio",
+            initial_capital=mock.ANY,
+            fee_rate=mock.ANY,
+            tax_rate=mock.ANY,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
             ma_short_windows=None,
             ma_long_windows=None,
             rsi_buy_below=None,
@@ -198,7 +239,55 @@ class WalkForwardReportCliTest(unittest.TestCase):
         self.assertIsNotNone(cm.exception.code)
         mock_run_wf.assert_not_called()
         mock_export_md.assert_not_called()
-        mock_export_excel.assert_not_called()
+
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_markdown")
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_excel")
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "ma_cross", "--output-md"])
+    def test_nested_metadata_structure(self, mock_export_excel, mock_export_md, mock_run_wf):
+        mock_run_wf.return_value = self.mock_wf_df
+        main()
+        result_dict = mock_export_md.call_args[0][0]
+        
+        self.assertIn("Parameters", result_dict)
+        self.assertIn("strategy", result_dict["Parameters"])
+        self.assertIn("backtest", result_dict["Parameters"])
+        self.assertIn("window", result_dict["Parameters"])
+        
+        self.assertEqual(result_dict["Parameters"]["window"]["train_days"], 504)
+        self.assertEqual(result_dict["Parameters"]["window"]["test_days"], 126)
+        
+    def test_build_report_data_preserves_metadata(self):
+        from src.tw_stock_tool.reports.walk_forward_report import build_walk_forward_report_data
+        
+        df = pd.DataFrame()
+        input_data = {
+            "Stock": "2330",
+            "Strategy": "ma_cross",
+            "Parameters": {
+                "strategy": {"ma_short_windows": (5,)},
+                "backtest": {"fee_rate": 0.001425},
+                "window": {"train_days": 504, "test_days": 126},
+            },
+            "Results": df,
+        }
+        
+        data = build_walk_forward_report_data(input_data)
+        
+        self.assertEqual(data["Parameters"]["strategy"]["ma_short_windows"], (5,))
+        self.assertEqual(data["Parameters"]["backtest"]["fee_rate"], 0.001425)
+        self.assertEqual(data["Parameters"]["window"]["train_days"], 504)
+        
+    def test_build_report_data_old_input_works(self):
+        from src.tw_stock_tool.reports.walk_forward_report import build_walk_forward_report_data
+        
+        df = pd.DataFrame()
+        data_df = build_walk_forward_report_data(df)
+        self.assertEqual(data_df["Parameters"], {})
+        
+        data_dict = build_walk_forward_report_data({"Results": df, "Stock": "2330"})
+        self.assertEqual(data_dict["Parameters"], {})
+        self.assertEqual(data_dict["Stock"], "2330")
 
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")
     @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_markdown")

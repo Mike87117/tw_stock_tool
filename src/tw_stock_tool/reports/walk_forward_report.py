@@ -67,6 +67,7 @@ def build_walk_forward_report_data(result: Union[pd.DataFrame, dict[str, Any], N
     data: dict[str, Any] = {
         "Stock": "N/A",
         "Strategy": "N/A",
+        "Parameters": {},
         "Generated At": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Window Columns": [],
         "Metric Columns": [],
@@ -87,6 +88,7 @@ def build_walk_forward_report_data(result: Union[pd.DataFrame, dict[str, Any], N
     elif isinstance(result, dict):
         data["Stock"] = result.get("Stock", "N/A")
         data["Strategy"] = result.get("Strategy", "N/A")
+        data["Parameters"] = result.get("Parameters", {})
         df_raw = result.get("Results")
         if isinstance(df_raw, pd.DataFrame):
             df = df_raw.copy()
@@ -190,6 +192,15 @@ def export_walk_forward_report_markdown(result: Union[pd.DataFrame, dict[str, An
             lines.append(f"- {k}: {v}")
     lines.append("")
     
+    if data.get("Parameters"):
+        lines.append("## Parameters / Assumptions")
+        for section, params in data["Parameters"].items():
+            lines.append(f"### {section.capitalize()}")
+            for k, v in params.items():
+                if v is not None:
+                    lines.append(f"- {k}: {v}")
+        lines.append("")
+    
     lines.append("## Best Window")
     if data["Best Window"]:
         for k, v in data["Best Window"].items():
@@ -229,6 +240,13 @@ def export_walk_forward_report_excel(result: Union[pd.DataFrame, dict[str, Any],
     ]
     for k, v in data["Summary"].items():
         summary_rows.append({"Field": k, "Value": v})
+        
+    if data.get("Parameters"):
+        for section, params in data["Parameters"].items():
+            if isinstance(params, dict):
+                for k, v in params.items():
+                    if v is not None:
+                        summary_rows.append({"Field": f"Param ({section}): {k}", "Value": str(v)})
         
     summary_df = pd.DataFrame(summary_rows)
     

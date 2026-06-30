@@ -8,7 +8,7 @@ from tw_stock_tool.reports.walk_forward_report import (
     export_walk_forward_report_markdown,
     export_walk_forward_report_excel,
 )
-from tw_stock_tool.utils.config import DEFAULT_PERIOD
+from tw_stock_tool.utils.config import DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, TAX_RATE
 from tw_stock_tool.cli.parsers import parse_int_tuple
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -29,6 +29,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--score-buy", type=parse_int_tuple, help="Comma-separated integers")
     parser.add_argument("--score-sell", type=parse_int_tuple, help="Comma-separated integers, can be negative")
 
+    # Window parameters
+    parser.add_argument("--train-days", type=int, default=504, help="Number of training days per window")
+    parser.add_argument("--test-days", type=int, default=126, help="Number of test days per window")
+    parser.add_argument("--step-days", type=int, default=None, help="Number of days to step forward per window")
+    parser.add_argument("--sort-by", default="Train Sharpe Ratio", help="Metric to select best parameters")
+
+    # Backtest engine parameters
+    parser.add_argument("--initial-capital", type=float, default=INITIAL_CAPITAL)
+    parser.add_argument("--fee-rate", type=float, default=FEE_RATE)
+    parser.add_argument("--tax-rate", type=float, default=TAX_RATE)
+    parser.add_argument("--position-size", type=float, default=1.0)
+    parser.add_argument("--stop-loss-pct", type=float, default=None)
+    parser.add_argument("--take-profit-pct", type=float, default=None)
+    parser.add_argument("--max-hold-days", type=int, default=None)
+
     return parser.parse_args(argv)
 
 
@@ -42,6 +57,17 @@ def main() -> None:
             strategy=args.strategy,
             period=args.period,
             force_refresh=args.force_refresh,
+            train_days=args.train_days,
+            test_days=args.test_days,
+            step_days=args.step_days,
+            sort_by=args.sort_by,
+            initial_capital=args.initial_capital,
+            fee_rate=args.fee_rate,
+            tax_rate=args.tax_rate,
+            position_size=args.position_size,
+            stop_loss_pct=args.stop_loss_pct,
+            take_profit_pct=args.take_profit_pct,
+            max_hold_days=args.max_hold_days,
             ma_short_windows=args.ma_short_windows,
             ma_long_windows=args.ma_long_windows,
             rsi_buy_below=args.rsi_buy_below,
@@ -50,9 +76,40 @@ def main() -> None:
             score_sell=args.score_sell,
         )
         
+        strategy_params = {
+            "ma_short_windows": args.ma_short_windows,
+            "ma_long_windows": args.ma_long_windows,
+            "rsi_buy_below": args.rsi_buy_below,
+            "rsi_sell_above": args.rsi_sell_above,
+            "score_buy": args.score_buy,
+            "score_sell": args.score_sell,
+        }
+        
+        backtest_params = {
+            "initial_capital": args.initial_capital,
+            "fee_rate": args.fee_rate,
+            "tax_rate": args.tax_rate,
+            "position_size": args.position_size,
+            "stop_loss_pct": args.stop_loss_pct,
+            "take_profit_pct": args.take_profit_pct,
+            "max_hold_days": args.max_hold_days,
+        }
+        
+        window_params = {
+            "train_days": args.train_days,
+            "test_days": args.test_days,
+            "step_days": args.step_days,
+            "sort_by": args.sort_by,
+        }
+
         result_dict = {
             "Stock": args.stock,
             "Strategy": args.strategy,
+            "Parameters": {
+                "strategy": strategy_params,
+                "backtest": backtest_params,
+                "window": window_params,
+            },
             "Results": wf_df,
         }
         
