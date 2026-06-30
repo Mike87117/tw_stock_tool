@@ -357,14 +357,14 @@ class ParameterSweepTest(unittest.TestCase):
         )
 
         with patch.object(parameter_sweep, "analyze_stock", return_value=analysis):
-            with patch.object(parameter_sweep, "INITIAL_CAPITAL", 10000):
-                with patch.object(parameter_sweep, "FEE_RATE", 0):
-                    with patch.object(parameter_sweep, "TAX_RATE", 0):
-                        result = parameter_sweep.run_parameter_sweep(
-                            "2330",
-                            strategy="score",
-                            top=20,
-                        )
+            result = parameter_sweep.run_parameter_sweep(
+                "2330",
+                strategy="score",
+                top=20,
+                initial_capital=10000,
+                fee_rate=0,
+                tax_rate=0,
+            )
 
         target = result[result["Parameters"] == "buy_score=4, sell_score=-2"].iloc[0]
         # Score creates BUY on day 1 and SELL on day 3. run_backtest must
@@ -391,6 +391,31 @@ class ParameterSweepTest(unittest.TestCase):
                         strategy="score",
                         top=top,
                     )
+    def test_parameter_sweep_passes_engine_params(self) -> None:
+        with patch.object(parameter_sweep, "analyze_stock", return_value=_fake_analysis()):
+            with patch.object(parameter_sweep, "run_backtest", side_effect=_fake_backtest) as mock_run_backtest:
+                parameter_sweep.run_parameter_sweep(
+                    "2330",
+                    strategy="ma_cross",
+                    ma_short_windows=(2,),
+                    ma_long_windows=(5,),
+                    initial_capital=200000,
+                    fee_rate=0.001,
+                    tax_rate=0.002,
+                    position_size=0.5,
+                    stop_loss_pct=0.1,
+                    take_profit_pct=0.2,
+                    max_hold_days=10,
+                )
+                mock_run_backtest.assert_called_once()
+                kwargs = mock_run_backtest.call_args.kwargs
+                self.assertEqual(kwargs["initial_capital"], 200000)
+                self.assertEqual(kwargs["fee_rate"], 0.001)
+                self.assertEqual(kwargs["tax_rate"], 0.002)
+                self.assertEqual(kwargs["position_size"], 0.5)
+                self.assertEqual(kwargs["stop_loss_pct"], 0.1)
+                self.assertEqual(kwargs["take_profit_pct"], 0.2)
+                self.assertEqual(kwargs["max_hold_days"], 10)
 
 
 if __name__ == "__main__":

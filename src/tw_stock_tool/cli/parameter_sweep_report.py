@@ -7,7 +7,7 @@ from tw_stock_tool.reports.parameter_sweep_report import (
     export_parameter_sweep_report_markdown,
     export_parameter_sweep_report_excel,
 )
-from tw_stock_tool.utils.config import DEFAULT_PERIOD
+from tw_stock_tool.utils.config import DEFAULT_PERIOD, INITIAL_CAPITAL, FEE_RATE, TAX_RATE
 
 
 from tw_stock_tool.cli.parsers import parse_int_tuple
@@ -31,6 +31,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--score-buy", type=parse_int_tuple, help="Comma-separated integers")
     parser.add_argument("--score-sell", type=parse_int_tuple, help="Comma-separated integers, can be negative")
 
+    # Engine Parameters
+    parser.add_argument("--initial-capital", type=float, default=INITIAL_CAPITAL, help="Initial capital (default from config)")
+    parser.add_argument("--fee-rate", type=float, default=FEE_RATE, help="Fee rate (default from config)")
+    parser.add_argument("--tax-rate", type=float, default=TAX_RATE, help="Tax rate (default from config)")
+    parser.add_argument("--position-size", type=float, default=1.0, help="Position size (0 to 1.0, default 1.0)")
+    parser.add_argument("--stop-loss-pct", type=float, default=None, help="Stop loss percentage (e.g., 0.05 for 5%%)")
+    parser.add_argument("--take-profit-pct", type=float, default=None, help="Take profit percentage")
+    parser.add_argument("--max-hold-days", type=int, default=None, help="Maximum holding days")
+
     return parser.parse_args(argv)
 
 
@@ -50,11 +59,41 @@ def main() -> None:
             rsi_sell_above=args.rsi_sell_above,
             score_buy=args.score_buy,
             score_sell=args.score_sell,
+            initial_capital=args.initial_capital,
+            fee_rate=args.fee_rate,
+            tax_rate=args.tax_rate,
+            stop_loss_pct=args.stop_loss_pct,
+            take_profit_pct=args.take_profit_pct,
+            max_hold_days=args.max_hold_days,
+            position_size=args.position_size,
         )
+
+        strategy_params = {
+            "ma_short_windows": args.ma_short_windows,
+            "ma_long_windows": args.ma_long_windows,
+            "rsi_buy_below": args.rsi_buy_below,
+            "rsi_sell_above": args.rsi_sell_above,
+            "score_buy": args.score_buy,
+            "score_sell": args.score_sell,
+        }
+
+        backtest_params = {
+            "initial_capital": args.initial_capital,
+            "fee_rate": args.fee_rate,
+            "tax_rate": args.tax_rate,
+            "position_size": args.position_size,
+            "stop_loss_pct": args.stop_loss_pct,
+            "take_profit_pct": args.take_profit_pct,
+            "max_hold_days": args.max_hold_days,
+        }
 
         result_dict = {
             "Stock": args.stock,
             "Strategy": args.strategy,
+            "Parameters": {
+                "strategy": strategy_params,
+                "backtest": backtest_params,
+            },
             "Results": sweep_df,
         }
         

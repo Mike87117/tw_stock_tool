@@ -60,6 +60,20 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         self.assertEqual(args.rsi_buy_below, (20,))
         self.assertEqual(args.score_sell, (-5,))
 
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross",
+                             "--initial-capital", "200000", "--fee-rate", "0.001", "--tax-rate", "0.002",
+                             "--position-size", "0.5", "--stop-loss-pct", "0.1", "--take-profit-pct", "0.2",
+                             "--max-hold-days", "10"])
+    def test_argument_parsing_custom_engine_params(self):
+        args = _parse_args()
+        self.assertEqual(args.initial_capital, 200000.0)
+        self.assertEqual(args.fee_rate, 0.001)
+        self.assertEqual(args.tax_rate, 0.002)
+        self.assertEqual(args.position_size, 0.5)
+        self.assertEqual(args.stop_loss_pct, 0.1)
+        self.assertEqual(args.take_profit_pct, 0.2)
+        self.assertEqual(args.max_hold_days, 10)
+
     @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross", "--ma-short-windows", "5,a,20"])
     def test_argument_parsing_invalid_range_raises_error(self):
         with self.assertRaises(SystemExit) as cm:
@@ -146,6 +160,13 @@ class ParameterSweepReportCLITest(unittest.TestCase):
             rsi_sell_above=None,
             score_buy=None,
             score_sell=None,
+            initial_capital=100000,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
+            position_size=1.0,
         )
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
@@ -173,7 +194,14 @@ class ParameterSweepReportCLITest(unittest.TestCase):
             rsi_buy_below=None,
             rsi_sell_above=None,
             score_buy=None,
-            score_sell=(-2,)
+            score_sell=(-2,),
+            initial_capital=100000,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
+            position_size=1.0,
         )
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
@@ -240,6 +268,53 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         output_str = captured_output.getvalue()
         self.assertIn("Error:", output_str)
         self.assertIn("locked", output_str)
+
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross",
+                             "--initial-capital", "200000", "--fee-rate", "0.001", "--tax-rate", "0.002",
+                             "--position-size", "0.5", "--stop-loss-pct", "0.1", "--take-profit-pct", "0.2",
+                             "--max-hold-days", "10", "--output-md"])
+    def test_run_sweep_called_with_custom_engine_params_and_metadata_passed_to_export(self, mock_export_md, mock_run_sweep):
+        mock_run_sweep.return_value = self.mock_sweep_df
+        main()
+        mock_run_sweep.assert_called_once()
+        kwargs = mock_run_sweep.call_args.kwargs
+        self.assertEqual(kwargs["initial_capital"], 200000.0)
+        self.assertEqual(kwargs["fee_rate"], 0.001)
+        self.assertEqual(kwargs["tax_rate"], 0.002)
+        self.assertEqual(kwargs["position_size"], 0.5)
+        self.assertEqual(kwargs["stop_loss_pct"], 0.1)
+        self.assertEqual(kwargs["take_profit_pct"], 0.2)
+        self.assertEqual(kwargs["max_hold_days"], 10)
+        mock_export_md.assert_called_once()
+        result_dict = mock_export_md.call_args.args[0]
+        self.assertIn("Parameters", result_dict)
+        self.assertIn("strategy", result_dict["Parameters"])
+        self.assertIn("backtest", result_dict["Parameters"])
+        self.assertEqual(result_dict["Parameters"]["backtest"]["initial_capital"], 200000.0)
+        self.assertEqual(result_dict["Parameters"]["backtest"]["fee_rate"], 0.001)
+        self.assertEqual(result_dict["Parameters"]["backtest"]["position_size"], 0.5)
+
+    def test_build_parameter_sweep_report_data_preserves_nested_metadata(self):
+        from src.tw_stock_tool.reports.parameter_sweep_report import build_parameter_sweep_report_data
+        input_dict = {
+            "Stock": "2330",
+            "Strategy": "ma_cross",
+            "Parameters": {
+                "strategy": {"ma_short_windows": (5,)},
+                "backtest": {"fee_rate": 0.001425}
+            },
+            "Results": self.mock_sweep_df,
+        }
+        data = build_parameter_sweep_report_data(input_dict)
+        self.assertEqual(data["Parameters"]["strategy"]["ma_short_windows"], (5,))
+        self.assertEqual(data["Parameters"]["backtest"]["fee_rate"], 0.001425)
+
+    def test_build_parameter_sweep_report_data_old_input_compatibility(self):
+        from src.tw_stock_tool.reports.parameter_sweep_report import build_parameter_sweep_report_data
+        data = build_parameter_sweep_report_data(self.mock_sweep_df)
+        self.assertEqual(data["Parameters"], {})
 
 if __name__ == "__main__":
     unittest.main()
