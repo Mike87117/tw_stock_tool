@@ -16,6 +16,7 @@ from tw_stock_tool.backtesting import strategy_compare
 from tw_stock_tool.cli import main as analyze_cli
 from tw_stock_tool.cli import benchmark
 from tw_stock_tool.cli import backtest_report
+from tw_stock_tool.cli import walk_forward_report
 from tw_stock_tool.ml import ai_stock_scanner
 from tw_stock_tool.cli import clean_stocks
 from tw_stock_tool.cli import daily_report_cli
@@ -105,6 +106,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     backtest_report_parser = subparsers.add_parser("backtest-report", help="Run backtest report")
     backtest_report_parser.set_defaults(handler=lambda args: _dispatch_existing_main(backtest_report.main, "backtest_report.py", args.args))
+
+    walk_forward_parser = subparsers.add_parser("walk-forward", help="Run walk forward report")
+    walk_forward_parser.set_defaults(
+        handler=lambda args: _dispatch_existing_main(
+            walk_forward_report.main,
+            "walk_forward_report.py",
+            args.args,
+        )
+    )
 
     args, passthrough_args = parser.parse_known_args(argv)
     args.args = passthrough_args
