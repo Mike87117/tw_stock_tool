@@ -135,6 +135,9 @@ Broker Interface
 - Phase 13.3：完成 (Backtest Report CLI Parameter Exposure Audit)
 - Phase 13.4：完成 (Backtest Report CLI Parameter Exposure Patch)
   - Exposed RSI, Score, and engine parameters in `backtest_report.py`.
+- Phase 13.5：完成 (Backtest Report Unified CLI Exposure Audit)
+- Phase 13.6：完成 (Backtest Report Unified CLI Exposure Patch)
+  - Added `twstock backtest-report` through unified CLI.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。

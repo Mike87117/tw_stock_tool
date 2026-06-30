@@ -167,6 +167,18 @@ class TwStockCliTest(unittest.TestCase):
         mocked.assert_called_once_with()
         self.assertEqual(captured[0], ["parameter_sweep.py", "--stock", "2330", "--period", "2y"])
 
+    def test_backtest_report_subcommand_dispatches_to_backtest_report(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.backtest_report, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main(["backtest-report", "--stock", "2330", "--strategy", "ma_cross"])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], ["backtest_report.py", "--stock", "2330", "--strategy", "ma_cross"])
+
     def test_unknown_subcommand_shows_error(self) -> None:
         with redirect_stderr(StringIO()):
             with self.assertRaises(SystemExit) as ctx:
@@ -194,6 +206,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("analyze", output)
         self.assertIn("strategy-compare", output)
         self.assertIn("parameter-sweep", output)
+        self.assertIn("backtest-report", output)
 
     def test_stock_list_help_exits_successfully(self) -> None:
         out = StringIO()
@@ -276,6 +289,15 @@ class TwStockCliTest(unittest.TestCase):
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
                 twstock_cli.main(["parameter-sweep", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
+
+    def test_backtest_report_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["backtest-report", "--help"])
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())
