@@ -115,7 +115,7 @@ python doctor.py --live
 | twstock：單股分析 | `twstock analyze --stock 2330 --period 2y` |
 | twstock：策略比較 | `twstock strategy-compare --stock 2330 --period 2y` |
 | twstock：產生歷史回測報告 | `twstock backtest-report --stock 2330 --strategy ma_cross --output-excel` |
-| twstock：Parameter Sweep | `twstock parameter-sweep --stock 2330 --period 2y` |
+| twstock：Parameter Sweep | `twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel` |
 | twstock：Walk Forward | `twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel` |
 | twstock：檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
 | twstock：Benchmark | `twstock benchmark --file stocks.txt --workers 8 --repeat 3` |
@@ -154,7 +154,7 @@ twstock doctor
 twstock analyze --stock 2330 --period 2y
 twstock strategy-compare --stock 2330 --period 2y
 twstock backtest-report --stock 2330 --strategy ma_cross --output-excel
-twstock parameter-sweep --stock 2330 --period 2y
+twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel
 twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
 twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md

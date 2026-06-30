@@ -144,6 +144,9 @@ Broker Interface
 - Phase 14.4：完成 (Walk Forward Engine Params & Metadata Patch)
 - Phase 14.5：完成 (Walk Forward Unified CLI Exposure Audit)
 - Phase 14.6：完成 (Walk Forward Unified CLI Exposure Patch)
+- Phase 14.7：完成 (Parameter Sweep Unified CLI Dispatch Alignment Audit)
+- Phase 14.8：完成 (Parameter Sweep Unified CLI Dispatch Alignment Patch)
+  - Aligned `twstock parameter-sweep` dispatch with the report-facing `cli.parameter_sweep_report.main`.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。

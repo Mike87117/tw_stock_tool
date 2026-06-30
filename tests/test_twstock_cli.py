@@ -155,17 +155,17 @@ class TwStockCliTest(unittest.TestCase):
         mocked.assert_called_once_with()
         self.assertEqual(captured[0], ["strategy_compare.py", "--stock", "2330", "--period", "2y"])
 
-    def test_parameter_sweep_subcommand_dispatches_to_parameter_sweep(self) -> None:
+    def test_parameter_sweep_subcommand_dispatches_to_parameter_sweep_report(self) -> None:
         captured: list[list[str]] = []
 
         def fake_main() -> None:
             captured.append(sys.argv[:])
 
-        with patch.object(twstock_cli.parameter_sweep, "main", side_effect=fake_main) as mocked:
-            twstock_cli.main(["parameter-sweep", "--stock", "2330", "--period", "2y"])
+        with patch.object(twstock_cli.parameter_sweep_report, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main(["parameter-sweep", "--stock", "2330", "--period", "2y", "--strategy", "all"])
 
         mocked.assert_called_once_with()
-        self.assertEqual(captured[0], ["parameter_sweep.py", "--stock", "2330", "--period", "2y"])
+        self.assertEqual(captured[0], ["parameter_sweep_report.py", "--stock", "2330", "--period", "2y", "--strategy", "all"])
 
     def test_backtest_report_subcommand_dispatches_to_backtest_report(self) -> None:
         captured: list[list[str]] = []
