@@ -50,7 +50,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main() -> None:
     try:
         args = _parse_args()
-        
+
         print(f"Running walk forward for {args.stock} (strategy={args.strategy}, period={args.period})...")
         wf_df = run_walk_forward(
             stock_id=args.stock,
@@ -75,7 +75,7 @@ def main() -> None:
             score_buy=args.score_buy,
             score_sell=args.score_sell,
         )
-        
+
         strategy_params = {
             "ma_short_windows": args.ma_short_windows,
             "ma_long_windows": args.ma_long_windows,
@@ -84,7 +84,7 @@ def main() -> None:
             "score_buy": args.score_buy,
             "score_sell": args.score_sell,
         }
-        
+
         backtest_params = {
             "initial_capital": args.initial_capital,
             "fee_rate": args.fee_rate,
@@ -94,7 +94,7 @@ def main() -> None:
             "take_profit_pct": args.take_profit_pct,
             "max_hold_days": args.max_hold_days,
         }
-        
+
         window_params = {
             "train_days": args.train_days,
             "test_days": args.test_days,
@@ -112,19 +112,19 @@ def main() -> None:
             },
             "Results": wf_df,
         }
-        
+
         out_dir = Path(args.output_dir)
-        
+
         if args.output_excel is not None:
             excel_output = args.output_excel or str(out_dir / "walk_forward_report.xlsx")
             excel_path = export_walk_forward_report_excel(result_dict, excel_output)
             print(f"Excel report: {excel_path}")
-            
+
         if args.output_md is not None:
             md_output = args.output_md or str(out_dir / "walk_forward_report.md")
             md_path = export_walk_forward_report_markdown(result_dict, md_output)
             print(f"Markdown report: {md_path}")
-            
+
         if args.output_excel is None and args.output_md is None:
             print("Walk forward finished. Summary:")
             print(f"  Total Windows Evaluated: {len(wf_df)}")
@@ -136,7 +136,7 @@ def main() -> None:
                     print(f"  Best Parameters: {best_window.get('Parameters', 'N/A')}")
                     print(f"  Best Test Total Return: {best_window.get('Test Total Return %', 0)}%")
                     print(f"  Best Test Sharpe Ratio: {best_window.get('Test Sharpe Ratio', 'N/A')}")
-            
+
     except Exception as exc:
         print(f"Error: {exc}")
         raise SystemExit(1) from exc
