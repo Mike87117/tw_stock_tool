@@ -179,6 +179,32 @@ class TwStockCliTest(unittest.TestCase):
         mocked.assert_called_once_with()
         self.assertEqual(captured[0], ["backtest_report.py", "--stock", "2330", "--strategy", "ma_cross"])
 
+    def test_walk_forward_subcommand_dispatches_to_walk_forward_report(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.walk_forward_report, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main([
+                "walk-forward",
+                "--stock", "2330",
+                "--strategy", "ma_cross",
+                "--train-days", "252",
+                "--test-days", "63",
+                "--output-md",
+            ])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], [
+            "walk_forward_report.py",
+            "--stock", "2330",
+            "--strategy", "ma_cross",
+            "--train-days", "252",
+            "--test-days", "63",
+            "--output-md",
+        ])
+
     def test_unknown_subcommand_shows_error(self) -> None:
         with redirect_stderr(StringIO()):
             with self.assertRaises(SystemExit) as ctx:
@@ -207,6 +233,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("strategy-compare", output)
         self.assertIn("parameter-sweep", output)
         self.assertIn("backtest-report", output)
+        self.assertIn("walk-forward", output)
 
     def test_stock_list_help_exits_successfully(self) -> None:
         out = StringIO()
@@ -298,6 +325,15 @@ class TwStockCliTest(unittest.TestCase):
         with redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
                 twstock_cli.main(["backtest-report", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("usage:", out.getvalue())
+
+    def test_walk_forward_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["walk-forward", "--help"])
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())
