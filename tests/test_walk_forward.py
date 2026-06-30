@@ -275,15 +275,18 @@ class WalkForwardTest(unittest.TestCase):
         )
 
         self.assertTrue(mock_run_backtest.called)
-        # Check the last call to ensure parameters were passed
-        _, kwargs = mock_run_backtest.call_args
-        self.assertEqual(kwargs["initial_capital"], 99999.0)
-        self.assertEqual(kwargs["fee_rate"], 0.01)
-        self.assertEqual(kwargs["tax_rate"], 0.02)
-        self.assertEqual(kwargs["position_size"], 0.5)
-        self.assertEqual(kwargs["stop_loss_pct"], 0.05)
-        self.assertEqual(kwargs["take_profit_pct"], 0.1)
-        self.assertEqual(kwargs["max_hold_days"], 10)
+        self.assertGreaterEqual(len(mock_run_backtest.call_args_list), 2)
+
+        # Check every call to ensure train and test backtests received the same engine parameters
+        for call_args in mock_run_backtest.call_args_list:
+            _, kwargs = call_args
+            self.assertEqual(kwargs["initial_capital"], 99999.0)
+            self.assertEqual(kwargs["fee_rate"], 0.01)
+            self.assertEqual(kwargs["tax_rate"], 0.02)
+            self.assertEqual(kwargs["position_size"], 0.5)
+            self.assertEqual(kwargs["stop_loss_pct"], 0.05)
+            self.assertEqual(kwargs["take_profit_pct"], 0.1)
+            self.assertEqual(kwargs["max_hold_days"], 10)
 
     def test_export_excel_contains_required_sheets(self) -> None:
         detail = pd.DataFrame(

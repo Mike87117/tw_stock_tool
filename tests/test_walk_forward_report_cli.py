@@ -257,6 +257,50 @@ class WalkForwardReportCliTest(unittest.TestCase):
         self.assertEqual(result_dict["Parameters"]["window"]["train_days"], 504)
         self.assertEqual(result_dict["Parameters"]["window"]["test_days"], 126)
 
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_markdown")
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_excel")
+    @mock.patch("sys.argv", [
+        "walk_forward_report.py", "--stock", "2330", "--strategy", "ma_cross",
+        "--train-days", "252", "--test-days", "63", "--step-days", "21", "--sort-by", "Train Total Return %",
+        "--initial-capital", "200000", "--fee-rate", "0.001", "--tax-rate", "0.002",
+        "--position-size", "0.5", "--stop-loss-pct", "0.1", "--take-profit-pct", "0.2", "--max-hold-days", "10",
+        "--output-md"
+    ])
+    def test_nested_metadata_custom_values(self, mock_export_excel, mock_export_md, mock_run_wf):
+        mock_run_wf.return_value = self.mock_wf_df
+        main()
+
+        # Verify run_walk_forward received the custom values
+        _, kwargs = mock_run_wf.call_args
+        self.assertEqual(kwargs["train_days"], 252)
+        self.assertEqual(kwargs["test_days"], 63)
+        self.assertEqual(kwargs["step_days"], 21)
+        self.assertEqual(kwargs["sort_by"], "Train Total Return %")
+        self.assertEqual(kwargs["initial_capital"], 200000.0)
+        self.assertEqual(kwargs["fee_rate"], 0.001)
+        self.assertEqual(kwargs["tax_rate"], 0.002)
+        self.assertEqual(kwargs["position_size"], 0.5)
+        self.assertEqual(kwargs["stop_loss_pct"], 0.1)
+        self.assertEqual(kwargs["take_profit_pct"], 0.2)
+        self.assertEqual(kwargs["max_hold_days"], 10)
+
+        # Verify export received nested metadata with custom values
+        result_dict = mock_export_md.call_args[0][0]
+
+        self.assertIn("strategy", result_dict["Parameters"])
+        self.assertIn("backtest", result_dict["Parameters"])
+        self.assertIn("window", result_dict["Parameters"])
+
+        self.assertEqual(result_dict["Parameters"]["backtest"]["initial_capital"], 200000.0)
+        self.assertEqual(result_dict["Parameters"]["backtest"]["fee_rate"], 0.001)
+        self.assertEqual(result_dict["Parameters"]["backtest"]["position_size"], 0.5)
+
+        self.assertEqual(result_dict["Parameters"]["window"]["train_days"], 252)
+        self.assertEqual(result_dict["Parameters"]["window"]["test_days"], 63)
+        self.assertEqual(result_dict["Parameters"]["window"]["step_days"], 21)
+        self.assertEqual(result_dict["Parameters"]["window"]["sort_by"], "Train Total Return %")
+
     def test_build_report_data_preserves_metadata(self):
         from src.tw_stock_tool.reports.walk_forward_report import build_walk_forward_report_data
 
