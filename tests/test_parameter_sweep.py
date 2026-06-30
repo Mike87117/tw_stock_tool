@@ -357,14 +357,14 @@ class ParameterSweepTest(unittest.TestCase):
         )
 
         with patch.object(parameter_sweep, "analyze_stock", return_value=analysis):
-            with patch.object(parameter_sweep, "INITIAL_CAPITAL", 10000):
-                with patch.object(parameter_sweep, "FEE_RATE", 0):
-                    with patch.object(parameter_sweep, "TAX_RATE", 0):
-                        result = parameter_sweep.run_parameter_sweep(
-                            "2330",
-                            strategy="score",
-                            top=20,
-                        )
+            result = parameter_sweep.run_parameter_sweep(
+                "2330",
+                strategy="score",
+                top=20,
+                initial_capital=10000,
+                fee_rate=0,
+                tax_rate=0,
+            )
 
         target = result[result["Parameters"] == "buy_score=4, sell_score=-2"].iloc[0]
         # Score creates BUY on day 1 and SELL on day 3. run_backtest must

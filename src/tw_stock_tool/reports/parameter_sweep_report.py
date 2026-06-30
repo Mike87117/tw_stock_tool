@@ -54,6 +54,7 @@ def build_parameter_sweep_report_data(result: Union[pd.DataFrame, dict[str, Any]
     data: dict[str, Any] = {
         "Stock": "N/A",
         "Strategy": "N/A",
+        "Parameters": {},
         "Generated At": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Parameter Columns": [],
         "Metric Columns": [],
@@ -74,6 +75,7 @@ def build_parameter_sweep_report_data(result: Union[pd.DataFrame, dict[str, Any]
     elif isinstance(result, dict):
         data["Stock"] = result.get("Stock", "N/A")
         data["Strategy"] = result.get("Strategy", "N/A")
+        data["Parameters"] = result.get("Parameters", {})
         df_raw = result.get("Results")
         if isinstance(df_raw, pd.DataFrame):
             df = df_raw.copy()
@@ -155,6 +157,14 @@ def export_parameter_sweep_report_markdown(result: Union[pd.DataFrame, dict[str,
         ""
     ])
     
+    if data.get("Parameters"):
+        lines.append("## Parameters / Assumptions")
+        for section, params in data["Parameters"].items():
+            lines.append(f"### {section.capitalize()}")
+            for k, v in params.items():
+                if v is not None:
+                    lines.append(f"- {k}: {v}")
+        lines.append("")
     lines.append("## Best Result")
     if data["Best Row"]:
         for k, v in data["Best Row"].items():
@@ -206,6 +216,13 @@ def export_parameter_sweep_report_excel(result: Union[pd.DataFrame, dict[str, An
             ", ".join(data["Metric Columns"]) if data["Metric Columns"] else "N/A",
         ]
     }
+    if data.get("Parameters"):
+        for section, params in data["Parameters"].items():
+            if isinstance(params, dict):
+                for k, v in params.items():
+                    if v is not None:
+                        summary_data["Field"].append(f"Param ({section}): {k}")
+                        summary_data["Value"].append(str(v))
     summary_df = pd.DataFrame(summary_data)
     
     notes_df = pd.DataFrame({"Notes": data["Notes"]})

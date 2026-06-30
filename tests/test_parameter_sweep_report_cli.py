@@ -146,6 +146,13 @@ class ParameterSweepReportCLITest(unittest.TestCase):
             rsi_sell_above=None,
             score_buy=None,
             score_sell=None,
+            initial_capital=100000,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
+            position_size=1.0,
         )
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
@@ -173,7 +180,14 @@ class ParameterSweepReportCLITest(unittest.TestCase):
             rsi_buy_below=None,
             rsi_sell_above=None,
             score_buy=None,
-            score_sell=(-2,)
+            score_sell=(-2,),
+            initial_capital=100000,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
+            position_size=1.0,
         )
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")

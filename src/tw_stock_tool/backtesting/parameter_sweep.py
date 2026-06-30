@@ -178,6 +178,9 @@ def run_parameter_sweep(
     sort_by: str = "Total Return %",
     top: int = 20,
     force_refresh: bool = False,
+    initial_capital: float = INITIAL_CAPITAL,
+    fee_rate: float = FEE_RATE,
+    tax_rate: float = TAX_RATE,
     stop_loss_pct: float | None = None,
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
@@ -217,9 +220,9 @@ def run_parameter_sweep(
             strategy_df = strategy_df.dropna(subset=["Close", "Signal"])
             result = run_backtest(
                 strategy_df,
-                initial_capital=INITIAL_CAPITAL,
-                fee_rate=FEE_RATE,
-                tax_rate=TAX_RATE,
+                initial_capital=initial_capital,
+                fee_rate=fee_rate,
+                tax_rate=tax_rate,
                 stop_loss_pct=stop_loss_pct,
                 take_profit_pct=take_profit_pct,
                 max_hold_days=max_hold_days,
