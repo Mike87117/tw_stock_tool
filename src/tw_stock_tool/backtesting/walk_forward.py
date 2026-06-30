@@ -202,14 +202,17 @@ def _run_strategy_backtest(
     take_profit_pct: float | None,
     max_hold_days: int | None,
     position_size: float,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
 ) -> dict[str, Any]:
     strategy_df = _build_strategy_df(strategy, df, params)
     strategy_df = strategy_df.dropna(subset=["Close", "Signal"])
     return run_backtest(
         strategy_df,
-        initial_capital=INITIAL_CAPITAL,
-        fee_rate=FEE_RATE,
-        tax_rate=TAX_RATE,
+        initial_capital=initial_capital,
+        fee_rate=fee_rate,
+        tax_rate=tax_rate,
         stop_loss_pct=stop_loss_pct,
         take_profit_pct=take_profit_pct,
         max_hold_days=max_hold_days,
@@ -300,6 +303,9 @@ def _evaluate_window_strategy(
     take_profit_pct: float | None,
     max_hold_days: int | None,
     position_size: float,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
     ma_short_windows: tuple[int, ...] | None = None,
     ma_long_windows: tuple[int, ...] | None = None,
     rsi_buy_below: tuple[int, ...] | None = None,
@@ -332,6 +338,9 @@ def _evaluate_window_strategy(
                 take_profit_pct,
                 max_hold_days,
                 position_size,
+                initial_capital,
+                fee_rate,
+                tax_rate,
             )
             metric_value = _sort_metric(train_result, sort_by)
             if metric_value > best_value:
@@ -353,6 +362,9 @@ def _evaluate_window_strategy(
         take_profit_pct,
         max_hold_days,
         position_size,
+        initial_capital,
+        fee_rate,
+        tax_rate,
     )
     return _result_row(
         window_number,
@@ -378,6 +390,9 @@ def run_walk_forward(
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
     position_size: float = 1.0,
+    initial_capital: float = INITIAL_CAPITAL,
+    fee_rate: float = FEE_RATE,
+    tax_rate: float = TAX_RATE,
     ma_short_windows: tuple[int, ...] | None = None,
     ma_long_windows: tuple[int, ...] | None = None,
     rsi_buy_below: tuple[int, ...] | None = None,
@@ -421,6 +436,9 @@ def run_walk_forward(
                         take_profit_pct=take_profit_pct,
                         max_hold_days=max_hold_days,
                         position_size=position_size,
+                        initial_capital=initial_capital,
+                        fee_rate=fee_rate,
+                        tax_rate=tax_rate,
                         ma_short_windows=ma_short_windows,
                         ma_long_windows=ma_long_windows,
                         rsi_buy_below=rsi_buy_below,
