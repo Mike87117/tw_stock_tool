@@ -1,9 +1,10 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = BASE_DIR / "output"
-CACHE_DIR = BASE_DIR / "cache"
 
+OUTPUT_DIR = Path(os.environ.get("TW_STOCK_TOOL_OUTPUT_DIR", Path.cwd() / "output"))
+CACHE_DIR = Path(os.environ.get("TW_STOCK_TOOL_CACHE_DIR", Path.cwd() / "cache"))
 VALID_PERIODS = {
     "1d",
     "5d",

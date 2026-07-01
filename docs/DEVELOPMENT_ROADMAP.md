@@ -159,6 +159,10 @@ Broker Interface
 - Phase 16.1：完成 (Release Candidate / User Workflow Audit)
 - Phase 16.2：完成 (README CLI UX Standardization Patch)
   - Standardized README to consistently recommend the unified `twstock` CLI for user workflows, reserving root wrapper usage for backward compatibility.
+- Phase 16.3：完成 (Runtime Output/Cache Path Policy Audit)
+- Phase 16.4：完成 (Runtime Output/Cache Path Policy Patch)
+  - Changed default `OUTPUT_DIR` and `CACHE_DIR` to use `Path.cwd()` to prevent writing to site-packages after installation.
+  - Added support for `TW_STOCK_TOOL_OUTPUT_DIR` and `TW_STOCK_TOOL_CACHE_DIR` environment variables to globally override paths.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。
