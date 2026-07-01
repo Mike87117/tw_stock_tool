@@ -151,6 +151,10 @@ Broker Interface
 - Phase 15.1：完成 (Release Readiness / Next Scope Audit)
 - Phase 15.2：完成 (Root Wrapper Alignment Patch)
   - Updated legacy root wrappers `parameter_sweep.py` and `walk_forward.py` to point to the modern CLI layer.
+- Phase 15.3：完成 (Root Wrapper Alignment Closeout Audit)
+- Phase 15.4：完成 (Root Entrypoint Redundancy / Deprecation Audit)
+- Phase 15.5：完成 (Root Entrypoint Policy Documentation Patch)
+  - Documented Root Entrypoint Policy: preserving both legacy and modern Report root wrappers as stable entrypoints for backwards compatibility, while retaining pure report CLI dispatch for the unified CLI.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。

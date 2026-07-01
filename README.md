@@ -1693,6 +1693,36 @@ python -m unittest discover -s tests
 - `walk_forward.py` 視窗切分、策略驗證、錯誤處理與 Excel 輸出
 - `twstock daily` Summary、候選股篩選、排序、錯誤處理與 Markdown 輸出
 
+## 根目錄進入點政策 (Root Entrypoint Policy)
+
+為確保向下相容並簡化執行流程，專案保留了多個根目錄（root）的腳本作為進入點（entrypoints）。這些腳本主要做為現代 CLI 模組的橋樑：
+
+1. **保留的 Report Wrappers：**
+   - `backtest_report.py`
+   - `parameter_sweep_report.py`
+   - `walk_forward_report.py`
+   這些檔案仍作為支援的相容性進入點。
+
+2. **對齊的 Legacy Root Wrappers：**
+   - `parameter_sweep.py`
+   - `walk_forward.py`
+   這些檔案直接將執行（Direct execution）導向現代的 Report CLI。
+
+3. **直接執行行為（Direct Execution Behavior）：**
+   - 執行 `python parameter_sweep.py ...` 會使用現代的 Parameter Sweep Report CLI。
+   - 執行 `python walk_forward.py ...` 會使用現代的 Walk Forward Report CLI。
+   - `python parameter_sweep_report.py ...` 與 `python walk_forward_report.py ...` 仍為支援的相容進入點。
+   - `python backtest_report.py ...` 仍為支援的 Report CLI 進入點。
+
+4. **Import 相容性：**
+   - `import parameter_sweep` 仍相容並對應於 `tw_stock_tool.backtesting.parameter_sweep`。
+   - `import walk_forward` 仍相容並對應於 `tw_stock_tool.backtesting.walk_forward`。
+
+5. **統一 CLI 政策（Unified CLI Policy）：**
+   - `twstock parameter-sweep` 會直接導向 `tw_stock_tool.cli.parameter_sweep_report.main`。
+   - `twstock walk-forward` 會直接導向 `tw_stock_tool.cli.walk_forward_report.main`。
+   - 統一的 CLI **不會**透過根目錄 wrapper 檔案進行路由，而是直接呼叫內部套件。
+
 ## 專案結構
 
 ```text
