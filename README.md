@@ -373,9 +373,10 @@ twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-exce
 如果想研究 baseline AI / ML 結果，可以再執行：
 
 ```bash
-python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output
 twstock ai-scan --auto-stock-list --stock-limit 20 --output
 ```
+
+*(註：單股的 AI 預測報告 `ai_prediction_report.py` 仍可透過相容性直接腳本執行使用。)*
 
 提醒：
 
