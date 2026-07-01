@@ -90,8 +90,8 @@ python doctor.py --live
 | 每日候選股票報告 | `twstock daily --file stocks.txt --output-md --output-excel` |
 | 自動更新後每日候選股票報告 | `twstock daily --auto-stock-list --output-md --output-excel` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
-| Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
-| Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
+| Parameter Sweep | `python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel` |
+| Walk Forward Test | `python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-excel` |
 | 建立 ML Dataset | `python ml_dataset.py --stock 2330 --period 5y --horizon 5 --output` |
 | AI Walk Forward skeleton | `python ai_walk_forward.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | Baseline ML model | `python baseline_ml_model.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
@@ -360,7 +360,7 @@ python main.py --stock 2330 --period 2y --export-excel --save-chart
 
 ```bash
 python strategy_compare.py --stock 2330 --period 2y
-python walk_forward.py --stock 2330 --period 10y --output
+python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-excel
 ```
 
 說明：
@@ -475,7 +475,7 @@ python strategy_compare.py --stock 2330 --period 2y
 使用：
 
 ```bash
-python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --strategy all --period 2y
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 ```
 
@@ -498,7 +498,7 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 使用：
 
 ```bash
-python walk_forward.py --stock 2330 --period 10y
+python walk_forward.py --stock 2330 --strategy ma_cross --period 10y
 ```
 
 流程：
@@ -817,14 +817,11 @@ python strategy_compare.py --stock 2330 --period 2y --output-excel
 `parameter_sweep.py` 會自動測試多組策略參數，並用歷史回測結果比較不同參數組合的表現。
 
 ```bash
-python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --strategy all --period 2y
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
 python parameter_sweep.py --stock 2330 --period 2y --strategy score
-python parameter_sweep.py --stock 2330 --period 2y --top 10
-python parameter_sweep.py --stock 2330 --period 2y --output
-python parameter_sweep.py --stock 2330 --period 2y --output-excel
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
+python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel output/2330_ma_sweep.xlsx
 ```
 
@@ -845,24 +842,12 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-
 
 - `--stock`: 股票代號，必填
 - `--period`: 分析期間，預設 `DEFAULT_PERIOD`
-- `--strategy`: `all`、`ma_cross`、`rsi`、`score`，預設 `all`
-- `--sort-by`: 排序欄位，預設 `Total Return %`，僅支援下列數值欄位：
-  - `Total Return %`
-  - `Buy and Hold Return %`
-  - `CAGR %`
-  - `Trade Count`
-  - `Win Rate %`
-  - `Max Drawdown %`
-  - `Profit Factor`
-  - `Sharpe Ratio`
-  - `Sortino Ratio`
-- `--top`: 顯示前 N 筆，預設 `20`
-  - `--top <= 0` 時會顯示全部結果
+- `--strategy`: `all`、`ma_cross`、`rsi`、`score`，必填
 - `--force-refresh`: 忽略快取重新下載
-- `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
-- `--output-excel`: 輸出 Excel，省略路徑時使用 `output/{stock}_parameter_sweep.xlsx`
-- `--stop-loss`: 停損百分比
-- `--take-profit`: 停利百分比
+- `--output-md`: 輸出 Markdown 報告
+- `--output-excel`: 輸出 Excel 報告
+- `--stop-loss-pct`: 停損百分比
+- `--take-profit-pct`: 停利百分比
 - `--max-hold-days`: 最大持有天數
 - `--position-size`: 每次投入資金比例，需符合 `0 < value <= 1`
 
@@ -996,28 +981,29 @@ python parameter_sweep_report.py --stock 2330 --strategy all --ma-short-windows 
 CLI 範例：
 
 ```bash
-python walk_forward.py --stock 2330 --period 5y
+python walk_forward.py --stock 2330 --strategy all --period 5y
 python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
 python walk_forward.py --stock 2330 --period 10y --strategy rsi
 python walk_forward.py --stock 2330 --period 10y --strategy score
-python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
-python walk_forward.py --stock 2330 --period 10y --output
-python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
+python walk_forward.py --stock 2330 --strategy all --period 10y --train-days 504 --test-days 126
+python walk_forward.py --stock 2330 --strategy all --period 10y --output-excel
+python walk_forward.py --stock 2330 --strategy all --period 10y --output-excel output/2330_walk_forward.xlsx
 ```
 
 參數說明：
 
 - `--stock`：股票代號，必填
 - `--period`：分析期間，預設 `DEFAULT_PERIOD`
-- `--strategy`：`all`、`ma_cross`、`rsi`、`score`，預設 `all`
+- `--strategy`：`all`、`ma_cross`、`rsi`、`score`，必填
 - `--train-days`：訓練區間交易日數，預設 `504`
 - `--test-days`：驗證區間交易日數，預設 `126`
 - `--step-days`：每次視窗往後移動的交易日數，預設等於 `test-days`
 - `--sort-by`：train 區間選最佳參數用的欄位，預設 `Train Sharpe Ratio`
 - `--force-refresh`：忽略快取重新下載
-- `--output`：輸出 Excel，省略路徑時使用 `output/{stock}_walk_forward.xlsx`
-- `--stop-loss`：停損百分比
-- `--take-profit`：停利百分比
+- `--output-md`：輸出 Markdown 報告
+- `--output-excel`：輸出 Excel 報告
+- `--stop-loss-pct`：停損百分比
+- `--take-profit-pct`：停利百分比
 - `--max-hold-days`：最大持有天數
 - `--position-size`：每次投入資金比例，需符合 `0 < value <= 1`
 
@@ -1218,9 +1204,10 @@ python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --out
 | `clean_stocks.py` | 有效股票清單 | `output/stocks_clean.txt` | 使用 `--write-clean-file`；只包含可正常取得資料的股票。 |
 | `twstock daily` | 每日候選清單報告 | `output/daily_report.md`, `output/daily_report.xlsx` | 使用 `--output-md`、`--output-excel` 或 `--output-dir`；也可指定自訂路徑。 |
 | `strategy_compare.py` | 策略比較 Excel | `output/{stock}_strategy_compare.xlsx` | 優先使用 `--output-excel`（舊版 `--output` 仍可作為相容別名）；也可指定自訂路徑。 |
-| `parameter_sweep.py` | Parameter Sweep CSV | `output/{stock}_parameter_sweep.csv` | 使用 `--output`；也可指定自訂路徑。 |
+| `parameter_sweep.py` | Parameter Sweep Markdown | `output/{stock}_parameter_sweep.md` | 使用 `--output-md`；也可指定自訂路徑。 |
 | `parameter_sweep.py` | Parameter Sweep Excel | `output/{stock}_parameter_sweep.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
-| `walk_forward.py` | Walk Forward Excel | `output/{stock}_walk_forward.xlsx` | 使用 `--output`；也可指定自訂路徑。 |
+| `walk_forward.py` | Walk Forward Markdown | `output/{stock}_walk_forward.md` | 使用 `--output-md`；也可指定自訂路徑。 |
+| `walk_forward.py` | Walk Forward Excel | `output/{stock}_walk_forward.xlsx` | 使用 `--output-excel`；也可指定自訂路徑。 |
 | `benchmark.py` | Benchmark 統計結果 | `output/benchmark/benchmark_summary.csv`<br>`output/benchmark/benchmark_detail.csv`<br>`output/benchmark/benchmark_errors.csv` | 使用 `--output` 時建立；可指定自訂資料夾或檔名前綴。 |
 | `cache/` | 快取資料 | `cache/{symbol}_{period}_{interval}_adjusted-{auto_adjust}.csv` | 由系統自動建立。 |
 | `cache_manager.py` | 快取管理 | 無固定輸出檔 | 主要顯示資訊與清除快取。 |
@@ -1643,7 +1630,7 @@ Walk Forward 需要資料量大於 `train_days + test_days`，否則無法建立
 範例：
 
 ```bash
-python walk_forward.py --stock 2330 --period 10y
+python walk_forward.py --stock 2330 --strategy all --period 10y
 ```
 
 ### Q: Parameter Sweep 很好，為什麼 Walk Forward 很差？

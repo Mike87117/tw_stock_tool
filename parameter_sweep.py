@@ -3,9 +3,10 @@
 from importlib import import_module as _import_module
 import sys as _sys
 
-_impl = _import_module("tw_stock_tool.backtesting.parameter_sweep")
+_impl = _import_module("tw_stock_tool.cli.parameter_sweep_report")
+_backtesting = _import_module("tw_stock_tool.backtesting.parameter_sweep")
 
 if __name__ == "__main__":
     _impl.main()
 else:
-    _sys.modules[__name__] = _impl
+    _sys.modules[__name__] = _backtesting

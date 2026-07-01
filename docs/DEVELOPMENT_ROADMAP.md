@@ -147,6 +147,10 @@ Broker Interface
 - Phase 14.7：完成 (Parameter Sweep Unified CLI Dispatch Alignment Audit)
 - Phase 14.8：完成 (Parameter Sweep Unified CLI Dispatch Alignment Patch)
   - Aligned `twstock parameter-sweep` dispatch with the report-facing `cli.parameter_sweep_report.main`.
+- Phase 14.9：完成 (Report CLI Alignment Closeout Audit)
+- Phase 15.1：完成 (Release Readiness / Next Scope Audit)
+- Phase 15.2：完成 (Root Wrapper Alignment Patch)
+  - Updated legacy root wrappers `parameter_sweep.py` and `walk_forward.py` to point to the modern CLI layer.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。
