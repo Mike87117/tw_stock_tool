@@ -821,10 +821,7 @@ python parameter_sweep.py --stock 2330 --strategy all --period 2y
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
 python parameter_sweep.py --stock 2330 --period 2y --strategy score
-python parameter_sweep.py --stock 2330 --period 2y --top 10
 python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel
-python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel output/2330_ma_sweep.xlsx
 ```
 
@@ -846,21 +843,9 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-
 - `--stock`: 股票代號，必填
 - `--period`: 分析期間，預設 `DEFAULT_PERIOD`
 - `--strategy`: `all`、`ma_cross`、`rsi`、`score`，預設 `all`
-- `--sort-by`: 排序欄位，預設 `Total Return %`，僅支援下列數值欄位：
-  - `Total Return %`
-  - `Buy and Hold Return %`
-  - `CAGR %`
-  - `Trade Count`
-  - `Win Rate %`
-  - `Max Drawdown %`
-  - `Profit Factor`
-  - `Sharpe Ratio`
-  - `Sortino Ratio`
-- `--top`: 顯示前 N 筆，預設 `20`
-  - `--top <= 0` 時會顯示全部結果
 - `--force-refresh`: 忽略快取重新下載
-- `--output`: 輸出 CSV，省略路徑時使用 `output/{stock}_parameter_sweep.csv`
-- `--output-excel`: 輸出 Excel，省略路徑時使用 `output/{stock}_parameter_sweep.xlsx`
+- `--output-md`: 輸出 Markdown 報告
+- `--output-excel`: 輸出 Excel 報告
 - `--stop-loss`: 停損百分比
 - `--take-profit`: 停利百分比
 - `--max-hold-days`: 最大持有天數
