@@ -121,9 +121,14 @@ def write_report(
         ]
     )
 
-    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        summary.to_excel(writer, index=False, sheet_name="Summary")
-        df.to_excel(writer, index=False, sheet_name="Comparison")
+    try:
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            summary.to_excel(writer, index=False, sheet_name="Summary")
+            df.to_excel(writer, index=False, sheet_name="Comparison")
+    except PermissionError as exc:
+        raise ValueError(
+            f"Failed to write Excel file: {output_path}. Please close the file if it is open."
+        ) from exc
 
 
 def main() -> None:

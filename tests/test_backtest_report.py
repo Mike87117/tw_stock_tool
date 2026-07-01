@@ -2,6 +2,7 @@
 
 import os
 import unittest
+from unittest.mock import patch
 import pandas as pd
 import tempfile
 from pathlib import Path
@@ -216,3 +217,11 @@ class TestBacktestReport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             export_backtest_report_markdown(result, str(Path(d) / "test.md"))
             export_backtest_report_excel(result, str(Path(d) / "test.xlsx"))
+
+    @patch("tw_stock_tool.reports.backtest_report.pd.ExcelWriter")
+    def test_export_excel_permission_error(self, mock_writer):
+        mock_writer.side_effect = PermissionError("locked")
+        with tempfile.TemporaryDirectory() as d:
+            out_path = Path(d) / "test.xlsx"
+            with self.assertRaisesRegex(ValueError, "Failed to write Excel file.*Please close the file if it is open"):
+                export_backtest_report_excel(self.mock_result, out_path)

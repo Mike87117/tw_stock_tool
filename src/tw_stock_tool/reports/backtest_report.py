@@ -277,12 +277,17 @@ def export_backtest_report_excel(result: dict[str, Any], output: str | None = No
     if drawdown_df.empty:
         drawdown_df = pd.DataFrame({"Note": ["No drawdown data"]})
 
-    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-        summary_df.to_excel(writer, sheet_name="Summary", index=False)
-        metrics_df.to_excel(writer, sheet_name="Metrics", index=False)
-        trade_summary_df.to_excel(writer, sheet_name="Trade Summary", index=False)
-        trades_df.to_excel(writer, sheet_name="Trades", index=False)
-        equity_df.to_excel(writer, sheet_name="Equity Curve", index=True)
-        drawdown_df.to_excel(writer, sheet_name="Drawdown", index=True)
+    try:
+        with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+            summary_df.to_excel(writer, sheet_name="Summary", index=False)
+            metrics_df.to_excel(writer, sheet_name="Metrics", index=False)
+            trade_summary_df.to_excel(writer, sheet_name="Trade Summary", index=False)
+            trades_df.to_excel(writer, sheet_name="Trades", index=False)
+            equity_df.to_excel(writer, sheet_name="Equity Curve", index=True)
+            drawdown_df.to_excel(writer, sheet_name="Drawdown", index=True)
+    except PermissionError as exc:
+        raise ValueError(
+            f"Failed to write Excel file: {out_path}. Please close the file if it is open."
+        ) from exc
         
     return out_path

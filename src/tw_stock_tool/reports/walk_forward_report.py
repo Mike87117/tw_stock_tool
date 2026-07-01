@@ -258,10 +258,15 @@ def export_walk_forward_report_excel(result: Union[pd.DataFrame, dict[str, Any],
     results_df = data["Results"]
     notes_df = pd.DataFrame({"Notes": data["Notes"]})
 
-    with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        summary_df.to_excel(writer, sheet_name="Summary", index=False)
-        best_window_df.to_excel(writer, sheet_name="Best Window", index=False)
-        results_df.to_excel(writer, sheet_name="Results", index=False)
-        notes_df.to_excel(writer, sheet_name="Notes", index=False)
-
+    try:
+        with pd.ExcelWriter(path, engine="openpyxl") as writer:
+            summary_df.to_excel(writer, sheet_name="Summary", index=False)
+            best_window_df.to_excel(writer, sheet_name="Best Window", index=False)
+            results_df.to_excel(writer, sheet_name="Results", index=False)
+            notes_df.to_excel(writer, sheet_name="Notes", index=False)
+    except PermissionError as exc:
+        raise ValueError(
+            f"Failed to write Excel file: {path}. Please close the file if it is open."
+        ) from exc
+        
     return path

@@ -213,5 +213,15 @@ class TestDailyWatchlist(unittest.TestCase):
             allow_partial=False
         )
 
+    @patch("tw_stock_tool.scanners.daily_watchlist.pd.ExcelWriter")
+    def test_export_excel_permission_error(self, mock_writer):
+        from tw_stock_tool.scanners.daily_watchlist import export_daily_watchlist_excel
+        mock_writer.side_effect = PermissionError("locked")
+        with tempfile.TemporaryDirectory() as d:
+            out_path = Path(d) / "test.xlsx"
+            with self.assertRaisesRegex(ValueError, "Failed to write Excel file.*Please close the file if it is open"):
+                export_daily_watchlist_excel(pd.DataFrame(), out_path)
+
+
 if __name__ == "__main__":
     unittest.main()
