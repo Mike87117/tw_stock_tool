@@ -50,6 +50,16 @@ pip install -r requirements.txt
 
 **注意：** 若使用此方式安裝，將無法使用 `twstock` 簡短指令，且所有的操作都必須改為直接執行 Python 腳本（例如 `python twstock_cli.py ...` 或 `python main.py ...`）。
 
+### 輸出與快取路徑設定
+
+工具預設會在當前執行目錄下建立輸出與快取資料夾：
+- 預設輸出目錄：`./output`
+- 預設快取目錄：`./cache`
+
+你可以透過設定環境變數來覆寫預設路徑：
+- `TW_STOCK_TOOL_OUTPUT_DIR`：自訂輸出目錄（例如 `~/.twstock/output`）
+- `TW_STOCK_TOOL_CACHE_DIR`：自訂快取目錄（例如 `~/.twstock/cache`）
+
 ### 環境檢查
 
 安裝套件後，建議先執行本機檢查：
