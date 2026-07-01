@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 import tempfile
 import os
-
+from unittest.mock import patch
 from src.tw_stock_tool.reports.parameter_sweep_report import (
     build_parameter_sweep_report_data,
     export_parameter_sweep_report_markdown,
@@ -197,6 +197,15 @@ class ParameterSweepReportTest(unittest.TestCase):
             
             export_parameter_sweep_report_excel(pd.DataFrame())
             mock_path.assert_any_call("output/parameter_sweep_report.xlsx")
+
+    @patch("tw_stock_tool.reports.parameter_sweep_report.pd.ExcelWriter")
+    def test_export_excel_permission_error(self, mock_writer):
+        mock_writer.side_effect = PermissionError("locked")
+        with tempfile.TemporaryDirectory() as d:
+            out_path = Path(d) / "test.xlsx"
+            with self.assertRaisesRegex(ValueError, "Failed to write Excel file.*Please close the file if it is open"):
+                export_parameter_sweep_report_excel(self.df, out_path)
+
 
 if __name__ == '__main__':
     unittest.main()

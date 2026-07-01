@@ -202,5 +202,14 @@ class WalkForwardReportTest(unittest.TestCase):
             export_walk_forward_report_excel(None)
             mock_path.assert_any_call("output/walk_forward_report.xlsx")
 
+    @mock.patch("tw_stock_tool.reports.walk_forward_report.pd.ExcelWriter")
+    def test_export_excel_permission_error(self, mock_writer):
+        mock_writer.side_effect = PermissionError("locked")
+        with tempfile.TemporaryDirectory() as d:
+            out_path = Path(d) / "test.xlsx"
+            with self.assertRaisesRegex(ValueError, "Failed to write Excel file.*Please close the file if it is open"):
+                export_walk_forward_report_excel(self.df, out_path)
+
+
 if __name__ == '__main__':
     unittest.main()

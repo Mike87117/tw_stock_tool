@@ -163,6 +163,9 @@ Broker Interface
 - Phase 16.4：完成 (Runtime Output/Cache Path Policy Patch)
   - Changed default `OUTPUT_DIR` and `CACHE_DIR` to use `Path.cwd()` to prevent writing to site-packages after installation.
   - Added support for `TW_STOCK_TOOL_OUTPUT_DIR` and `TW_STOCK_TOOL_CACHE_DIR` environment variables to globally override paths.
+- Phase 16.5：完成 (Report Exporter PermissionError Consistency Audit)
+- Phase 16.6：完成 (Report Exporter PermissionError Consistency Patch)
+  - Added localized `try/except PermissionError` blocks to all missing exporters (`backtest_report`, `parameter_sweep_report`, `walk_forward_report`, `daily_watchlist`, `verify_batch`) to consistently raise `ValueError` with a user-friendly message when Excel files are locked.
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。

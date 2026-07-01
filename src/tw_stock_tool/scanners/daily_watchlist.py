@@ -79,6 +79,10 @@ def export_daily_watchlist_excel(df: pd.DataFrame, output: str | None = None) ->
             if not error_df.empty:
                 error_df.to_excel(writer, index=False, sheet_name="Errors")
                 
+    except PermissionError as exc:
+        raise ValueError(
+            f"Failed to write Excel file: {out_path}. Please close the file if it is open."
+        ) from exc
     except Exception as exc:
         raise ValueError(f"Failed to write Excel: {exc}") from exc
         
