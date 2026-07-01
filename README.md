@@ -32,32 +32,36 @@
 
 ## 安裝
 
+推薦的安裝方式是安裝套件與統一指令介面 (`twstock`)，以便後續能使用簡潔的指令：
+
 ```bash
 cd tw_stock_tool
-pip install -r requirements.txt
-```
-
-### 可選：安裝成 twstock 指令
-
-```bash
 pip install -e .
 twstock doctor
 ```
 
-不安裝也可以繼續用 `python twstock_cli.py ...`。安裝後可以用 `twstock ...` 簡化指令。
+### 可選：僅安裝相依套件 (Fallback / Development)
+
+如果你只是為了開發、測試或是環境限制，可以只安裝相依套件：
+
+```bash
+pip install -r requirements.txt
+```
+
+**注意：** 若使用此方式安裝，將無法使用 `twstock` 簡短指令，且所有的操作都必須改為直接執行 Python 腳本（例如 `python twstock_cli.py ...` 或 `python main.py ...`）。
 
 ### 環境檢查
 
-安裝套件後，建議先執行：
+安裝套件後，建議先執行本機檢查：
 
 ```bash
-python doctor.py
+twstock doctor
 ```
 
 如果想同時檢查外部資料來源，可以執行：
 
 ```bash
-python doctor.py --live
+twstock doctor --live
 ```
 
 說明：
@@ -74,52 +78,47 @@ python doctor.py --live
 
 ## 常用指令速查表
 
-以下列出最常使用的指令，方便快速查找。
+以下列出最常使用的指令，推薦優先使用 `twstock` 統一介面。
+
+### 推薦使用的統一 CLI (twstock)
+
+| 目的 | 指令 |
+| --- | --- |
+| 環境檢查 | `twstock doctor` |
+| 單股分析 | `twstock analyze --stock 2330 --period 2y` |
+| 策略比較 | `twstock strategy-compare --stock 2330 --period 2y` |
+| 多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
+| 每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output-md` |
+| 產生歷史回測報告 | `twstock backtest-report --stock 2330 --strategy ma_cross --output-excel` |
+| Parameter Sweep | `twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel` |
+| Walk Forward | `twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel` |
+| 檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
+| 查看快取摘要 | `twstock cache --summary` |
+| 列出快取檔案 | `twstock cache --list` |
+| 清除快取 | `twstock cache --clear` |
+| Benchmark | `twstock benchmark --file stocks.txt --workers 8 --repeat 3` |
+| 執行全部測試 | `python -m unittest discover -s tests` |
+
+### 相容性直接腳本執行 (Legacy / Compatibility Scripts)
+
+如果你沒有使用 `pip install -e .` 安裝套件，可直接執行根目錄下的腳本：
 
 | 目的 | 指令 |
 | --- | --- |
 | 單股分析 | `python main.py --stock 2330 --period 2y` |
-| 匯出單股分析 Excel | `python main.py --stock 2330 --period 2y --export-excel` |
-| 輸出單股分析圖表 | `python main.py --stock 2330 --period 2y --save-chart` |
 | 更新股票清單 | `python stock_list_updater.py --market all --output stocks.txt` |
 | 官方資料來源檢查 | `python stock_list_smoke_check.py` |
 | 價格資料來源檢查 | `python price_data_smoke_check.py` |
 | 多股票掃描 | `python scan_stocks.py --file stocks.txt` |
-| 自動更新後多股票掃描 | `python scan_stocks.py --auto-stock-list` |
-| 檢查股票清單 | `python clean_stocks.py --file stocks.txt --output --write-clean-file` |
-| 每日候選股票報告 | `twstock daily --file stocks.txt --output-md --output-excel` |
-| 自動更新後每日候選股票報告 | `twstock daily --auto-stock-list --output-md --output-excel` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
 | Parameter Sweep | `python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel` |
 | Walk Forward Test | `python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-excel` |
 | 建立 ML Dataset | `python ml_dataset.py --stock 2330 --period 5y --horizon 5 --output` |
-| AI Walk Forward skeleton | `python ai_walk_forward.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
+| AI Walk Forward | `python ai_walk_forward.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | Baseline ML model | `python baseline_ml_model.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | AI Prediction Report | `python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output` |
 | 多股票 AI 掃描 | `python ai_stock_scanner.py --file stocks.txt --period 5y --horizon 5 --output` |
-| 自動更新後多股票 AI 掃描 | `python ai_stock_scanner.py --auto-stock-list --period 5y --horizon 5 --output` |
-| Benchmark | `python benchmark.py --file stocks.txt --workers 8 --repeat 3` |
-| 查看快取摘要 | `python cache_manager.py --summary` |
-| 清除快取 | `python cache_manager.py --clear` |
-| 環境檢查 | `python doctor.py` |
 | 本機 GUI 原型 | `python gui_app.py` |
-| 統一 CLI：環境檢查 | `python twstock_cli.py doctor` |
-| 統一 CLI：多股票掃描 | `python twstock_cli.py scan --auto-stock-list --stock-limit 50` |
-| 統一 CLI：每日候選報告 | `python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output-md` |
-| twstock：環境檢查 | `twstock doctor` |
-| twstock：多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
-| twstock：每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output-md` |
-| twstock：查看快取摘要 | `twstock cache --summary` |
-| twstock：列出快取檔案 | `twstock cache --list` |
-| twstock：清除快取 | `twstock cache --clear` |
-| twstock：單股分析 | `twstock analyze --stock 2330 --period 2y` |
-| twstock：策略比較 | `twstock strategy-compare --stock 2330 --period 2y` |
-| twstock：產生歷史回測報告 | `twstock backtest-report --stock 2330 --strategy ma_cross --output-excel` |
-| twstock：Parameter Sweep | `twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel` |
-| twstock：Walk Forward | `twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel` |
-| twstock：檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
-| twstock：Benchmark | `twstock benchmark --file stocks.txt --workers 8 --repeat 3` |
-| 執行全部測試 | `python -m unittest discover -s tests` |
 
 ### 更新股票清單
 
@@ -179,15 +178,15 @@ python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output-md
 第一次使用時，建議先用 `--stock-limit` 限制掃描數量，避免一次掃描全市場導致執行時間過長，或遇到 yfinance rate limit。
 
 ```bash
-python scan_stocks.py --auto-stock-list --stock-limit 50
+twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md
-python ai_stock_scanner.py --auto-stock-list --stock-limit 20 --output
+twstock ai-scan --auto-stock-list --stock-limit 20 --output
 ```
 
 如果想隨機抽樣，可以使用：
 
 ```bash
-python scan_stocks.py --auto-stock-list --stock-sample 50 --random-state 42
+twstock scan --auto-stock-list --stock-sample 50 --random-state 42
 ```
 
 補充說明：
@@ -299,13 +298,13 @@ python gui_app.py
 
 但目前 GUI 還是初版，完整功能仍以 CLI / `twstock ...` 為主。
 
-### Step 1：安裝套件
+### Step 1：安裝套件與指令介面
 
-先安裝需求套件，並確認 CLI 能正常顯示說明。
+推薦使用 `pip install -e .` 將套件與 `twstock` 指令一起安裝，這樣後續的操作會更簡單。
 
 ```bash
-pip install -r requirements.txt
-python main.py --help
+pip install -e .
+twstock --help
 ```
 
 ### Step 2：檢查資料來源
@@ -313,8 +312,8 @@ python main.py --help
 第一次使用時，建議先確認官方股票清單來源與價格資料來源可用。
 
 ```bash
-python stock_list_smoke_check.py
-python price_data_smoke_check.py
+twstock stock-list smoke-check
+twstock price-smoke-check
 ```
 
 說明：
@@ -326,7 +325,7 @@ python price_data_smoke_check.py
 ### Step 3：先小範圍掃描
 
 ```bash
-python scan_stocks.py --auto-stock-list --stock-limit 50
+twstock scan --auto-stock-list --stock-limit 50
 ```
 
 說明：
@@ -353,20 +352,20 @@ twstock daily --auto-stock-list --stock-limit 50 --output-md
 假設對 `2330` 有興趣，可以輸出單股分析 Excel 與圖表。
 
 ```bash
-python main.py --stock 2330 --period 2y --export-excel --save-chart
+twstock analyze --stock 2330 --period 2y --export-excel --save-chart
 ```
 
 ### Step 6：策略比較與 Walk Forward
 
 ```bash
-python strategy_compare.py --stock 2330 --period 2y
-python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-excel
+twstock strategy-compare --stock 2330 --period 2y
+twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
 ```
 
 說明：
 
-- `strategy_compare.py` 用來比較不同策略在同一檔股票上的歷史回測結果。
-- `walk_forward.py` 用 train / test 視窗驗證參數是否可能過度擬合。
+- `strategy-compare` 用來比較不同策略在同一檔股票上的歷史回測結果。
+- `walk-forward` 用 train / test 視窗驗證參數是否可能過度擬合。
 - Walk Forward 比單純 Parameter Sweep 更適合用來觀察策略穩定性。
 
 ### Step 7：AI / ML 研究流程（進階選項）
@@ -375,7 +374,7 @@ python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-ex
 
 ```bash
 python ai_prediction_report.py --stock 2330 --period 5y --horizon 5 --output
-python ai_stock_scanner.py --auto-stock-list --stock-limit 20 --period 5y --horizon 5 --output
+twstock ai-scan --auto-stock-list --stock-limit 20 --output
 ```
 
 提醒：
