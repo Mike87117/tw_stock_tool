@@ -90,8 +90,8 @@ python doctor.py --live
 | 每日候選股票報告 | `twstock daily --file stocks.txt --output-md --output-excel` |
 | 自動更新後每日候選股票報告 | `twstock daily --auto-stock-list --output-md --output-excel` |
 | 策略比較 | `python strategy_compare.py --stock 2330 --period 2y` |
-| Parameter Sweep | `python parameter_sweep.py --stock 2330 --period 2y --output-excel` |
-| Walk Forward Test | `python walk_forward.py --stock 2330 --period 10y --output` |
+| Parameter Sweep | `python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel` |
+| Walk Forward Test | `python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-excel` |
 | 建立 ML Dataset | `python ml_dataset.py --stock 2330 --period 5y --horizon 5 --output` |
 | AI Walk Forward skeleton | `python ai_walk_forward.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
 | Baseline ML model | `python baseline_ml_model.py --stock 2330 --period 5y --horizon 5 --train-size 252 --test-size 63` |
@@ -360,7 +360,7 @@ python main.py --stock 2330 --period 2y --export-excel --save-chart
 
 ```bash
 python strategy_compare.py --stock 2330 --period 2y
-python walk_forward.py --stock 2330 --period 10y --output
+python walk_forward.py --stock 2330 --strategy ma_cross --period 10y --output-excel
 ```
 
 說明：
@@ -475,7 +475,7 @@ python strategy_compare.py --stock 2330 --period 2y
 使用：
 
 ```bash
-python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --strategy all --period 2y
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 ```
 
@@ -498,7 +498,7 @@ python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 使用：
 
 ```bash
-python walk_forward.py --stock 2330 --period 10y
+python walk_forward.py --stock 2330 --strategy ma_cross --period 10y
 ```
 
 流程：
@@ -817,14 +817,14 @@ python strategy_compare.py --stock 2330 --period 2y --output-excel
 `parameter_sweep.py` 會自動測試多組策略參數，並用歷史回測結果比較不同參數組合的表現。
 
 ```bash
-python parameter_sweep.py --stock 2330 --period 2y
+python parameter_sweep.py --stock 2330 --strategy all --period 2y
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross
 python parameter_sweep.py --stock 2330 --period 2y --strategy rsi
 python parameter_sweep.py --stock 2330 --period 2y --strategy score
 python parameter_sweep.py --stock 2330 --period 2y --top 10
-python parameter_sweep.py --stock 2330 --period 2y --output
-python parameter_sweep.py --stock 2330 --period 2y --output-excel
-python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output
+python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel
+python parameter_sweep.py --stock 2330 --strategy all --period 2y --output-excel
+python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel
 python parameter_sweep.py --stock 2330 --period 2y --strategy ma_cross --output-excel output/2330_ma_sweep.xlsx
 ```
 
@@ -996,13 +996,13 @@ python parameter_sweep_report.py --stock 2330 --strategy all --ma-short-windows 
 CLI 範例：
 
 ```bash
-python walk_forward.py --stock 2330 --period 5y
+python walk_forward.py --stock 2330 --strategy all --period 5y
 python walk_forward.py --stock 2330 --period 10y --strategy ma_cross
 python walk_forward.py --stock 2330 --period 10y --strategy rsi
 python walk_forward.py --stock 2330 --period 10y --strategy score
-python walk_forward.py --stock 2330 --period 10y --train-days 504 --test-days 126
-python walk_forward.py --stock 2330 --period 10y --output
-python walk_forward.py --stock 2330 --period 10y --output output/2330_walk_forward.xlsx
+python walk_forward.py --stock 2330 --strategy all --period 10y --train-days 504 --test-days 126
+python walk_forward.py --stock 2330 --strategy all --period 10y --output-excel
+python walk_forward.py --stock 2330 --strategy all --period 10y --output-excel output/2330_walk_forward.xlsx
 ```
 
 參數說明：
@@ -1643,7 +1643,7 @@ Walk Forward 需要資料量大於 `train_days + test_days`，否則無法建立
 範例：
 
 ```bash
-python walk_forward.py --stock 2330 --period 10y
+python walk_forward.py --stock 2330 --strategy all --period 10y
 ```
 
 ### Q: Parameter Sweep 很好，為什麼 Walk Forward 很差？
