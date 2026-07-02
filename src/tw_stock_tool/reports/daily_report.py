@@ -36,6 +36,21 @@ SUMMARY_COLUMNS = [
     "Average Volume Ratio",
 ]
 
+DAILY_REPORT_SECTION_ORDER = [
+    ("Report Metadata", "Report Metadata", "dict"),
+    ("Report Highlights", "Report Highlights", "list"),
+    ("Data Quality Notes", "Data Quality Notes", "list"),
+    ("Universe Summary", "Universe Summary", "dict"),
+    ("Screening Summary", "Screening Summary", "table"),
+    ("Watchlist Candidates for Further Review", "Watchlist Candidates", "table"),
+    ("Backtest Highlights", "Backtest Highlights", "table"),
+    ("Parameter Sweep Highlights", "Parameter Sweep Highlights", "table"),
+    ("Walk Forward Highlights", "Walk Forward Highlights", "table"),
+    ("Risk Notes", "Risk Notes", "list_risk_notes"),
+    ("Data Limitations", "Data Limitations", "list"),
+    ("Next Research Actions", "Next Research Actions", "list"),
+]
+
 
 def collect_stock_ids(
     stocks: Iterable[str] | None,
@@ -411,57 +426,21 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
         out.append("")
         return out
 
-    # 1. Report Metadata
-    lines.append("## Report Metadata\n")
-    lines.extend(_render_dict(report_data.get("Report Metadata", {})))
-
-    # 1.5 Report Highlights
-    lines.append("## Report Highlights\n")
-    lines.extend(_render_list_of_strings(report_data.get("Report Highlights", [])))
-
-    # 1.7 Data Quality Notes
-    lines.append("## Data Quality Notes\n")
-    lines.extend(_render_list_of_strings(report_data.get("Data Quality Notes", [])))
-
-    # 2. Universe Summary
-    lines.append("## Universe Summary\n")
-    lines.extend(_render_dict(report_data.get("Universe Summary", {})))
-
-    # 3. Screening Summary
-    lines.append("## Screening Summary\n")
-    lines.extend(_render_table(report_data.get("Screening Summary", [])))
-
-    # 4. Watchlist Candidates for Further Review
-    lines.append("## Watchlist Candidates for Further Review\n")
-    lines.extend(_render_table(report_data.get("Watchlist Candidates", [])))
-
-    # 5. Backtest Highlights
-    lines.append("## Backtest Highlights\n")
-    lines.extend(_render_table(report_data.get("Backtest Highlights", [])))
-
-    # 6. Parameter Sweep Highlights
-    lines.append("## Parameter Sweep Highlights\n")
-    lines.extend(_render_table(report_data.get("Parameter Sweep Highlights", [])))
-
-    # 7. Walk Forward Highlights
-    lines.append("## Walk Forward Highlights\n")
-    lines.extend(_render_table(report_data.get("Walk Forward Highlights", [])))
-
-    # 8. Risk Notes
-    lines.append("## Risk Notes\n")
-    risk_notes = report_data.get("Risk Notes", [])
-    disclaimer = "This report is for research purposes only and does not constitute investment advice."
-    if disclaimer not in risk_notes:
-        risk_notes = risk_notes.copy()
-        risk_notes.append(disclaimer)
-    lines.extend(_render_list_of_strings(risk_notes))
-
-    # 9. Data Limitations
-    lines.append("## Data Limitations\n")
-    lines.extend(_render_list_of_strings(report_data.get("Data Limitations", [])))
-
-    # 10. Next Research Actions
-    lines.append("## Next Research Actions\n")
-    lines.extend(_render_list_of_strings(report_data.get("Next Research Actions", [])))
+    for heading, data_key, renderer_type in DAILY_REPORT_SECTION_ORDER:
+        lines.append(f"## {heading}\n")
+        
+        if renderer_type == "dict":
+            lines.extend(_render_dict(report_data.get(data_key, {})))
+        elif renderer_type == "list":
+            lines.extend(_render_list_of_strings(report_data.get(data_key, [])))
+        elif renderer_type == "table":
+            lines.extend(_render_table(report_data.get(data_key, [])))
+        elif renderer_type == "list_risk_notes":
+            risk_notes = report_data.get(data_key, [])
+            disclaimer = "This report is for research purposes only and does not constitute investment advice."
+            if disclaimer not in risk_notes:
+                risk_notes = risk_notes.copy()
+                risk_notes.append(disclaimer)
+            lines.extend(_render_list_of_strings(risk_notes))
 
     return "\n".join(lines)
