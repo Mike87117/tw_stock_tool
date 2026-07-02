@@ -8,7 +8,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS
+from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.utils.console_lock import console_io_lock
 
 
@@ -57,6 +57,12 @@ def _is_cache_fresh(path: Path) -> bool:
         return modified >= market_close
 
     return True
+
+
+def _get_cache_age_days(path: Path) -> float:
+    mtime = path.stat().st_mtime
+    now = pd.Timestamp.now(tz="UTC").timestamp()
+    return max(0.0, (now - mtime) / 86400.0)
 
 
 def _read_cache(path: Path) -> pd.DataFrame:
@@ -414,18 +420,29 @@ def download_tw_stock(
                 source = "TWSE" if suffix == ".TW" else "TPEX"
                 errors.append(f"{symbol} {source} fallback failed: {exc}")
 
-    for symbol, _, _ in candidates:
-        cache_path = _cache_path(symbol, period, interval, auto_adjust)
-        if cache_path.exists():
-            try:
-                cached_df = _read_cache(cache_path)
-                import sys
-                print(f"[WARNING] All live data sources failed for {symbol}. Using stale cached data from {cache_path}.", file=sys.stderr)
-                if verbose:
-                    print(f"{symbol}: From stale cache")
-                return _prepare_ohlcv(cached_df, symbol), symbol
-            except Exception as exc:
-                errors.append(f"{symbol} stale cache read failed: {exc}")
+    if not force_refresh:
+        for symbol, _, _ in candidates:
+            cache_path = _cache_path(symbol, period, interval, auto_adjust)
+            if cache_path.exists():
+                try:
+                    age_days = _get_cache_age_days(cache_path)
+                except Exception as exc:
+                    errors.append(f"{symbol} stale cache mtime read failed: {exc}")
+                    continue
+
+                if age_days > MAX_STALE_CACHE_DAYS:
+                    errors.append(f"{symbol} stale cache rejected: {age_days:.1f} days old (exceeds {MAX_STALE_CACHE_DAYS} day limit)")
+                    continue
+
+                try:
+                    cached_df = _read_cache(cache_path)
+                    import sys
+                    print(f"[WARNING] All live data sources failed for {symbol}. Using {age_days:.1f}-day-old stale cached data from {cache_path} (max stale age: {MAX_STALE_CACHE_DAYS} days).", file=sys.stderr)
+                    if verbose:
+                        print(f"{symbol}: From stale cache")
+                    return _prepare_ohlcv(cached_df, symbol), symbol
+                except Exception as exc:
+                    errors.append(f"{symbol} stale cache read failed: {exc}")
 
     raise _format_no_data_error(original_stock_id, tried_symbols, errors)
 

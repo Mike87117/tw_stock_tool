@@ -457,17 +457,64 @@ class DataLoaderTest(unittest.TestCase):
             with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
                 with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
                     with patch.object(data_loader, "_is_cache_fresh", return_value=False):
-                        # Create a stale cache file manually
-                        cache_path = data_loader._cache_path("2330.TW", "1y", "1d", True)
-                        data_loader._write_cache(_download_df(), cache_path)
+                        with patch.object(data_loader, "_get_cache_age_days", return_value=2.0):
+                            cache_path = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                            data_loader._write_cache(_download_df(), cache_path)
 
-                        df, symbol = data_loader.download_tw_stock("2330", period="1y", auto_adjust=True)
+                            df, symbol = data_loader.download_tw_stock("2330", period="1y", auto_adjust=True)
 
         self.assertEqual(symbol, "2330.TW")
         self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
         self.assertIn("WARNING", mock_stderr.getvalue())
         self.assertIn("stale cached data", mock_stderr.getvalue())
         self.assertIn("2330.TW", mock_stderr.getvalue())
+
+    @patch("sys.stderr", new_callable=StringIO)
+    def test_stale_cache_within_threshold_is_used(self, mock_stderr: StringIO) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(data_loader, "_is_cache_fresh", return_value=False):
+                        with patch.object(data_loader, "_get_cache_age_days", return_value=10.0):
+                            cache_path = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                            data_loader._write_cache(_download_df(), cache_path)
+
+                            df, symbol = data_loader.download_tw_stock("2330", period="1y", auto_adjust=True)
+
+        self.assertEqual(symbol, "2330.TW")
+        self.assertIn("WARNING", mock_stderr.getvalue())
+        self.assertIn("stale cached data", mock_stderr.getvalue())
+        self.assertIn("2330.TW", mock_stderr.getvalue())
+        self.assertIn("10.0", mock_stderr.getvalue())
+
+    def test_stale_cache_older_than_threshold_is_rejected_and_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(data_loader, "_is_cache_fresh", return_value=False):
+                        with patch.object(data_loader, "_get_cache_age_days", return_value=20.0):
+                            cache_path = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                            data_loader._write_cache(_download_df(), cache_path)
+
+                            with self.assertRaises(data_loader.DataLoaderError) as context:
+                                data_loader.download_tw_stock("2330", period="1y", auto_adjust=True)
+
+        self.assertIn("stale cache rejected", str(context.exception))
+        self.assertIn("20.0", str(context.exception))
+
+    def test_force_refresh_bypasses_stale_cache_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(data_loader, "_is_cache_fresh", return_value=False):
+                        with patch.object(data_loader, "_get_cache_age_days", return_value=2.0):
+                            cache_path = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                            data_loader._write_cache(_download_df(), cache_path)
+
+                            with self.assertRaises(data_loader.DataLoaderError) as context:
+                                data_loader.download_tw_stock("2330", period="1y", auto_adjust=True, force_refresh=True)
+
+        self.assertIn("No price data found", str(context.exception))
 
     def test_download_raises_data_loader_error_when_live_fetch_fails_and_no_cache_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
