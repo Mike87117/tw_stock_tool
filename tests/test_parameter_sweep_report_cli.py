@@ -261,6 +261,42 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         self.assertIn("locked", output_str)
 
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report._preflight_output_path")
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross", "--output-md"])
+    def test_preflight_invalid_md_path_aborts_early(self, mock_preflight, mock_run_sweep):
+        mock_preflight.side_effect = PermissionError("access denied")
+
+        import io
+        captured_output = io.StringIO()
+        with mock.patch("sys.stdout", captured_output):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+
+        self.assertEqual(cm.exception.code, 1)
+        output_str = captured_output.getvalue()
+        self.assertIn("Error:", output_str)
+        self.assertIn("access denied", output_str)
+        mock_run_sweep.assert_not_called()
+
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report._preflight_output_path")
+    @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross", "--output-excel"])
+    def test_preflight_invalid_excel_path_aborts_early(self, mock_preflight, mock_run_sweep):
+        mock_preflight.side_effect = PermissionError("file locked")
+
+        import io
+        captured_output = io.StringIO()
+        with mock.patch("sys.stdout", captured_output):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+
+        self.assertEqual(cm.exception.code, 1)
+        output_str = captured_output.getvalue()
+        self.assertIn("Error:", output_str)
+        self.assertIn("file locked", output_str)
+        mock_run_sweep.assert_not_called()
+
+    @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep")
     @mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.export_parameter_sweep_report_markdown")
     @mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross",
                              "--initial-capital", "200000", "--fee-rate", "0.001", "--tax-rate", "0.002",
