@@ -20,7 +20,7 @@ class WalkForwardReportTest(unittest.TestCase):
                 "Train End": "2022-12-31",
                 "Test Start": "2023-01-01",
                 "Test End": "2023-03-31",
-                "Best Parameters": "short=5,long=20",
+                "Parameters": "short=5,long=20",
                 "Train Sharpe Ratio": 1.4,
                 "Test Sharpe Ratio": 0.9,
                 "Train Total Return %": 12.0,
@@ -37,7 +37,7 @@ class WalkForwardReportTest(unittest.TestCase):
                 "Train End": "2023-03-31",
                 "Test Start": "2023-04-01",
                 "Test End": "2023-06-30",
-                "Best Parameters": "short=10,long=30",
+                "Parameters": "short=10,long=30",
                 "Train Sharpe Ratio": 1.1,
                 "Test Sharpe Ratio": 1.5,
                 "Train Total Return %": 10.0,
@@ -209,6 +209,44 @@ class WalkForwardReportTest(unittest.TestCase):
             out_path = Path(d) / "test.xlsx"
             with self.assertRaisesRegex(ValueError, "Failed to write Excel file.*Please close the file if it is open"):
                 export_walk_forward_report_excel(self.df, out_path)
+
+    def test_no_banned_wording_in_markdown_and_excel(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Test Markdown
+            md_path = Path(tmpdir) / "wf.md"
+            export_walk_forward_report_markdown(self.df, output=str(md_path))
+            content = md_path.read_text(encoding="utf-8").lower()
+
+            banned_phrases = [
+                "best strategy",
+                "best parameters",
+                "best test total return",
+                "best test sharpe ratio",
+                "## best window",
+                "no best window found",
+                "recommended stocks",
+                "buy recommendation",
+                "sell recommendation",
+                "investment recommendation",
+                "investment opportunity",
+                "best stocks to buy",
+                "should buy",
+                "safe to invest",
+                "guaranteed profit",
+                "guaranteed return",
+                "guaranteed latest data"
+            ]
+            for phrase in banned_phrases:
+                self.assertNotIn(phrase.lower(), content)
+
+            # Test Excel Sheet Names
+            xl_path = Path(tmpdir) / "wf.xlsx"
+            export_walk_forward_report_excel(self.df, output=str(xl_path))
+            with pd.ExcelFile(xl_path) as xls:
+                sheet_names_lower = [s.lower() for s in xls.sheet_names]
+                for phrase in banned_phrases:
+                    for s in sheet_names_lower:
+                        self.assertNotIn(phrase.lower(), s)
 
 
 if __name__ == '__main__':

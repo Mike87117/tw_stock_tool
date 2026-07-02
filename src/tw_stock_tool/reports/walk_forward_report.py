@@ -186,10 +186,11 @@ def export_walk_forward_report_markdown(result: Union[pd.DataFrame, dict[str, An
     ])
 
     for k, v in data["Summary"].items():
+        print_k = k.replace("Best", "Top Walk-Forward")
         if isinstance(v, float):
-            lines.append(f"- {k}: {v:.4f}")
+            lines.append(f"- {print_k}: {v:.4f}")
         else:
-            lines.append(f"- {k}: {v}")
+            lines.append(f"- {print_k}: {v}")
     lines.append("")
 
     if data.get("Parameters"):
@@ -239,7 +240,8 @@ def export_walk_forward_report_excel(result: Union[pd.DataFrame, dict[str, Any],
         {"Field": "Generated At", "Value": data["Generated At"]},
     ]
     for k, v in data["Summary"].items():
-        summary_rows.append({"Field": k, "Value": v})
+        print_k = k.replace("Best", "Top Walk-Forward")
+        summary_rows.append({"Field": print_k, "Value": v})
 
     if data.get("Parameters"):
         for section, params in data["Parameters"].items():

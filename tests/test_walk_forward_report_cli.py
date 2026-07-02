@@ -346,6 +346,49 @@ class WalkForwardReportCliTest(unittest.TestCase):
         mock_export_md.assert_not_called()
         mock_export_excel.assert_not_called()
 
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.run_walk_forward")
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_markdown")
+    @mock.patch("src.tw_stock_tool.cli.walk_forward_report.export_walk_forward_report_excel")
+    @mock.patch("sys.argv", ["walk_forward_report.py", "--stock", "2330", "--strategy", "ma_cross"])
+    def test_no_banned_wording_in_cli_stdout(self, mock_export_excel, mock_export_md, mock_run_wf):
+        mock_run_wf.return_value = self.mock_wf_df
+
+        captured_output = StringIO()
+        with mock.patch("sys.stdout", captured_output):
+            main()
+
+        out = captured_output.getvalue().lower()
+
+        # Positive assertions
+        self.assertIn("top walk-forward strategy:", out)
+        self.assertIn("top walk-forward parameters:", out)
+        self.assertIn("top walk-forward test total return:", out)
+        self.assertIn("top walk-forward test sharpe ratio:", out)
+
+        # Negative assertions
+        banned_phrases = [
+            "best strategy",
+            "best parameters",
+            "best test total return",
+            "best test sharpe ratio",
+            "## best window",
+            "no best window found",
+            "recommended stocks",
+            "buy recommendation",
+            "sell recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
+            "safe to invest",
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data"
+        ]
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase.lower(), out)
+
+
 
 if __name__ == "__main__":
     unittest.main()
