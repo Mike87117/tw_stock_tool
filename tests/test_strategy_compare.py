@@ -151,5 +151,134 @@ class StrategyCompareTest(unittest.TestCase):
         self.assertIn("may be open", str(cm.exception))
 
 
+    def test_no_banned_wording_in_cli_stdout(self) -> None:
+        import sys
+        from io import StringIO
+        import tempfile
+        from pathlib import Path
+        
+        banned_phrases = [
+            "best strategy",
+            "best parameters",
+            "best result",
+            "best total return",
+            "best sharpe ratio",
+            "winner",
+            "recommended stocks",
+            "buy recommendation",
+            "sell recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
+            "safe to invest",
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data"
+        ]
+
+        def passthrough_strategy(df: pd.DataFrame, **_: object) -> pd.DataFrame:
+            return df[["Open", "Close", "Signal"]].copy()
+
+        fake_result = {
+            "Total Return %": 1.0,
+            "Buy and Hold Return %": 1.0,
+            "CAGR %": 1.0,
+            "Trade Count": 1,
+            "Win Rate %": 100.0,
+            "Max Drawdown %": 0.0,
+            "Profit Factor": 1.0,
+            "Sharpe Ratio": 0.0,
+            "Sortino Ratio": 0.0,
+        }
+
+        captured_output = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "compare.xlsx"
+            with patch("sys.argv", ["strategy_compare.py", "--stock", "2330", "--output-excel", str(out_path)]):
+                with patch.object(strategy_compare, "STRATEGIES", {"score_strategy": passthrough_strategy}):
+                    with patch.object(strategy_compare, "analyze_stock", return_value=_fake_analysis()):
+                        with patch.object(strategy_compare, "run_backtest", return_value=fake_result):
+                            with patch("sys.stdout", captured_output):
+                                strategy_compare.main()
+        
+        stdout_str = captured_output.getvalue().lower()
+        
+        # Positive assertions
+        self.assertIn("strategy", stdout_str)
+        self.assertIn("total return %", stdout_str)
+        self.assertIn("cagr %", stdout_str)
+        self.assertIn("sharpe ratio", stdout_str)
+        
+        # Negative assertions
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase.lower(), stdout_str)
+
+    def test_no_banned_wording_in_excel(self) -> None:
+        import tempfile
+        from pathlib import Path
+        
+        banned_phrases = [
+            "best strategy",
+            "best parameters",
+            "best result",
+            "best total return",
+            "best sharpe ratio",
+            "winner",
+            "recommended stocks",
+            "buy recommendation",
+            "sell recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
+            "safe to invest",
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data"
+        ]
+
+        fake_result = pd.DataFrame([{
+            "Strategy": "score_strategy",
+            "Total Return %": 1.0,
+            "Buy and Hold Return %": 1.0,
+            "CAGR %": 1.0,
+            "Trade Count": 1,
+            "Win Rate %": 100.0,
+            "Max Drawdown %": 0.0,
+            "Profit Factor": 1.0,
+            "Sharpe Ratio": 0.0,
+            "Sortino Ratio": 0.0,
+        }])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "compare.xlsx"
+            strategy_compare.export_strategy_compare(fake_result, out_path)
+            
+            with pd.ExcelFile(out_path) as xls:
+                # Positive assertions
+                self.assertIn("Strategy_Compare", xls.sheet_names)
+                
+                # Negative assertions for sheet names
+                for sheet in xls.sheet_names:
+                    for phrase in banned_phrases:
+                        self.assertNotIn(phrase.lower(), sheet.lower())
+                        
+                # Negative assertions for visible labels
+                df = pd.read_excel(xls, sheet_name="Strategy_Compare")
+                visible_str = df.astype(str).values.flatten().tolist() + list(df.columns)
+                visible_str_lower = " ".join(visible_str).lower()
+                
+                # Positive assertions for column names
+                self.assertIn("strategy", visible_str_lower)
+                self.assertIn("total return %", visible_str_lower)
+                self.assertIn("cagr %", visible_str_lower)
+                self.assertIn("sharpe ratio", visible_str_lower)
+                
+                for phrase in banned_phrases:
+                    self.assertNotIn(phrase.lower(), visible_str_lower)
+
+
 if __name__ == "__main__":
     unittest.main()
