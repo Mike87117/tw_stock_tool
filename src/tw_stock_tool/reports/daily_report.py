@@ -328,12 +328,25 @@ def build_daily_report_data(
     else:
         highlights.append("No screening summary data was provided, so highlights are limited for this report.")
 
+    data_quality_notes = []
+    data_quality_notes.append(f"Data quality summary: {len(universe_list)} symbols were included in the configured universe.")
+    
+    if norm_screening:
+        data_quality_notes.append(f"Screening summary rows available: {len(norm_screening)}.")
+    else:
+        data_quality_notes.append("No screening summary data was provided for this report.")
+        
+    limitations_count = len(final_data_limitations)
+    data_quality_notes.append(f"Data limitations recorded: {limitations_count} item(s).")
+    data_quality_notes.append("Some symbols may be absent due to upstream data availability or scan errors.")
+
     report_data = {
         "Report Metadata": {
             "Date": report_date,
             "Type": "Daily Research Report"
         },
         "Report Highlights": highlights,
+        "Data Quality Notes": data_quality_notes,
         "Universe Summary": {
             "Total Stocks": len(universe_list),
             "Universe": universe_list
@@ -405,6 +418,10 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
     # 1.5 Report Highlights
     lines.append("## Report Highlights\n")
     lines.extend(_render_list_of_strings(report_data.get("Report Highlights", [])))
+
+    # 1.7 Data Quality Notes
+    lines.append("## Data Quality Notes\n")
+    lines.extend(_render_list_of_strings(report_data.get("Data Quality Notes", [])))
 
     # 2. Universe Summary
     lines.append("## Universe Summary\n")
