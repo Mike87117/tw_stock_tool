@@ -43,9 +43,36 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _preflight_output_path(path: str | Path) -> None:
+    """Validate that the given output path can be written to before starting expensive work."""
+    p = Path(path)
+    if p.exists() and p.is_dir():
+        raise ValueError(f"Output path is a directory, not a file: {path}")
+    
+    p.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        with open(p, "a", encoding="utf-8") as f:
+            pass
+    except Exception as exc:
+        raise PermissionError(f"Cannot write to output path {path}: {exc}") from exc
+
+
 def main() -> None:
     try:
         args = _parse_args()
+
+        out_dir = Path(args.output_dir)
+        excel_output = None
+        md_output = None
+
+        if args.output_excel is not None:
+            excel_output = args.output_excel or str(out_dir / "parameter_sweep_report.xlsx")
+            _preflight_output_path(excel_output)
+            
+        if args.output_md is not None:
+            md_output = args.output_md or str(out_dir / "parameter_sweep_report.md")
+            _preflight_output_path(md_output)
 
         print(f"Running parameter sweep for {args.stock} (strategy={args.strategy}, period={args.period})...")
         sweep_df = run_parameter_sweep(
@@ -97,15 +124,11 @@ def main() -> None:
             "Results": sweep_df,
         }
         
-        out_dir = Path(args.output_dir)
-        
-        if args.output_excel is not None:
-            excel_output = args.output_excel or str(out_dir / "parameter_sweep_report.xlsx")
+        if excel_output is not None:
             excel_path = export_parameter_sweep_report_excel(result_dict, excel_output)
             print(f"Excel report: {excel_path}")
             
-        if args.output_md is not None:
-            md_output = args.output_md or str(out_dir / "parameter_sweep_report.md")
+        if md_output is not None:
             md_path = export_parameter_sweep_report_markdown(result_dict, md_output)
             print(f"Markdown report: {md_path}")
             
