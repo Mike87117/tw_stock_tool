@@ -201,12 +201,12 @@ def export_walk_forward_report_markdown(result: Union[pd.DataFrame, dict[str, An
                     lines.append(f"- {k}: {v}")
         lines.append("")
 
-    lines.append("## Best Window")
+    lines.append("## Top Walk-Forward Window")
     if data["Best Window"]:
         for k, v in data["Best Window"].items():
             lines.append(f"- {k}: {v}")
     else:
-        lines.append("No best window found.")
+        lines.append("No top walk-forward window found.")
     lines.append("")
 
     lines.append("## Results")
@@ -261,7 +261,7 @@ def export_walk_forward_report_excel(result: Union[pd.DataFrame, dict[str, Any],
     try:
         with pd.ExcelWriter(path, engine="openpyxl") as writer:
             summary_df.to_excel(writer, sheet_name="Summary", index=False)
-            best_window_df.to_excel(writer, sheet_name="Best Window", index=False)
+            best_window_df.to_excel(writer, sheet_name="Top Walk-Forward Window", index=False)
             results_df.to_excel(writer, sheet_name="Results", index=False)
             notes_df.to_excel(writer, sheet_name="Notes", index=False)
     except PermissionError as exc:

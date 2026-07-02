@@ -132,10 +132,10 @@ def main() -> None:
                 report_data = build_walk_forward_report_data(result_dict)
                 best_window = report_data.get("Best Window")
                 if best_window:
-                    print(f"  Best Strategy: {best_window.get('Strategy', 'N/A')}")
-                    print(f"  Best Parameters: {best_window.get('Parameters', 'N/A')}")
-                    print(f"  Best Test Total Return: {best_window.get('Test Total Return %', 0)}%")
-                    print(f"  Best Test Sharpe Ratio: {best_window.get('Test Sharpe Ratio', 'N/A')}")
+                    print(f"  Top Walk-Forward Strategy: {best_window.get('Strategy', 'N/A')}")
+                    print(f"  Top Walk-Forward Parameters: {best_window.get('Parameters', 'N/A')}")
+                    print(f"  Top Walk-Forward Test Total Return: {best_window.get('Test Total Return %', 0)}%")
+                    print(f"  Top Walk-Forward Test Sharpe Ratio: {best_window.get('Test Sharpe Ratio', 'N/A')}")
 
     except Exception as exc:
         print(f"Error: {exc}")

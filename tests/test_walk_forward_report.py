@@ -146,7 +146,7 @@ class WalkForwardReportTest(unittest.TestCase):
             self.assertIn("# Walk Forward Report", content)
             self.assertIn("Research report only, not investment advice.", content)
             self.assertIn("## Summary", content)
-            self.assertIn("## Best Window", content)
+            self.assertIn("## Top Walk-Forward Window", content)
             self.assertIn("## Results", content)
             self.assertIn("## Notes", content)
             self.assertIn("Test Sharpe Ratio", content)
@@ -157,7 +157,7 @@ class WalkForwardReportTest(unittest.TestCase):
             export_walk_forward_report_markdown(None, output=str(out_path))
             content = out_path.read_text(encoding="utf-8")
             self.assertIn("No walk forward results.", content)
-            self.assertIn("No best window found.", content)
+            self.assertIn("No top walk-forward window found.", content)
 
     def test_export_excel(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -167,14 +167,14 @@ class WalkForwardReportTest(unittest.TestCase):
             
             with pd.ExcelFile(out_path) as xls:
                 self.assertIn("Summary", xls.sheet_names)
-                self.assertIn("Best Window", xls.sheet_names)
+                self.assertIn("Top Walk-Forward Window", xls.sheet_names)
                 self.assertIn("Results", xls.sheet_names)
                 self.assertIn("Notes", xls.sheet_names)
                 
                 res_df = pd.read_excel(xls, sheet_name="Results")
                 self.assertEqual(len(res_df), 2)
                 
-                best_df = pd.read_excel(xls, sheet_name="Best Window")
+                best_df = pd.read_excel(xls, sheet_name="Top Walk-Forward Window")
                 self.assertEqual(len(best_df), 1)
 
     def test_export_excel_empty(self):
@@ -185,7 +185,7 @@ class WalkForwardReportTest(unittest.TestCase):
             with pd.ExcelFile(out_path) as xls:
                 res_df = pd.read_excel(xls, sheet_name="Results")
                 self.assertEqual(len(res_df), 0)
-                best_df = pd.read_excel(xls, sheet_name="Best Window")
+                best_df = pd.read_excel(xls, sheet_name="Top Walk-Forward Window")
                 self.assertEqual(len(best_df), 0)
 
     def test_default_output_paths(self):
