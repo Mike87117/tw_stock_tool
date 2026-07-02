@@ -172,8 +172,8 @@ class WalkForwardReportCliTest(unittest.TestCase):
 
         out = captured_output.getvalue()
         self.assertIn("Walk forward finished", out)
-        self.assertIn("Best Strategy: ma_cross", out)
-        self.assertIn("Best Parameters: short=10,long=30", out)
+        self.assertIn("Top Walk-Forward Strategy: ma_cross", out)
+        self.assertIn("Top Walk-Forward Parameters: short=10,long=30", out)
 
         mock_run_wf.assert_called_once_with(
             stock_id="2330",
