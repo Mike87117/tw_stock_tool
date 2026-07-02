@@ -40,6 +40,24 @@ class TestDailyReportMarkdown(unittest.TestCase):
         indices = [markdown.find(sec) for sec in sections]
         self.assertEqual(indices, sorted(indices), "Sections are out of order")
 
+    def test_build_data_contract(self):
+        data = build_daily_report_data()
+        expected_keys = [
+            "Report Metadata",
+            "Report Highlights",
+            "Data Quality Notes",
+            "Universe Summary",
+            "Screening Summary",
+            "Watchlist Candidates",
+            "Backtest Highlights",
+            "Parameter Sweep Highlights",
+            "Walk Forward Highlights",
+            "Risk Notes",
+            "Data Limitations",
+            "Next Research Actions",
+        ]
+        self.assertEqual(list(data.keys()), expected_keys, "Data contract keys or order do not match expected structure.")
+
     def test_watchlist_candidates_table(self):
         candidates = [{"Stock": "2330", "Score": 5}, {"Stock": "2317", "Score": 3}]
         data = build_daily_report_data(watchlist_candidates=candidates)
@@ -65,7 +83,11 @@ class TestDailyReportMarkdown(unittest.TestCase):
             "should buy",
             "safe to invest",
             "guaranteed return", 
-            "profit opportunity"
+            "profit opportunity",
+            "investment recommendation",
+            "investment opportunity",
+            "guaranteed profit",
+            "guaranteed latest data"
         ]
         
         for word in banned_words:
@@ -74,12 +96,14 @@ class TestDailyReportMarkdown(unittest.TestCase):
     def test_renderer_does_not_mutate_input(self):
         input_data = build_daily_report_data()
         
-        # Create a deep-ish copy manually just for test tracking since dict has nested dicts/lists
+        # Snapshot state
         original_risk_notes_len = len(input_data["Risk Notes"])
+        original_data_limitations_len = len(input_data["Data Limitations"])
         
         render_daily_report_markdown(input_data)
         
         self.assertEqual(len(input_data["Risk Notes"]), original_risk_notes_len)
+        self.assertEqual(len(input_data["Data Limitations"]), original_data_limitations_len)
 
     def test_table_renders_union_headers_for_inconsistent_rows(self):
         data = build_daily_report_data(
