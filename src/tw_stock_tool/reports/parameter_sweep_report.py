@@ -165,7 +165,7 @@ def export_parameter_sweep_report_markdown(result: Union[pd.DataFrame, dict[str,
                 if v is not None:
                     lines.append(f"- {k}: {v}")
         lines.append("")
-    lines.append("## Best Result")
+    lines.append("## Top In-Sample Result")
     if data["Best Row"]:
         for k, v in data["Best Row"].items():
             lines.append(f"- {k}: {v}")
