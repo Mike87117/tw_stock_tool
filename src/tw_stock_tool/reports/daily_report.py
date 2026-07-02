@@ -323,10 +323,10 @@ def build_daily_report_data(
         
         highlights.append(f"Report generation summary: {scanned} symbols included.")
         highlights.append(f"Notable observations: {candidates} candidates met the criteria.")
-        highlights.append(f"Strategy signal counts: {buy_count} BUY signals, {watch_count} WATCH signals.")
+        highlights.append(f"Strategy signal counts from existing computed metrics: {buy_count} BUY labels, {watch_count} WATCH labels.")
         highlights.append("Generated from available computed metrics.")
     else:
-        highlights.append("No screening data available to generate highlights.")
+        highlights.append("No screening summary data was provided, so highlights are limited for this report.")
 
     report_data = {
         "Report Metadata": {
