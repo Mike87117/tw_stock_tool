@@ -406,5 +406,33 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         
         self.assertIn("## top in-sample result", md_content)
 
+
+    def test_preflight_missing_target_does_not_create_file(self):
+        from src.tw_stock_tool.cli.parameter_sweep_report import _preflight_output_path
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "new_report.md"
+            _preflight_output_path(target)
+            self.assertFalse(target.exists())
+
+    def test_preflight_creates_missing_parent_directory(self):
+        from src.tw_stock_tool.cli.parameter_sweep_report import _preflight_output_path
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "nested" / "new_report.md"
+            _preflight_output_path(target)
+            self.assertTrue(target.parent.exists())
+            self.assertTrue(target.parent.is_dir())
+            self.assertFalse(target.exists())
+
+    def test_preflight_rejects_existing_directory_as_target(self):
+        from src.tw_stock_tool.cli.parameter_sweep_report import _preflight_output_path
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            with self.assertRaises(ValueError):
+                _preflight_output_path(target)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 import argparse
+import tempfile
 from pathlib import Path
 
 from tw_stock_tool.backtesting.parameter_sweep import run_parameter_sweep
@@ -46,16 +47,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _preflight_output_path(path: str | Path) -> None:
     """Validate that the given output path can be written to before starting expensive work."""
     p = Path(path)
-    if p.exists() and p.is_dir():
-        raise ValueError(f"Output path is a directory, not a file: {path}")
-    
-    p.parent.mkdir(parents=True, exist_ok=True)
-    
-    try:
-        with open(p, "a", encoding="utf-8") as f:
-            pass
-    except Exception as exc:
-        raise PermissionError(f"Cannot write to output path {path}: {exc}") from exc
+    if p.exists():
+        if p.is_dir():
+            raise ValueError(f"Output path is a directory, not a file: {path}")
+        try:
+            with open(p, "a", encoding="utf-8") as f:
+                pass
+        except Exception as exc:
+            raise PermissionError(f"Cannot write to output path {path}: {exc}") from exc
+    else:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with tempfile.NamedTemporaryFile(dir=p.parent, delete=True) as f:
+                pass
+        except Exception as exc:
+            raise PermissionError(f"Cannot write to output path {path}: {exc}") from exc
 
 
 def main() -> None:
