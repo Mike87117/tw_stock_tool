@@ -55,9 +55,14 @@ class TestDailyReportMarkdown(unittest.TestCase):
         markdown = render_daily_report_markdown(data).lower()
         
         banned_words = [
+            "stocks to buy",
             "recommended stocks", 
             "buy recommendation", 
             "sell recommendation", 
+            "best opportunities",
+            "high-potential stocks",
+            "should buy",
+            "safe to invest",
             "guaranteed return", 
             "profit opportunity"
         ]
@@ -97,6 +102,21 @@ class TestDailyReportMarkdown(unittest.TestCase):
         self.assertIn("## Data Limitations", markdown)
         self.assertIn("- 9999: ERROR - bad stock", markdown)
         self.assertIn("- 8888: ERROR - no data", markdown)
+
+    def test_highlights_with_screening_data(self):
+        screening_data = [{"Stocks Scanned": 1500, "Candidates": 50, "BUY Count": 10, "WATCH Count": 40}]
+        data = build_daily_report_data(screening_results=screening_data)
+        markdown = render_daily_report_markdown(data)
+        
+        self.assertIn("Report generation summary: 1500 symbols included.", markdown)
+        self.assertIn("Notable observations: 50 candidates met the criteria.", markdown)
+        self.assertIn("Strategy signal counts from existing computed metrics: 10 BUY labels, 40 WATCH labels.", markdown)
+        self.assertIn("Generated from available computed metrics.", markdown)
+
+    def test_highlights_empty_state(self):
+        data = build_daily_report_data()
+        markdown = render_daily_report_markdown(data)
+        self.assertIn("No screening summary data was provided, so highlights are limited for this report.", markdown)
 
 
 if __name__ == '__main__':
