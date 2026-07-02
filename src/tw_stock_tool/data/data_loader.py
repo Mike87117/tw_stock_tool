@@ -414,5 +414,18 @@ def download_tw_stock(
                 source = "TWSE" if suffix == ".TW" else "TPEX"
                 errors.append(f"{symbol} {source} fallback failed: {exc}")
 
+    for symbol, _, _ in candidates:
+        cache_path = _cache_path(symbol, period, interval, auto_adjust)
+        if cache_path.exists():
+            try:
+                cached_df = _read_cache(cache_path)
+                import sys
+                print(f"[WARNING] All live data sources failed for {symbol}. Using stale cached data from {cache_path}.", file=sys.stderr)
+                if verbose:
+                    print(f"{symbol}: From stale cache")
+                return _prepare_ohlcv(cached_df, symbol), symbol
+            except Exception as exc:
+                errors.append(f"{symbol} stale cache read failed: {exc}")
+
     raise _format_no_data_error(original_stock_id, tried_symbols, errors)
 
