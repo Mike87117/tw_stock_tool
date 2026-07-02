@@ -133,11 +133,8 @@ class ParameterSweepReportCLITest(unittest.TestCase):
 
         import io
         captured_output = io.StringIO()
-        sys.stdout = captured_output
-        try:
+        with mock.patch("sys.stdout", captured_output):
             main()
-        finally:
-            sys.stdout = sys.__stdout__
             
         # Verify exporters not called
         mock_export_md.assert_not_called()
@@ -178,11 +175,8 @@ class ParameterSweepReportCLITest(unittest.TestCase):
 
         import io
         captured_output = io.StringIO()
-        sys.stdout = captured_output
-        try:
+        with mock.patch("sys.stdout", captured_output):
             main()
-        finally:
-            sys.stdout = sys.__stdout__
 
         mock_run_sweep.assert_called_once_with(
             stock_id="2330",
@@ -257,12 +251,9 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         mock_export_md.side_effect = PermissionError("locked")
 
         captured_output = io.StringIO()
-        sys.stdout = captured_output
-        try:
+        with mock.patch("sys.stdout", captured_output):
             with self.assertRaises(SystemExit) as cm:
                 main()
-        finally:
-            sys.stdout = sys.__stdout__
 
         self.assertEqual(cm.exception.code, 1)
         output_str = captured_output.getvalue()
@@ -324,14 +315,11 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         
         # Test CLI Print
         captured_output = io.StringIO()
-        sys.stdout = captured_output
-        try:
+        with mock.patch("sys.stdout", captured_output):
             with mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep") as mock_run_sweep:
                 mock_run_sweep.return_value = self.mock_sweep_df
                 with mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross"]):
                     main()
-        finally:
-            sys.stdout = sys.__stdout__
             
         cli_out = captured_output.getvalue().lower()
         
@@ -367,11 +355,20 @@ class ParameterSweepReportCLITest(unittest.TestCase):
             "best strategy",
             "best parameters",
             "best total return",
+            "best sharpe ratio",
             "## best result"
         ]
         
         for phrase in banned_phrases:
             self.assertNotIn(phrase, combined_text, f"Banned phrase '{phrase}' found in output")
+            
+        # Explicit positive assertions that the new wording is present
+        self.assertIn("top in-sample strategy", cli_out)
+        self.assertIn("top in-sample parameters", cli_out)
+        self.assertIn("top in-sample total return", cli_out)
+        self.assertIn("top in-sample sharpe ratio", cli_out)
+        
+        self.assertIn("## top in-sample result", md_content)
 
 if __name__ == "__main__":
     unittest.main()
