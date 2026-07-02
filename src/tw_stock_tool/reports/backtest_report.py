@@ -98,8 +98,8 @@ def build_backtest_report_data(result: dict[str, Any]) -> dict[str, Any]:
         "Profit Factor": safe_get("Profit Factor"),
         "Sharpe Ratio": safe_get("Sharpe Ratio"),
         "Sortino Ratio": safe_get("Sortino Ratio"),
-        "Best Trade %": safe_get("Best Trade %"),
-        "Worst Trade %": safe_get("Worst Trade %"),
+        "Max Profit Trade %": safe_get("Best Trade %"),
+        "Max Loss Trade %": safe_get("Worst Trade %"),
         "Average Hold Days": safe_get("Avg Hold Days"),
         "Average Profit": safe_get("Avg Profit"),
         "Average Loss": safe_get("Avg Loss"),
@@ -121,8 +121,8 @@ def build_backtest_report_data(result: dict[str, Any]) -> dict[str, Any]:
             "Losing Trades": len(losses) if not pnl.empty else 0,
             "Average Profit": float(wins.mean()) if not wins.empty else "N/A",
             "Average Loss": float(losses.mean()) if not losses.empty else "N/A",
-            "Best Trade": float(pnl.max()) if not pnl.empty else "N/A",
-            "Worst Trade": float(pnl.min()) if not pnl.empty else "N/A",
+            "Max Profit Trade": float(pnl.max()) if not pnl.empty else "N/A",
+            "Max Loss Trade": float(pnl.min()) if not pnl.empty else "N/A",
             "Average Hold Days": float(hold_days.mean()) if not hold_days.empty else "N/A",
         }
     data["Trade Summary"] = trade_summary

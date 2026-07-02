@@ -225,3 +225,68 @@ class TestBacktestReport(unittest.TestCase):
             out_path = Path(d) / "test.xlsx"
             with self.assertRaisesRegex(ValueError, "Failed to write Excel file.*Please close the file if it is open"):
                 export_backtest_report_excel(self.mock_result, out_path)
+
+    def test_no_banned_wording_in_markdown_and_excel(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Test Markdown
+            md_path = Path(tmpdir) / "bt.md"
+            export_backtest_report_markdown(self.mock_result, output=str(md_path))
+            content = md_path.read_text(encoding="utf-8").lower()
+
+            # Positive assertions
+            self.assertIn("## summary", content)
+            self.assertIn("## metrics", content)
+            self.assertIn("## trade summary", content)
+            self.assertIn("## trades", content)
+            self.assertIn("## notes", content)
+            self.assertIn("research report only, not investment advice", content)
+            self.assertIn("past performance does not guarantee future results", content)
+            self.assertIn("max profit trade", content)
+            self.assertIn("max loss trade", content)
+
+            banned_phrases = [
+                "best strategy",
+                "best parameters",
+                "best result",
+                "best trade",
+                "worst trade",
+                "recommended stocks",
+                "buy recommendation",
+                "sell recommendation",
+                "investment recommendation",
+                "investment opportunity",
+                "best stocks to buy",
+                "should buy",
+                "safe to invest",
+                "guaranteed profit",
+                "guaranteed return",
+                "guaranteed latest data"
+            ]
+            for phrase in banned_phrases:
+                self.assertNotIn(phrase.lower(), content)
+
+            # Test Excel
+            xl_path = Path(tmpdir) / "bt.xlsx"
+            export_backtest_report_excel(self.mock_result, output=str(xl_path))
+            with pd.ExcelFile(xl_path) as xls:
+                sheet_names_lower = [s.lower() for s in xls.sheet_names]
+                for phrase in banned_phrases:
+                    for s in sheet_names_lower:
+                        self.assertNotIn(phrase.lower(), s)
+                
+                # Positive sheet names
+                self.assertIn("summary", sheet_names_lower)
+                self.assertIn("metrics", sheet_names_lower)
+                self.assertIn("trade summary", sheet_names_lower)
+                self.assertIn("trades", sheet_names_lower)
+
+                # Check visible labels in metrics / trade summary
+                metrics_df = pd.read_excel(xls, sheet_name="Metrics")
+                metrics_str = metrics_df.astype(str).values.flatten().tolist()
+                metrics_str_lower = " ".join(metrics_str).lower()
+                self.assertIn("max profit trade", metrics_str_lower)
+                self.assertIn("max loss trade", metrics_str_lower)
+
+                for phrase in banned_phrases:
+                    self.assertNotIn(phrase.lower(), metrics_str_lower)
+
