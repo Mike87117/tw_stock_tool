@@ -313,11 +313,27 @@ def build_daily_report_data(
     if not universe_list and not norm_screening and not norm_watchlist:
         final_data_limitations.append("No screening data or watchlist candidates were provided for this run.")
 
+    highlights = []
+    if norm_screening:
+        summary_dict = norm_screening[0]
+        scanned = summary_dict.get("Stocks Scanned", 0)
+        candidates = summary_dict.get("Candidates", 0)
+        buy_count = summary_dict.get("BUY Count", 0)
+        watch_count = summary_dict.get("WATCH Count", 0)
+        
+        highlights.append(f"Report generation summary: {scanned} symbols included.")
+        highlights.append(f"Notable observations: {candidates} candidates met the criteria.")
+        highlights.append(f"Strategy signal counts: {buy_count} BUY signals, {watch_count} WATCH signals.")
+        highlights.append("Generated from available computed metrics.")
+    else:
+        highlights.append("No screening data available to generate highlights.")
+
     report_data = {
         "Report Metadata": {
             "Date": report_date,
             "Type": "Daily Research Report"
         },
+        "Report Highlights": highlights,
         "Universe Summary": {
             "Total Stocks": len(universe_list),
             "Universe": universe_list
@@ -385,6 +401,10 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
     # 1. Report Metadata
     lines.append("## Report Metadata\n")
     lines.extend(_render_dict(report_data.get("Report Metadata", {})))
+
+    # 1.5 Report Highlights
+    lines.append("## Report Highlights\n")
+    lines.extend(_render_list_of_strings(report_data.get("Report Highlights", [])))
 
     # 2. Universe Summary
     lines.append("## Universe Summary\n")

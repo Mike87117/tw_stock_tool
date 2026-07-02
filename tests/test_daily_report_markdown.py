@@ -20,6 +20,7 @@ class TestDailyReportMarkdown(unittest.TestCase):
         # Section heading stability
         sections = [
             "## Report Metadata",
+            "## Report Highlights",
             "## Universe Summary",
             "## Screening Summary",
             "## Watchlist Candidates for Further Review",
