@@ -60,6 +60,38 @@ pip install -r requirements.txt
 - `TW_STOCK_TOOL_OUTPUT_DIR`：自訂輸出目錄（例如 `~/.twstock/output`）
 - `TW_STOCK_TOOL_CACHE_DIR`：自訂快取目錄（例如 `~/.twstock/cache`）
 
+### 資料來源與快取備援 (Data Source & Cache Resilience)
+
+本工具在抓取資料時採用多層備援機制，以降低因暫時性網路問題或 API 限制而導致的執行中斷。資料抓取的順序為：
+1. **Fresh Cache** (當日有效的快取)
+2. **Yahoo Finance** (首選即時/歷史資料)
+3. **Official TWSE / TPEx** (若不需要還原權值，則回退至官方資料)
+4. **Stale Cache Fallback** (過期快取備援，受限於最長天數)
+5. 若所有來源均失敗，則拋出 `DataLoaderError`。
+
+**重要提示**：官方 TWSE / TPEx 備援並非完整的還原歷史資料庫，無法完全替代 Yahoo Finance 提供的 `auto_adjust=True` 歷史價格。
+
+#### 過期快取備援 (Stale Cache Fallback)
+如果所有的即時資料來源抓取失敗，工具可能會讀取已存在的過期快取作為最後的備援手段。這有助於在資料源中斷時避免分析與報表完全停擺。當使用過期快取時，系統會輸出警告 (Warning)。
+> **注意**：過期快取備援是為了提高系統可用性 (availability)，並不保證提供最新的市場資料。請將過期快取的警告視為提示，並在使用分析結果前自行確認資料的新鮮度。
+
+#### 最長過期快取天數限制
+為避免分析過於陳舊的資料，預設的過期快取最長保留使用天數為 **14 天**。若快取檔案的修改時間超過此限制，系統將拒絕使用並拋出 `DataLoaderError`。
+
+你可以透過設定環境變數來覆寫預設的 14 天限制：
+- `TW_STOCK_TOOL_MAX_STALE_CACHE_DAYS`：正整數，控制過期快取的最長有效天數。若設定為無效值、0 或負數，則自動回退至預設的 14 天。
+例如 (Windows CMD)：
+```cmd
+set TW_STOCK_TOOL_MAX_STALE_CACHE_DAYS=7
+```
+(Windows PowerShell)：
+```powershell
+$env:TW_STOCK_TOOL_MAX_STALE_CACHE_DAYS = "7"
+```
+
+#### 強制更新 (--force-refresh)
+如果在執行指令時加入了強制更新參數 (`--force-refresh` 或 `force_refresh=True`)，系統將完全繞過過期快取備援機制。在此情況下，如果即時抓取失敗，程式將直接報錯，不會嘗試使用舊資料。
+
 ### 環境檢查
 
 安裝套件後，建議先執行本機檢查：
