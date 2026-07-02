@@ -451,6 +451,33 @@ class DataLoaderTest(unittest.TestCase):
         self.assertIn("1d", message)
         self.assertIn("interval", message.lower())
 
+    @patch("sys.stderr", new_callable=StringIO)
+    def test_download_falls_back_to_stale_cache_when_live_fetch_fails(self, mock_stderr: StringIO) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with patch.object(data_loader, "_is_cache_fresh", return_value=False):
+                        # Create a stale cache file manually
+                        cache_path = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                        data_loader._write_cache(_download_df(), cache_path)
+
+                        df, symbol = data_loader.download_tw_stock("2330", period="1y", auto_adjust=True)
+
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+        self.assertIn("WARNING", mock_stderr.getvalue())
+        self.assertIn("stale cached data", mock_stderr.getvalue())
+        self.assertIn("2330.TW", mock_stderr.getvalue())
+
+    def test_download_raises_data_loader_error_when_live_fetch_fails_and_no_cache_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
+                    with self.assertRaises(data_loader.DataLoaderError) as context:
+                        data_loader.download_tw_stock("2330", period="1y", auto_adjust=True)
+
+        self.assertIn("No price data found", str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
