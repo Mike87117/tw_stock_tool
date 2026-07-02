@@ -146,8 +146,8 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         # Verify summary output
         out = captured_output.getvalue()
         self.assertIn("Total Rows: 2", out)
-        self.assertIn("Best Strategy: ma_cross", out)
-        self.assertIn("Best Parameters: short=10", out)
+        self.assertIn("Top In-Sample Strategy: ma_cross", out)
+        self.assertIn("Top In-Sample Parameters: short=10", out)
 
         mock_run_sweep.assert_called_once_with(
             stock_id="2330",
@@ -315,6 +315,63 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         from src.tw_stock_tool.reports.parameter_sweep_report import build_parameter_sweep_report_data
         data = build_parameter_sweep_report_data(self.mock_sweep_df)
         self.assertEqual(data["Parameters"], {})
+
+    def test_no_banned_wording_in_cli_and_markdown(self):
+        from src.tw_stock_tool.reports.parameter_sweep_report import export_parameter_sweep_report_markdown
+        import io
+        import tempfile
+        import sys
+        
+        # Test CLI Print
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        try:
+            with mock.patch("src.tw_stock_tool.cli.parameter_sweep_report.run_parameter_sweep") as mock_run_sweep:
+                mock_run_sweep.return_value = self.mock_sweep_df
+                with mock.patch("sys.argv", ["parameter_sweep_report.py", "--stock", "2330", "--strategy", "ma_cross"]):
+                    main()
+        finally:
+            sys.stdout = sys.__stdout__
+            
+        cli_out = captured_output.getvalue().lower()
+        
+        # Test Markdown Generation
+        with tempfile.TemporaryDirectory() as td:
+            md_path = Path(td) / "test.md"
+            
+            result_dict = {
+                "Stock": "2330",
+                "Strategy": "ma_cross",
+                "Parameters": {},
+                "Results": self.mock_sweep_df,
+            }
+            
+            export_parameter_sweep_report_markdown(result_dict, str(md_path))
+            md_content = md_path.read_text(encoding="utf-8").lower()
+            
+        combined_text = cli_out + " " + md_content
+        
+        # Banned user-facing phrases (investment advice)
+        banned_phrases = [
+            "recommended stocks",
+            "buy recommendation",
+            "sell recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
+            "safe to invest",
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data",
+            "best strategy",
+            "best parameters",
+            "best total return",
+            "## best result"
+        ]
+        
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase, combined_text, f"Banned phrase '{phrase}' found in output")
 
 if __name__ == "__main__":
     unittest.main()

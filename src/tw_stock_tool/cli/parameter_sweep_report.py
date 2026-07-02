@@ -116,10 +116,10 @@ def main() -> None:
                 report_data = build_parameter_sweep_report_data(result_dict)
                 best_row = report_data.get("Best Row")
                 if best_row:
-                    print(f"  Best Strategy: {best_row.get('Strategy', 'N/A')}")
-                    print(f"  Best Parameters: {best_row.get('Parameters', 'N/A')}")
-                    print(f"  Best Total Return: {best_row.get('Total Return %', 0)}%")
-                    print(f"  Best Sharpe Ratio: {best_row.get('Sharpe Ratio', 'N/A')}")
+                    print(f"  Top In-Sample Strategy: {best_row.get('Strategy', 'N/A')}")
+                    print(f"  Top In-Sample Parameters: {best_row.get('Parameters', 'N/A')}")
+                    print(f"  Top In-Sample Total Return: {best_row.get('Total Return %', 0)}%")
+                    print(f"  Top In-Sample Sharpe Ratio: {best_row.get('Sharpe Ratio', 'N/A')}")
             
     except Exception as exc:
         print(f"Error: {exc}")
