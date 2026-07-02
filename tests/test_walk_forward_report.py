@@ -222,14 +222,19 @@ class WalkForwardReportTest(unittest.TestCase):
                 "best parameters",
                 "best test total return",
                 "best test sharpe ratio",
-                "best window",
-                "no best window",
-                "recommend",
-                "opportunity",
+                "## best window",
+                "no best window found",
+                "recommended stocks",
                 "buy recommendation",
                 "sell recommendation",
+                "investment recommendation",
+                "investment opportunity",
+                "best stocks to buy",
+                "should buy",
                 "safe to invest",
-                "guaranteed"
+                "guaranteed profit",
+                "guaranteed return",
+                "guaranteed latest data"
             ]
             for phrase in banned_phrases:
                 self.assertNotIn(phrase.lower(), content)

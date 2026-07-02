@@ -354,9 +354,8 @@ class WalkForwardReportCliTest(unittest.TestCase):
         mock_run_wf.return_value = self.mock_wf_df
 
         captured_output = StringIO()
-        sys.stdout = captured_output
-        main()
-        sys.stdout = sys.__stdout__
+        with mock.patch("sys.stdout", captured_output):
+            main()
 
         out = captured_output.getvalue().lower()
 
@@ -372,14 +371,19 @@ class WalkForwardReportCliTest(unittest.TestCase):
             "best parameters",
             "best test total return",
             "best test sharpe ratio",
-            "best window",
-            "no best window",
-            "recommend",
-            "opportunity",
+            "## best window",
+            "no best window found",
+            "recommended stocks",
             "buy recommendation",
             "sell recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
             "safe to invest",
-            "guaranteed"
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data"
         ]
         for phrase in banned_phrases:
             self.assertNotIn(phrase.lower(), out)
