@@ -326,3 +326,58 @@ class TestBacktestReportCLI(unittest.TestCase):
         self.assertEqual(params["strategy"]["long_window"], 20)
         self.assertEqual(params["backtest"]["initial_capital"], 100000)
         self.assertEqual(params["backtest"]["fee_rate"], 0.001425)
+
+    @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_report.run_backtest")
+    @patch("tw_stock_tool.cli.backtest_report._parse_args")
+    def test_no_banned_wording_in_cli_stdout(self, mock_parse, mock_run, mock_analyze):
+        mock_parse.return_value = MagicMock(
+            stock="2330", strategy="ma_cross", period="1y",
+            initial_capital=100000, output_md=None, output_excel=None, output_dir="output", force_refresh=False,
+            short_window=5, long_window=20, rsi_buy_below=30.0, rsi_sell_above=70.0,
+            score_buy=None, score_sell=None, fee_rate=0.001425, tax_rate=0.003, position_size=1.0,
+            stop_loss_pct=None, take_profit_pct=None, max_hold_days=None
+        )
+        mock_run.return_value = {"Total Return %": 5.0, "Win Rate %": 40.0, "Trade Count": 10}
+
+        mock_strat = MagicMock()
+        mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
+
+        from io import StringIO
+        captured_output = StringIO()
+
+        with patch.dict("tw_stock_tool.cli.backtest_report.STRATEGIES", {"ma_cross_strategy": mock_strat}):
+            with patch("sys.stdout", captured_output):
+                main()
+
+        out = captured_output.getvalue().lower()
+
+        # Positive assertions
+        self.assertIn("total return", out)
+        self.assertIn("win rate", out)
+        self.assertIn("trades", out)
+
+        # Negative assertions
+        banned_phrases = [
+            "best strategy",
+            "best parameters",
+            "best result",
+            "best trade",
+            "best trade %",
+            "worst trade",
+            "worst trade %",
+            "recommended stocks",
+            "buy recommendation",
+            "sell recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
+            "safe to invest",
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data"
+        ]
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase.lower(), out)
+
