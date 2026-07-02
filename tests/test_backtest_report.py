@@ -249,7 +249,9 @@ class TestBacktestReport(unittest.TestCase):
                 "best parameters",
                 "best result",
                 "best trade",
+                "best trade %",
                 "worst trade",
+                "worst trade %",
                 "recommended stocks",
                 "buy recommendation",
                 "sell recommendation",
@@ -289,4 +291,13 @@ class TestBacktestReport(unittest.TestCase):
 
                 for phrase in banned_phrases:
                     self.assertNotIn(phrase.lower(), metrics_str_lower)
+
+                trade_summary_df = pd.read_excel(xls, sheet_name="Trade Summary")
+                trade_summary_str = trade_summary_df.astype(str).values.flatten().tolist()
+                trade_summary_str_lower = " ".join(trade_summary_str).lower()
+                self.assertIn("max profit trade", trade_summary_str_lower)
+                self.assertIn("max loss trade", trade_summary_str_lower)
+
+                for phrase in banned_phrases:
+                    self.assertNotIn(phrase.lower(), trade_summary_str_lower)
 

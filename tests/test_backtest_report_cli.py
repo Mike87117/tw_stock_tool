@@ -343,7 +343,6 @@ class TestBacktestReportCLI(unittest.TestCase):
         mock_strat = MagicMock()
         mock_strat.return_value = pd.DataFrame(index=pd.date_range("2023-01-01", "2023-01-10"))
 
-        import sys
         from io import StringIO
         captured_output = StringIO()
 
@@ -364,7 +363,9 @@ class TestBacktestReportCLI(unittest.TestCase):
             "best parameters",
             "best result",
             "best trade",
+            "best trade %",
             "worst trade",
+            "worst trade %",
             "recommended stocks",
             "buy recommendation",
             "sell recommendation",
