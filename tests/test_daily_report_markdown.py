@@ -21,6 +21,7 @@ class TestDailyReportMarkdown(unittest.TestCase):
         sections = [
             "## Report Metadata",
             "## Report Highlights",
+            "## Data Quality Notes",
             "## Universe Summary",
             "## Screening Summary",
             "## Watchlist Candidates for Further Review",
@@ -117,6 +118,34 @@ class TestDailyReportMarkdown(unittest.TestCase):
         data = build_daily_report_data()
         markdown = render_daily_report_markdown(data)
         self.assertIn("No screening summary data was provided, so highlights are limited for this report.", markdown)
+
+    def test_data_quality_notes_empty(self):
+        data = build_daily_report_data()
+        markdown = render_daily_report_markdown(data)
+        
+        self.assertIn("## Data Quality Notes", markdown)
+        self.assertIn("Data quality summary: 0 symbols were included in the configured universe.", markdown)
+        self.assertIn("No screening summary data was provided for this report.", markdown)
+        self.assertIn("Data limitations recorded: 1 item(s).", markdown) # empty state adds 1 limitation automatically
+        self.assertIn("Some symbols may be absent due to upstream data availability or scan errors.", markdown)
+
+    def test_data_quality_notes_populated(self):
+        screening_data = [{"Stocks Scanned": 1500, "Candidates": 50, "BUY Count": 10, "WATCH Count": 40}]
+        universe = ["2330", "2317", "2454"]
+        limitations = ["9999: ERROR - bad stock", "8888: ERROR - no data"]
+        
+        data = build_daily_report_data(
+            stock_universe=universe, 
+            screening_results=screening_data,
+            data_limitations=limitations
+        )
+        markdown = render_daily_report_markdown(data)
+        
+        self.assertIn("## Data Quality Notes", markdown)
+        self.assertIn("Data quality summary: 3 symbols were included in the configured universe.", markdown)
+        self.assertIn("Screening summary rows available: 1.", markdown)
+        self.assertIn("Data limitations recorded: 2 item(s).", markdown)
+        self.assertIn("Some symbols may be absent due to upstream data availability or scan errors.", markdown)
 
 
 if __name__ == '__main__':
