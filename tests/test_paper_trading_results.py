@@ -11,6 +11,8 @@ from tw_stock_tool.paper_trading.results import (
     SimulatedPaperTradingResult,
     build_simulated_paper_trading_result,
     build_simulated_paper_trading_summary,
+    build_simulated_order_rows,
+    build_simulated_fill_rows,
 )
 import numbers
 
@@ -279,3 +281,182 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
     def test_paper_trading_init_exports_summary_helper(self):
         import tw_stock_tool.paper_trading as pt
         self.assertTrue(hasattr(pt, "build_simulated_paper_trading_summary"))
+
+    def test_build_order_rows_maps_fields(self):
+        class DummyTimestamp:
+            pass
+        signal_time = DummyTimestamp()
+        created_at = DummyTimestamp()
+        order = SimulatedOrder(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            signal_time=signal_time,
+            created_at=created_at,
+            strategy="unit-test-strategy"
+        )
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=1,
+            fill_count=0,
+            open_position_count=0,
+            orders=(order,),
+            fills=tuple(),
+        )
+        rows = build_simulated_order_rows(result)
+        self.assertIsInstance(rows, list)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        expected_keys = {
+            "order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy"
+        }
+        self.assertEqual(set(row.keys()), expected_keys)
+        self.assertEqual(row["order_id"], "order-1")
+        self.assertEqual(row["symbol"], "2330")
+        self.assertEqual(row["side"], "BUY")
+        self.assertEqual(row["quantity"], 1000)
+        self.assertIs(row["signal_time"], signal_time)
+        self.assertIs(row["created_at"], created_at)
+        self.assertEqual(row["strategy"], "unit-test-strategy")
+
+    def test_build_fill_rows_maps_fields_and_properties(self):
+        class DummyTimestamp:
+            pass
+        filled_at = DummyTimestamp()
+        fill = SimulatedFill(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            price=100.0,
+            filled_at=filled_at,
+            fee=100.0,
+            tax=0.0,
+            slippage=50.0
+        )
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=0,
+            fill_count=1,
+            open_position_count=0,
+            orders=tuple(),
+            fills=(fill,),
+        )
+        rows = build_simulated_fill_rows(result)
+        self.assertIsInstance(rows, list)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        expected_keys = {
+            "order_id", "symbol", "side", "quantity", "price", "filled_at",
+            "fee", "tax", "slippage", "gross_amount", "net_cash_effect"
+        }
+        self.assertEqual(set(row.keys()), expected_keys)
+        self.assertEqual(row["order_id"], "order-1")
+        self.assertEqual(row["symbol"], "2330")
+        self.assertEqual(row["side"], "BUY")
+        self.assertEqual(row["quantity"], 1000)
+        self.assertEqual(row["price"], 100.0)
+        self.assertEqual(row["fee"], 100.0)
+        self.assertEqual(row["tax"], 0.0)
+        self.assertEqual(row["slippage"], 50.0)
+        self.assertEqual(row["gross_amount"], 100000.0)
+        self.assertEqual(row["net_cash_effect"], -100150.0)
+        self.assertIs(row["filled_at"], filled_at)
+
+    def test_trade_log_helpers_return_empty_lists(self):
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=0,
+            fill_count=0,
+            open_position_count=0,
+            orders=tuple(),
+            fills=tuple(),
+        )
+        self.assertEqual(build_simulated_order_rows(result), [])
+        self.assertEqual(build_simulated_fill_rows(result), [])
+
+    def test_trade_log_helpers_preserve_original_types(self):
+        class DummyTimestamp:
+            pass
+        signal_time = DummyTimestamp()
+        created_at = DummyTimestamp()
+        filled_at = DummyTimestamp()
+        order = SimulatedOrder(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            signal_time=signal_time,
+            created_at=created_at,
+            strategy="unit-test-strategy"
+        )
+        fill = SimulatedFill(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            price=100.0,
+            filled_at=filled_at,
+            fee=100.0,
+            tax=0.0,
+            slippage=50.0
+        )
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=1,
+            fill_count=1,
+            open_position_count=0,
+            orders=(order,),
+            fills=(fill,),
+        )
+        order_rows = build_simulated_order_rows(result)
+        fill_rows = build_simulated_fill_rows(result)
+
+        o_row = order_rows[0]
+        self.assertNotIsInstance(o_row["signal_time"], str)
+        self.assertNotIsInstance(o_row["created_at"], str)
+        self.assertIsInstance(o_row["quantity"], numbers.Integral)
+
+        f_row = fill_rows[0]
+        self.assertNotIsInstance(f_row["filled_at"], str)
+        self.assertIsInstance(f_row["quantity"], numbers.Integral)
+        self.assertIsInstance(f_row["price"], numbers.Real)
+        self.assertIsInstance(f_row["fee"], numbers.Real)
+        self.assertIsInstance(f_row["tax"], numbers.Real)
+        self.assertIsInstance(f_row["slippage"], numbers.Real)
+        self.assertIsInstance(f_row["gross_amount"], numbers.Real)
+        self.assertIsInstance(f_row["net_cash_effect"], numbers.Real)
+
+    def test_paper_trading_init_exports_trade_log_row_helpers(self):
+        import tw_stock_tool.paper_trading as pt
+        self.assertTrue(hasattr(pt, "build_simulated_order_rows"))
+        self.assertTrue(hasattr(pt, "build_simulated_fill_rows"))

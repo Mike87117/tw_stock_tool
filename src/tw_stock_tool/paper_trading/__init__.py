@@ -8,6 +8,8 @@ from .results import (
     SimulatedPaperTradingResult,
     build_simulated_paper_trading_result,
     build_simulated_paper_trading_summary,
+    build_simulated_order_rows,
+    build_simulated_fill_rows,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "SimulatedPaperTradingResult",
     "build_simulated_paper_trading_result",
     "build_simulated_paper_trading_summary",
+    "build_simulated_order_rows",
+    "build_simulated_fill_rows",
 ]
