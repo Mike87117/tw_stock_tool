@@ -7,6 +7,10 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedPortfolio,
 )
+from tw_stock_tool.paper_trading.results import (
+    SimulatedPaperTradingResult,
+    build_simulated_paper_trading_result,
+)
 
 
 def run_simulated_paper_trading(
@@ -98,3 +102,33 @@ def run_simulated_paper_trading(
             portfolio.trade_log.record_order(pending_order)
 
     return portfolio
+
+
+def run_simulated_paper_trading_result(
+    df: pd.DataFrame,
+    symbol: str,
+    initial_cash: float,
+    quantity_per_trade: int = 1000,
+    fee_rate: float = 0.0,
+    tax_rate: float = 0.0,
+    slippage_per_share: float = 0.0,
+    last_price: float | None = None,
+) -> SimulatedPaperTradingResult:
+    """
+    Run simulated paper trading and build a stable summary result object.
+    """
+    portfolio = run_simulated_paper_trading(
+        df=df,
+        symbol=symbol,
+        initial_cash=initial_cash,
+        quantity_per_trade=quantity_per_trade,
+        fee_rate=fee_rate,
+        tax_rate=tax_rate,
+        slippage_per_share=slippage_per_share,
+    )
+    return build_simulated_paper_trading_result(
+        portfolio=portfolio,
+        symbol=symbol,
+        initial_cash=initial_cash,
+        last_price=last_price,
+    )
