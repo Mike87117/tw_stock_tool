@@ -14,7 +14,7 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
             quantity=1000,
             signal_time="2023-01-01 10:00:00",
             created_at="2023-01-01 10:05:00",
-            strategy="ma_cross"
+            strategy="mean|reversion"
         )
         self.fill = SimulatedFill(
             order_id="order-1",
@@ -65,7 +65,8 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
         self.assertIn("| Final Position Quantity | 1000 |", output)
 
         # 4. Order rows are represented
-        self.assertIn("| order-1 | 2330 | BUY | 1000 | 2023-01-01 10:00:00 | 2023-01-01 10:05:00 | ma_cross |", output)
+        self.assertIn("| order-1 | 2330 | BUY | 1000 | 2023-01-01 10:00:00 | 2023-01-01 10:05:00 | mean\\|reversion |", output)
+        self.assertNotIn("mean|reversion", output)
 
         # 5. Fill rows are represented
         self.assertIn("| order-1 | 2330 | BUY | 1000 | 100.50 | 2023-01-01 10:10:00 | 143.00 | 0.00 | 50.00 | 100,500.00 | -100,693.00 |", output)
@@ -100,8 +101,8 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
         self.assertIn("## Orders", output)
         self.assertIn("## Fills", output)
 
-        # Verify headers exist
-        self.assertIn("| Order ID | Symbol |", output)
+        self.assertIn("*No orders to display.*", output)
+        self.assertIn("*No fills to display.*", output)
 
         # Should only contain the summary items, the empty orders/fills headers, but no extra data lines.
         lines = output.strip().split("\n")
