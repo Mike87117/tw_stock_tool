@@ -469,6 +469,27 @@ class DataLoaderTest(unittest.TestCase):
         self.assertIn("stale cached data", mock_stderr.getvalue())
         self.assertIn("2330.TW", mock_stderr.getvalue())
 
+        banned_phrases = (
+            "guaranteed latest data",
+            "guaranteed complete",
+            "guaranteed accurate",
+            "always latest",
+            "real-time guaranteed",
+            "refresh always succeeds",
+            "fallback data is current",
+            "official stock list is complete",
+            "investment-grade data",
+            "safe to invest",
+            "best stocks to buy",
+            "investment recommendation",
+            "recommended stocks",
+            "guaranteed profit",
+            "guaranteed return",
+        )
+        output = mock_stderr.getvalue().lower()
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase, output)
+
     @patch("sys.stderr", new_callable=StringIO)
     def test_stale_cache_within_threshold_is_used(self, mock_stderr: StringIO) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

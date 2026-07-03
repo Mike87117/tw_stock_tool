@@ -141,6 +141,39 @@ class StockListUpdaterTest(unittest.TestCase):
             self.assertEqual(result["Stock"].tolist(), ["2330"])
             self.assertEqual(path.read_text(encoding="utf-8").splitlines(), ["2330"])
 
+    def test_main_success_output_has_no_banned_data_freshness_wording(self) -> None:
+        import sys
+        df = pd.DataFrame({"Stock": ["2330"], "Name": ["台積電"], "Market": ["TWSE"], "Type": ["股票"]})
+        path = Path("stocks.txt")
+
+        with patch.object(sys, "argv", ["stock_list_updater.py", "--market", "twse", "--output", "stocks.txt"]):
+            with patch.object(stock_list_updater, "update_stock_list", return_value=(df, path)):
+                with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+                    stock_list_updater.main()
+
+        output = mock_stdout.getvalue().lower()
+        self.assertIn("stock list updated:", output)
+        self.assertIn("stocks: 1", output)
+        banned_phrases = (
+            "guaranteed latest data",
+            "guaranteed complete",
+            "guaranteed accurate",
+            "always latest",
+            "real-time guaranteed",
+            "refresh always succeeds",
+            "fallback data is current",
+            "official stock list is complete",
+            "investment-grade data",
+            "safe to invest",
+            "best stocks to buy",
+            "investment recommendation",
+            "recommended stocks",
+            "guaranteed profit",
+            "guaranteed return",
+        )
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase, output)
+
     def test_invalid_market_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):
             stock_list_updater.update_stock_list("bad", "stocks.txt")
@@ -176,6 +209,27 @@ class StockListUpdaterTest(unittest.TestCase):
             self.assertEqual(result["Stock"].tolist(), ["2330"])
             self.assertIn("Warning: Partial stock list update. Errors: TPEX: down", mock_stderr.getvalue())
             self.assertTrue(output.exists())
+
+            banned_phrases = (
+                "guaranteed latest data",
+                "guaranteed complete",
+                "guaranteed accurate",
+                "always latest",
+                "real-time guaranteed",
+                "refresh always succeeds",
+                "fallback data is current",
+                "official stock list is complete",
+                "investment-grade data",
+                "safe to invest",
+                "best stocks to buy",
+                "investment recommendation",
+                "recommended stocks",
+                "guaranteed profit",
+                "guaranteed return",
+            )
+            err_str = mock_stderr.getvalue().lower()
+            for phrase in banned_phrases:
+                self.assertNotIn(phrase, err_str)
 
     def test_parse_args(self) -> None:
         args = stock_list_updater._parse_args(

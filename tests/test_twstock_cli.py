@@ -235,6 +235,42 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("backtest-report", output)
         self.assertIn("walk-forward", output)
 
+    def test_no_banned_data_freshness_wording_in_cli_help(self) -> None:
+        banned_phrases = (
+            "guaranteed latest data",
+            "guaranteed complete",
+            "guaranteed accurate",
+            "always latest",
+            "real-time guaranteed",
+            "refresh always succeeds",
+            "fallback data is current",
+            "official stock list is complete",
+            "investment-grade data",
+            "safe to invest",
+            "best stocks to buy",
+            "investment recommendation",
+            "recommended stocks",
+            "guaranteed profit",
+            "guaranteed return",
+        )
+        subcommands = [
+            ["--help"],
+            ["stock-list", "update", "--help"],
+            ["cache", "--help"],
+            ["scan", "--help"],
+        ]
+
+        for cmd in subcommands:
+            out = StringIO()
+            with redirect_stdout(out):
+                with self.assertRaises(SystemExit) as ctx:
+                    twstock_cli.main(cmd)
+            self.assertEqual(ctx.exception.code, 0)
+
+            output = out.getvalue().lower()
+            for phrase in banned_phrases:
+                self.assertNotIn(phrase, output, f"Banned phrase '{phrase}' found in 'twstock {' '.join(cmd)}'")
+
     def test_stock_list_help_exits_successfully(self) -> None:
         out = StringIO()
         with redirect_stdout(out):
