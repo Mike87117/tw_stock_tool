@@ -1234,6 +1234,82 @@ python backtest_report.py --stock 2330 --strategy ma_cross --period 2y --output-
 python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
 ```
 
+## Simulated Paper Trading Export APIs
+
+This library-level helper API exports an already constructed simulated paper trading result to markdown or CSV formats.
+
+> **Safety Boundary**: This is a research-only simulated reporting feature. It is not live trading, broker integration, investment advice, or a buy/sell/hold recommendation system, and it does not guarantee profit.
+
+### 1. Markdown string export
+
+Use this to render a result into a Markdown string. It returns a Markdown string and does not write files.
+
+```python
+from tw_stock_tool.paper_trading import export_simulated_paper_trading_markdown
+
+markdown_text = export_simulated_paper_trading_markdown(result)
+```
+
+### 2. CSV bundle string export
+
+Use this to render a result into a bundle of CSV strings. It does not write files.
+
+```python
+from tw_stock_tool.paper_trading import export_simulated_paper_trading_csv_bundle
+
+csv_bundle = export_simulated_paper_trading_csv_bundle(result)
+
+summary_csv = csv_bundle["summary"]
+orders_csv = csv_bundle["orders"]
+fills_csv = csv_bundle["fills"]
+```
+
+### 3. Markdown file export
+
+Use this to render a simulated paper trading result and write the Markdown report to the requested path. It returns a `Path`.
+
+```python
+from tw_stock_tool.paper_trading import export_simulated_paper_trading_markdown_file
+
+path = export_simulated_paper_trading_markdown_file(
+    result,
+    "output/simulated_paper_trading_report.md",
+    overwrite=False,
+)
+```
+
+*(Note: This function only writes an output file. It does not fetch market data or run a strategy.)*
+
+### 4. CSV files export
+
+Use this to render a simulated paper trading result and write the CSV bundle to a directory.
+
+```python
+from tw_stock_tool.paper_trading import export_simulated_paper_trading_csv_files
+
+paths = export_simulated_paper_trading_csv_files(
+    result,
+    "output/simulated_paper_trading",
+    basename="simulated_paper_trading",
+    overwrite=False,
+)
+```
+
+This writes:
+- `simulated_paper_trading_summary.csv`
+- `simulated_paper_trading_orders.csv`
+- `simulated_paper_trading_fills.csv`
+
+And returns:
+
+```python
+{
+    "summary": Path(...),
+    "orders": Path(...),
+    "fills": Path(...),
+}
+```
+
 ## 輸出檔案位置總覽
 
 | 工具 | 功能 | 預設輸出位置 | 備註 |
