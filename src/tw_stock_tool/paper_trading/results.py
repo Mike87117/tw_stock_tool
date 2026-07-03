@@ -94,3 +94,41 @@ def build_simulated_paper_trading_summary(
         "total_return": total_return,
         "total_return_pct": total_return_pct,
     }
+
+def build_simulated_order_rows(
+    result: SimulatedPaperTradingResult,
+) -> list[dict[str, object]]:
+    """Convert a SimulatedPaperTradingResult's orders into a list of flat dictionaries."""
+    rows = []
+    for order in result.orders:
+        rows.append({
+            "order_id": order.order_id,
+            "symbol": order.symbol,
+            "side": order.side,
+            "quantity": order.quantity,
+            "signal_time": order.signal_time,
+            "created_at": order.created_at,
+            "strategy": order.strategy,
+        })
+    return rows
+
+def build_simulated_fill_rows(
+    result: SimulatedPaperTradingResult,
+) -> list[dict[str, object]]:
+    """Convert a SimulatedPaperTradingResult's fills into a list of flat dictionaries."""
+    rows = []
+    for fill in result.fills:
+        rows.append({
+            "order_id": fill.order_id,
+            "symbol": fill.symbol,
+            "side": fill.side,
+            "quantity": fill.quantity,
+            "price": fill.price,
+            "filled_at": fill.filled_at,
+            "fee": fill.fee,
+            "tax": fill.tax,
+            "slippage": fill.slippage,
+            "gross_amount": fill.gross_amount,
+            "net_cash_effect": fill.net_cash_effect,
+        })
+    return rows
