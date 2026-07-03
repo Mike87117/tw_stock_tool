@@ -16,6 +16,10 @@ from .exporters import (
     export_simulated_paper_trading_markdown,
     export_simulated_paper_trading_csv_bundle,
 )
+from .export_files import (
+    export_simulated_paper_trading_markdown_file,
+    export_simulated_paper_trading_csv_files,
+)
 
 __all__ = [
     "run_simulated_paper_trading",
@@ -28,4 +32,6 @@ __all__ = [
     "build_simulated_paper_trading_report_data",
     "export_simulated_paper_trading_markdown",
     "export_simulated_paper_trading_csv_bundle",
+    "export_simulated_paper_trading_markdown_file",
+    "export_simulated_paper_trading_csv_files",
 ]
