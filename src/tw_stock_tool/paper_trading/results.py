@@ -67,3 +67,30 @@ def build_simulated_paper_trading_result(
         orders=tuple(portfolio.trade_log.orders),
         fills=tuple(portfolio.trade_log.fills),
     )
+
+def build_simulated_paper_trading_summary(
+    result: SimulatedPaperTradingResult,
+) -> dict[str, object]:
+    """Convert a SimulatedPaperTradingResult into a flat summary dictionary."""
+    total_return = result.total_equity - result.initial_cash
+
+    if result.initial_cash == 0:
+        total_return_pct = None
+    else:
+        total_return_pct = total_return / result.initial_cash
+
+    return {
+        "symbol": result.symbol,
+        "initial_cash": result.initial_cash,
+        "final_cash": result.final_cash,
+        "final_position_quantity": result.final_position_quantity,
+        "average_cost": result.average_cost,
+        "realized_pnl": result.realized_pnl,
+        "unrealized_pnl": result.unrealized_pnl,
+        "total_equity": result.total_equity,
+        "order_count": result.order_count,
+        "fill_count": result.fill_count,
+        "open_position_count": result.open_position_count,
+        "total_return": total_return,
+        "total_return_pct": total_return_pct,
+    }

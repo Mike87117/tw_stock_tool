@@ -10,7 +10,9 @@ from tw_stock_tool.paper_trading.models import (
 from tw_stock_tool.paper_trading.results import (
     SimulatedPaperTradingResult,
     build_simulated_paper_trading_result,
+    build_simulated_paper_trading_summary,
 )
+import numbers
 
 
 class TestSimulatedPaperTradingResults(unittest.TestCase):
@@ -155,3 +157,125 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
                     initial_cash=100000.0,
                     last_price=val,
                 )
+
+    def test_build_summary_computes_returns(self):
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=110000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=10000.0,
+            unrealized_pnl=0.0,
+            total_equity=110000.0,
+            order_count=2,
+            fill_count=2,
+            open_position_count=0,
+            orders=tuple(),
+            fills=tuple(),
+        )
+        summary = build_simulated_paper_trading_summary(result)
+        self.assertEqual(summary["total_return"], 10000.0)
+        self.assertEqual(summary["total_return_pct"], 0.1)
+
+    def test_build_summary_handles_zero_initial_cash(self):
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=0.0,
+            final_cash=0.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=0.0,
+            order_count=0,
+            fill_count=0,
+            open_position_count=0,
+            orders=tuple(),
+            fills=tuple(),
+        )
+        summary = build_simulated_paper_trading_summary(result)
+        self.assertEqual(summary["total_return"], 0.0)
+        self.assertIsNone(summary["total_return_pct"])
+
+    def test_build_summary_omits_heavy_structures(self):
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=0,
+            fill_count=0,
+            open_position_count=0,
+            orders=tuple(),
+            fills=tuple(),
+        )
+        summary = build_simulated_paper_trading_summary(result)
+        self.assertNotIn("orders", summary)
+        self.assertNotIn("fills", summary)
+        self.assertNotIn("trade_log", summary)
+
+    def test_build_summary_preserves_numeric_types(self):
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=110000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=10000.0,
+            unrealized_pnl=0.0,
+            total_equity=110000.0,
+            order_count=2,
+            fill_count=2,
+            open_position_count=0,
+            orders=tuple(),
+            fills=tuple(),
+        )
+        summary = build_simulated_paper_trading_summary(result)
+        self.assertIsInstance(summary["total_return"], numbers.Real)
+        self.assertIsInstance(summary["total_return_pct"], float)
+        self.assertNotIsInstance(summary["total_return_pct"], str)
+        self.assertNotIsInstance(summary["initial_cash"], str)
+        self.assertNotIsInstance(summary["total_equity"], str)
+
+    def test_build_summary_contains_expected_keys_only(self):
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=110000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=10000.0,
+            unrealized_pnl=0.0,
+            total_equity=110000.0,
+            order_count=2,
+            fill_count=2,
+            open_position_count=0,
+            orders=tuple(),
+            fills=tuple(),
+        )
+        summary = build_simulated_paper_trading_summary(result)
+        expected_keys = {
+            "symbol",
+            "initial_cash",
+            "final_cash",
+            "final_position_quantity",
+            "average_cost",
+            "realized_pnl",
+            "unrealized_pnl",
+            "total_equity",
+            "order_count",
+            "fill_count",
+            "open_position_count",
+            "total_return",
+            "total_return_pct",
+        }
+        self.assertEqual(set(summary.keys()), expected_keys)
+
+    def test_paper_trading_init_exports_summary_helper(self):
+        import tw_stock_tool.paper_trading as pt
+        self.assertTrue(hasattr(pt, "build_simulated_paper_trading_summary"))
