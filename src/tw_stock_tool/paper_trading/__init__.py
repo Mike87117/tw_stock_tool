@@ -10,6 +10,7 @@ from .results import (
     build_simulated_paper_trading_summary,
     build_simulated_order_rows,
     build_simulated_fill_rows,
+    build_simulated_paper_trading_report_data,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "build_simulated_paper_trading_summary",
     "build_simulated_order_rows",
     "build_simulated_fill_rows",
+    "build_simulated_paper_trading_report_data",
 ]

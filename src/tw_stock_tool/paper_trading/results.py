@@ -132,3 +132,13 @@ def build_simulated_fill_rows(
             "net_cash_effect": fill.net_cash_effect,
         })
     return rows
+
+def build_simulated_paper_trading_report_data(
+    result: SimulatedPaperTradingResult,
+) -> dict[str, object]:
+    """Bundle summary and trade logs into a single flat report payload."""
+    return {
+        "summary": build_simulated_paper_trading_summary(result),
+        "order_rows": build_simulated_order_rows(result),
+        "fill_rows": build_simulated_fill_rows(result),
+    }
