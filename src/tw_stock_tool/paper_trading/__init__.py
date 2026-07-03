@@ -12,6 +12,7 @@ from .results import (
     build_simulated_fill_rows,
     build_simulated_paper_trading_report_data,
 )
+from .exporters import export_simulated_paper_trading_markdown
 
 __all__ = [
     "run_simulated_paper_trading",
@@ -22,4 +23,5 @@ __all__ = [
     "build_simulated_order_rows",
     "build_simulated_fill_rows",
     "build_simulated_paper_trading_report_data",
+    "export_simulated_paper_trading_markdown",
 ]
