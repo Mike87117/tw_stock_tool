@@ -13,6 +13,7 @@ from tw_stock_tool.paper_trading.results import (
     build_simulated_paper_trading_summary,
     build_simulated_order_rows,
     build_simulated_fill_rows,
+    build_simulated_paper_trading_report_data,
 )
 import numbers
 
@@ -460,3 +461,68 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
         import tw_stock_tool.paper_trading as pt
         self.assertTrue(hasattr(pt, "build_simulated_order_rows"))
         self.assertTrue(hasattr(pt, "build_simulated_fill_rows"))
+        self.assertTrue(hasattr(pt, "build_simulated_paper_trading_report_data"))
+
+    def test_build_simulated_paper_trading_report_data(self):
+        class DummyTimestamp:
+            pass
+        signal_time = DummyTimestamp()
+        created_at = DummyTimestamp()
+        filled_at = DummyTimestamp()
+        order = SimulatedOrder(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            signal_time=signal_time,
+            created_at=created_at,
+            strategy="unit-test-strategy"
+        )
+        fill = SimulatedFill(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            price=100.0,
+            filled_at=filled_at,
+            fee=100.0,
+            tax=0.0,
+            slippage=50.0
+        )
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=1,
+            fill_count=1,
+            open_position_count=0,
+            orders=(order,),
+            fills=(fill,),
+        )
+
+        report_data = build_simulated_paper_trading_report_data(result)
+
+        self.assertIsInstance(report_data, dict)
+        self.assertEqual(set(report_data.keys()), {"summary", "order_rows", "fill_rows"})
+
+        self.assertEqual(report_data["summary"], build_simulated_paper_trading_summary(result))
+        self.assertEqual(report_data["order_rows"], build_simulated_order_rows(result))
+        self.assertEqual(report_data["fill_rows"], build_simulated_fill_rows(result))
+
+        # Verify no raw order/fill objects leak into the top level structure.
+        self.assertNotIn("orders", report_data)
+        self.assertNotIn("fills", report_data)
+        self.assertNotIn("trade_log", report_data)
+        self.assertNotIn("metadata", report_data)
+        self.assertNotIn("recommendation", report_data)
+
+        # Verify raw values are preserved
+        o_row = report_data["order_rows"][0]
+        self.assertIs(o_row["signal_time"], signal_time)
+        self.assertNotIsInstance(o_row["signal_time"], str)
+        self.assertIsInstance(o_row["quantity"], numbers.Integral)
