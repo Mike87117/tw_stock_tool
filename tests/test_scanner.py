@@ -342,6 +342,91 @@ class ScannerTest(unittest.TestCase):
                 expected = "A" if column == "Volume_Ratio" else "B"
                 self.assertEqual(result.iloc[0]["Stock"], expected)
 
+    def test_no_banned_wording_in_cli_stdout_and_excel(self) -> None:
+        import tempfile
+        from pathlib import Path
+        
+        banned_phrases = [
+            "best stocks",
+            "best stock",
+            "recommended stocks",
+            "recommended stock",
+            "buy recommendation",
+            "sell recommendation",
+            "hold recommendation",
+            "investment recommendation",
+            "investment opportunity",
+            "best stocks to buy",
+            "should buy",
+            "should sell",
+            "safe to invest",
+            "strong buy",
+            "winner",
+            "guaranteed profit",
+            "guaranteed return",
+            "guaranteed latest data",
+        ]
+
+        def fake_scan_one_stock(stock_id: str, config: ScanConfig) -> dict[str, object]:
+            return _fake_scan_row(stock_id)
+
+        stdout = StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            test_args = [
+                "scan_stocks",
+                "--stocks", "2330", "2317",
+                "--output-dir", tmp_dir,
+            ]
+            with patch("sys.argv", test_args):
+                with patch.object(scanner, "scan_one_stock", side_effect=fake_scan_one_stock):
+                    with patch("sys.stdout", stdout):
+                        scan_stocks_cli.main()
+
+            output = stdout.getvalue().lower()
+            
+            # Positive assertions (CLI)
+            self.assertIn("掃描完成", output)
+            self.assertIn("成功", output)
+            self.assertIn("失敗", output)
+            self.assertIn("excel:", output)
+            
+            # Negative assertions (CLI)
+            for phrase in banned_phrases:
+                self.assertNotIn(phrase, output)
+                
+            # Negative assertions (Excel)
+            tmp_path = Path(tmp_dir)
+            excel_files = list(tmp_path.glob("*.xlsx"))
+            self.assertTrue(excel_files)
+            excel_path = excel_files[0]
+            
+            with pd.ExcelFile(excel_path) as xls:
+                for sheet_name in xls.sheet_names:
+                    for phrase in banned_phrases:
+                        self.assertNotIn(phrase, sheet_name.lower())
+                    
+                    df = pd.read_excel(xls, sheet_name=sheet_name)
+                    # Check columns
+                    for col in df.columns:
+                        for phrase in banned_phrases:
+                            self.assertNotIn(phrase, str(col).lower())
+                    # Check data
+                    for _, row in df.iterrows():
+                        for val in row.values:
+                            val_str = str(val).lower()
+                            for phrase in banned_phrases:
+                                self.assertNotIn(phrase, val_str)
+                                
+                # Positive assertion for Excel
+                columns = [str(c) for c in df.columns]
+                self.assertIn("Score", columns)
+                self.assertIn("Signal", columns)
+                self.assertIn("Close", columns)
+                self.assertIn("Volume_Ratio", columns)
+                
+                signals = df["Signal"].dropna().tolist()
+                self.assertIn("HOLD", signals)
+
 
 if __name__ == "__main__":
     unittest.main()
