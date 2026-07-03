@@ -2,7 +2,12 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading
+from tw_stock_tool.paper_trading.engine import (
+    run_simulated_paper_trading,
+    run_simulated_paper_trading_result,
+)
+from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
+from tw_stock_tool.paper_trading.models import PaperTradingModelError
 
 
 class TestSimulatedPaperTradingEngine(unittest.TestCase):
@@ -209,3 +214,62 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         pos = portfolio.position_for("2330")
         self.assertEqual(pos.realized_pnl, 8460.0)
         self.assertEqual(portfolio.cash, 208460.0)
+
+    def test_run_simulated_result_wrapper_flat_portfolio(self):
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0, 102.0],
+            "entry_signal": [False, False, False],
+            "exit_signal": [False, False, False],
+        })
+        result = run_simulated_paper_trading_result(
+            df=df, symbol="2330", initial_cash=100000.0, quantity_per_trade=1000
+        )
+        self.assertIsInstance(result, SimulatedPaperTradingResult)
+        self.assertEqual(result.final_cash, 100000.0)
+        self.assertEqual(result.final_position_quantity, 0)
+        self.assertEqual(result.total_equity, 100000.0)
+        self.assertEqual(result.order_count, 0)
+        self.assertEqual(result.fill_count, 0)
+
+    def test_run_simulated_result_wrapper_closed_position_without_last_price(self):
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0, 102.0, 103.0],
+            "entry_signal": [True, False, False, False],
+            "exit_signal": [False, False, True, False],
+        })
+        result = run_simulated_paper_trading_result(
+            df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000
+        )
+        self.assertIsInstance(result, SimulatedPaperTradingResult)
+        self.assertEqual(result.final_position_quantity, 0)
+        self.assertEqual(result.fill_count, 2)
+        self.assertEqual(result.total_equity, result.final_cash)
+
+    def test_run_simulated_result_wrapper_open_position_uses_last_price(self):
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0, 102.0],
+            "entry_signal": [True, False, False],
+            "exit_signal": [False, False, False],
+        })
+        result = run_simulated_paper_trading_result(
+            df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000, last_price=105.0
+        )
+        self.assertIsInstance(result, SimulatedPaperTradingResult)
+        self.assertGreater(result.final_position_quantity, 0)
+        self.assertEqual(result.unrealized_pnl, 4000.0)  # (105 - 101) * 1000 = 4000
+        self.assertEqual(result.total_equity, 200000.0 - 101000.0 + 105000.0)
+
+    def test_run_simulated_result_wrapper_open_position_missing_price(self):
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0, 102.0],
+            "entry_signal": [True, False, False],
+            "exit_signal": [False, False, False],
+        })
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_paper_trading_result(
+                df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000
+            )
+
+    def test_paper_trading_init_exports_run_result_helper(self):
+        import tw_stock_tool.paper_trading as pt
+        self.assertTrue(hasattr(pt, "run_simulated_paper_trading_result"))
