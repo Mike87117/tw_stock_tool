@@ -1,3 +1,5 @@
+import csv
+import io
 from typing import Any
 from .results import (
     SimulatedPaperTradingResult,
@@ -103,3 +105,96 @@ def export_simulated_paper_trading_markdown(
     # Append trailing newline
     lines.append("")
     return "\n".join(lines)
+
+def export_simulated_paper_trading_csv_bundle(
+    result: SimulatedPaperTradingResult,
+) -> dict[str, str]:
+    """Export a SimulatedPaperTradingResult to a bundle of CSV strings."""
+    report_data = build_simulated_paper_trading_report_data(result)
+
+    summary = report_data["summary"]
+    order_rows = report_data["order_rows"]
+    fill_rows = report_data["fill_rows"]
+
+    # 1. Summary CSV
+    summary_keys = [
+        "symbol",
+        "initial_cash",
+        "final_cash",
+        "final_position_quantity",
+        "average_cost",
+        "realized_pnl",
+        "unrealized_pnl",
+        "total_equity",
+        "order_count",
+        "fill_count",
+        "open_position_count",
+        "total_return",
+        "total_return_pct",
+    ]
+
+    summary_io = io.StringIO()
+    summary_writer = csv.writer(summary_io, lineterminator="\n")
+    summary_writer.writerow(["metric", "value"])
+
+    for key in summary_keys:
+        value = summary.get(key)
+        if value is None:
+            csv_val = ""
+        else:
+            csv_val = str(value)
+        summary_writer.writerow([key, csv_val])
+
+    # 2. Orders CSV
+    order_keys = [
+        "order_id",
+        "symbol",
+        "side",
+        "quantity",
+        "signal_time",
+        "created_at",
+        "strategy",
+    ]
+
+    orders_io = io.StringIO()
+    orders_writer = csv.writer(orders_io, lineterminator="\n")
+    orders_writer.writerow(order_keys)
+
+    for row in order_rows:
+        row_vals = []
+        for k in order_keys:
+            v = row.get(k)
+            row_vals.append("" if v is None else str(v))
+        orders_writer.writerow(row_vals)
+
+    # 3. Fills CSV
+    fill_keys = [
+        "order_id",
+        "symbol",
+        "side",
+        "quantity",
+        "price",
+        "filled_at",
+        "fee",
+        "tax",
+        "slippage",
+        "gross_amount",
+        "net_cash_effect",
+    ]
+
+    fills_io = io.StringIO()
+    fills_writer = csv.writer(fills_io, lineterminator="\n")
+    fills_writer.writerow(fill_keys)
+
+    for row in fill_rows:
+        row_vals = []
+        for k in fill_keys:
+            v = row.get(k)
+            row_vals.append("" if v is None else str(v))
+        fills_writer.writerow(row_vals)
+
+    return {
+        "summary": summary_io.getvalue(),
+        "orders": orders_io.getvalue(),
+        "fills": fills_io.getvalue(),
+    }

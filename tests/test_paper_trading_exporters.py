@@ -110,5 +110,129 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
         # Check there is no "order-1"
         self.assertNotIn("order-1", output)
 
+class TestPaperTradingCSVExporter(unittest.TestCase):
+
+    def setUp(self):
+        self.order = SimulatedOrder(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            signal_time="2023-01-01 10:00:00",
+            created_at="2023-01-01 10:05:00",
+            strategy="mean|reversion,with,commas"
+        )
+        self.fill = SimulatedFill(
+            order_id="order-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            price=100.5,
+            filled_at="2023-01-01 10:10:00",
+            fee=143.0,
+            tax=0.0,
+            slippage=50.0
+        )
+        self.result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=1000000.0,
+            final_cash=899307.0,
+            final_position_quantity=1000,
+            average_cost=100.5,
+            realized_pnl=0.0,
+            unrealized_pnl=5000.0,
+            total_equity=1004307.0,
+            order_count=1,
+            fill_count=1,
+            open_position_count=1,
+            orders=(self.order,),
+            fills=(self.fill,),
+        )
+
+    def test_export_simulated_paper_trading_csv_bundle(self):
+        from tw_stock_tool.paper_trading.exporters import export_simulated_paper_trading_csv_bundle
+        import csv
+        import io
+
+        output = export_simulated_paper_trading_csv_bundle(self.result)
+
+        self.assertIsInstance(output, dict)
+        self.assertEqual(set(output.keys()), {"summary", "orders", "fills"})
+
+        for v in output.values():
+            self.assertIsInstance(v, str)
+
+        summary_csv = output["summary"]
+        orders_csv = output["orders"]
+        fills_csv = output["fills"]
+
+        # Parse summary
+        summary_reader = list(csv.reader(io.StringIO(summary_csv)))
+        self.assertEqual(summary_reader[0], ["metric", "value"])
+        # Check specific rows
+        summary_dict = {row[0]: row[1] for row in summary_reader[1:]}
+        self.assertEqual(summary_dict["symbol"], "2330")
+        self.assertEqual(summary_dict["initial_cash"], "1000000.0")
+        self.assertEqual(summary_dict["total_return"], "4307.0")
+        self.assertEqual(summary_dict["total_return_pct"], "0.004307") # no % sign
+
+        # Parse orders
+        orders_reader = list(csv.reader(io.StringIO(orders_csv)))
+        self.assertEqual(orders_reader[0], ["order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy"])
+        self.assertEqual(len(orders_reader), 2)
+        self.assertEqual(orders_reader[1], ["order-1", "2330", "BUY", "1000", "2023-01-01 10:00:00", "2023-01-01 10:05:00", "mean|reversion,with,commas"])
+
+        # Parse fills
+        fills_reader = list(csv.reader(io.StringIO(fills_csv)))
+        self.assertEqual(fills_reader[0], ["order_id", "symbol", "side", "quantity", "price", "filled_at", "fee", "tax", "slippage", "gross_amount", "net_cash_effect"])
+        self.assertEqual(len(fills_reader), 2)
+        self.assertEqual(fills_reader[1], ["order-1", "2330", "BUY", "1000", "100.5", "2023-01-01 10:10:00", "143.0", "0.0", "50.0", "100500.0", "-100693.0"])
+
+        forbidden_words = [
+            "recommended", "recommendation", "buy recommendation", "sell recommendation",
+            "hold recommendation", "profitable", "bad trade", "safe", "guaranteed"
+        ]
+        for v in output.values():
+            lower_val = v.lower()
+            for word in forbidden_words:
+                self.assertNotIn(word, lower_val)
+
+    def test_empty_orders_and_fills_csv(self):
+        from tw_stock_tool.paper_trading.exporters import export_simulated_paper_trading_csv_bundle
+        import csv
+        import io
+
+        empty_result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=1000000.0,
+            final_cash=1000000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=1000000.0,
+            order_count=0,
+            fill_count=0,
+            open_position_count=0,
+            orders=(),
+            fills=(),
+        )
+
+        output = export_simulated_paper_trading_csv_bundle(empty_result)
+
+        orders_reader = list(csv.reader(io.StringIO(output["orders"])))
+        self.assertEqual(len(orders_reader), 1)
+        self.assertEqual(orders_reader[0], ["order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy"])
+
+        fills_reader = list(csv.reader(io.StringIO(output["fills"])))
+        self.assertEqual(len(fills_reader), 1)
+        self.assertEqual(fills_reader[0], ["order_id", "symbol", "side", "quantity", "price", "filled_at", "fee", "tax", "slippage", "gross_amount", "net_cash_effect"])
+
+        summary_reader = list(csv.reader(io.StringIO(output["summary"])))
+        summary_dict = {row[0]: row[1] for row in summary_reader[1:]}
+        self.assertEqual(summary_dict["symbol"], "2330")
+        self.assertEqual(summary_dict["total_return"], "0.0")
+        self.assertEqual(summary_dict["total_return_pct"], "0.0")
+
 if __name__ == "__main__":
     unittest.main()
