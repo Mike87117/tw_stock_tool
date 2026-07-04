@@ -2,7 +2,8 @@ import unittest
 
 import pandas as pd
 
-from backtest import BacktestError, run_backtest
+from tw_stock_tool.backtesting.results import BacktestResult
+from backtest import BacktestError, run_backtest, run_backtest_result
 
 
 def _backtest_frame(closes: list[float], signals: list[str], opens: list[float] | None = None) -> pd.DataFrame:
@@ -199,6 +200,61 @@ class BacktestTest(unittest.TestCase):
     def test_invalid_position_size_raises(self) -> None:
         with self.assertRaises(BacktestError):
             run_backtest(
+                _backtest_frame([100, 110], ["BUY", "SELL"]),
+                position_size=0,
+            )
+
+    def test_run_backtest_result_returns_structured_type(self) -> None:
+        frame = _backtest_frame([100, 110, 120], ["BUY", "SELL", "HOLD"])
+        result = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+        )
+        self.assertIsInstance(result, BacktestResult)
+        self.assertIsInstance(result.trades, pd.DataFrame)
+        self.assertIsInstance(result.equity_curve, pd.Series)
+        self.assertGreaterEqual(result.trade_count, 0)
+        self.assertGreater(result.final_capital, 0)
+        self.assertEqual(result.start_date, frame.index[0])
+        self.assertEqual(result.end_date, frame.index[-1])
+
+    def test_backward_compatibility_matches_exactly(self) -> None:
+        frame = _backtest_frame(
+            closes=[100, 110, 120, 130],
+            signals=["BUY", "HOLD", "SELL", "HOLD"],
+            opens=[99, 105, 119, 125],
+        )
+        structured_result = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+        )
+        legacy_result = run_backtest(
+            frame,
+            initial_capital=10000,
+            fee_rate=0.001425,
+            tax_rate=0.003,
+        )
+        
+        legacy_from_structured = structured_result.to_legacy_dict()
+        
+        self.assertEqual(set(legacy_from_structured.keys()), set(legacy_result.keys()))
+        
+        self.assertEqual(legacy_from_structured["Initial Capital"], legacy_result["Initial Capital"])
+        self.assertEqual(legacy_from_structured["Final Capital"], legacy_result["Final Capital"])
+        self.assertEqual(legacy_from_structured["Trade Count"], legacy_result["Trade Count"])
+        self.assertEqual(legacy_from_structured["Total Return %"], legacy_result["Total Return %"])
+        self.assertEqual(legacy_from_structured["Max Drawdown %"], legacy_result["Max Drawdown %"])
+        
+        self.assertEqual(len(legacy_from_structured["Trades"]), len(legacy_result["Trades"]))
+        self.assertEqual(len(legacy_from_structured["Equity Curve"]), len(legacy_result["Equity Curve"]))
+
+    def test_run_backtest_result_invalid_position_size_raises(self) -> None:
+        with self.assertRaises(BacktestError):
+            run_backtest_result(
                 _backtest_frame([100, 110], ["BUY", "SELL"]),
                 position_size=0,
             )
