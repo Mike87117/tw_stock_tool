@@ -96,6 +96,13 @@ class TestBacktestConverterRoundtrip(unittest.TestCase):
         self.assertEqual(buy_order.metadata["semantics"], "retrospective_offline_mapping")
         self.assertEqual(sell_order.metadata["semantics"], "retrospective_offline_mapping")
 
+        # Backtest metadata survives roundtrip
+        for order in (buy_order, sell_order):
+            self.assertEqual(order.metadata["backtest"]["strategy"], "IntegrationTestStrategy")
+            self.assertEqual(order.metadata["backtest"]["parameters"], {})
+            self.assertIsNone(order.metadata["backtest"]["start_date"])
+            self.assertIsNone(order.metadata["backtest"]["end_date"])
+
     def test_user_metadata_survives_json_roundtrip_safely(self):
         caller_metadata = {
             "source": "malicious_source",
