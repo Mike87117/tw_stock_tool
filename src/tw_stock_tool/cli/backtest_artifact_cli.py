@@ -2,15 +2,19 @@ import argparse
 
 from tw_stock_tool.backtesting.serialization import BacktestResultSerializationError
 from tw_stock_tool.backtesting.serialization_files import load_backtest_result_json_file
+from tw_stock_tool.paper_trading import convert_backtest_result_to_simulated_paper_trading_result
+from tw_stock_tool.paper_trading.models import PaperTradingModelError
+from tw_stock_tool.paper_trading.serialization_files import export_simulated_paper_trading_result_json_file
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="backtest_artifact_cli.py",
         description=(
-            "Validate or inspect an existing research-only BacktestResult JSON artifact. "
+            "Validate, inspect, or convert an existing research-only BacktestResult JSON artifact. "
             "Does not fetch market data, run strategies, execute backtests, connect to brokers, "
-            "place orders, produce live signals, or provide investment advice."
+            "place orders, produce live signals, or provide investment advice. "
+            "Conversion is a retrospective offline mapping to a simulated paper trading JSON artifact."
         ),
     )
     
@@ -34,6 +38,33 @@ def build_parser() -> argparse.ArgumentParser:
         "input_json",
         type=str,
         help="Path to the BacktestResult JSON artifact to inspect.",
+    )
+    
+    convert_parser = subparsers.add_parser(
+        "convert-to-simulated-paper-trading",
+        help="Convert an existing research-only BacktestResult JSON artifact to a simulated paper trading JSON artifact.",
+        description=(
+            "Convert an existing research-only BacktestResult JSON artifact to a simulated paper trading JSON artifact. "
+            "Does not fetch market data, run strategies, execute backtests, connect to brokers, "
+            "place orders, produce live signals, or provide investment advice."
+        ),
+    )
+    convert_parser.add_argument(
+        "input_json",
+        type=str,
+        help="Path to the existing BacktestResult JSON artifact.",
+    )
+    convert_parser.add_argument(
+        "--output-json",
+        type=str,
+        required=True,
+        help="Path to write the output simulated paper trading JSON artifact.",
+    )
+    convert_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        default=False,
+        help="Overwrite the output file if it exists.",
     )
     
     return parser
@@ -62,7 +93,15 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Max Drawdown:    {result.max_drawdown_pct:.2f}%")
             print(f"Trade Count:     {result.trade_count}")
 
+        elif args.command == "convert-to-simulated-paper-trading":
+            result = load_backtest_result_json_file(args.input_json)
+            paper_trading_result = convert_backtest_result_to_simulated_paper_trading_result(result)
+            written_path = export_simulated_paper_trading_result_json_file(paper_trading_result, args.output_json, overwrite=args.overwrite)
+            print(f"Simulated paper trading artifact written: {written_path}")
+
             
+    except FileExistsError as e:
+        parser.exit(1, f"error: {e}. Use --overwrite to replace existing files.\n")
     except FileNotFoundError as e:
         parser.exit(1, f"error: {e}\n")
     except IsADirectoryError as e:
@@ -70,6 +109,8 @@ def main(argv: list[str] | None = None) -> None:
     except PermissionError as e:
         parser.exit(1, f"error: {e}\n")
     except BacktestResultSerializationError as e:
+        parser.exit(1, f"error: {e}\n")
+    except PaperTradingModelError as e:
         parser.exit(1, f"error: {e}\n")
 
 
