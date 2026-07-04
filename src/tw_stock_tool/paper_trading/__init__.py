@@ -30,6 +30,9 @@ from .serialization_files import (
     export_simulated_paper_trading_result_json_file,
     load_simulated_paper_trading_result_json_file,
 )
+from .backtest_converter import (
+    convert_backtest_result_to_simulated_paper_trading_result,
+)
 
 __all__ = [
     "run_simulated_paper_trading",
@@ -50,4 +53,5 @@ __all__ = [
     "load_simulated_paper_trading_result_json",
     "export_simulated_paper_trading_result_json_file",
     "load_simulated_paper_trading_result_json_file",
+    "convert_backtest_result_to_simulated_paper_trading_result",
 ]
