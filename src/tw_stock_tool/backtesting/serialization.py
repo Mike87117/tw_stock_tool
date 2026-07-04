@@ -3,6 +3,7 @@ import math
 import datetime
 from typing import Any
 import pandas as pd
+import numpy as np
 
 from tw_stock_tool.backtesting.results import BacktestResult
 
@@ -11,13 +12,41 @@ class BacktestResultSerializationError(Exception):
     pass
 
 
-def _is_finite_number(val: Any) -> bool:
-    if isinstance(val, bool):
-        return False
-    if not isinstance(val, (int, float)):
-        return False
-    return math.isfinite(val)
+def _normalize_float(val: Any, name: str) -> float:
+    if isinstance(val, bool) or isinstance(val, np.bool_):
+        raise BacktestResultSerializationError(f"{name} must be numeric, got bool.")
+    if not isinstance(val, (int, float, np.integer, np.floating)):
+        raise BacktestResultSerializationError(f"{name} must be numeric.")
+    val_float = float(val)
+    if not math.isfinite(val_float):
+        raise BacktestResultSerializationError(f"Numeric value for {name} must be finite, got: {val}")
+    return val_float
 
+def _normalize_int(val: Any, name: str) -> int:
+    if isinstance(val, bool) or isinstance(val, np.bool_):
+        raise BacktestResultSerializationError(f"{name} must be an integer, got bool.")
+    if not isinstance(val, (int, np.integer)):
+        raise BacktestResultSerializationError(f"{name} must be an integer.")
+    return int(val)
+
+def _normalize_numeric(val: Any, name: str) -> int | float:
+    if isinstance(val, bool) or isinstance(val, np.bool_):
+        raise BacktestResultSerializationError(f"{name} must be numeric, got bool.")
+    if isinstance(val, (int, np.integer)):
+        return int(val)
+    if isinstance(val, (float, np.floating)):
+        val_float = float(val)
+        if not math.isfinite(val_float):
+            raise BacktestResultSerializationError(f"Numeric value for {name} must be finite, got: {val}")
+        return val_float
+    raise BacktestResultSerializationError(f"{name} must be numeric.")
+
+def _is_finite_number(val: Any) -> bool:
+    if isinstance(val, bool) or isinstance(val, np.bool_):
+        return False
+    if not isinstance(val, (int, float, np.integer, np.floating)):
+        return False
+    return math.isfinite(float(val))
 
 def _is_json_serializable(data: dict) -> bool:
     try:
@@ -48,39 +77,29 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
         raise BacktestResultSerializationError("parameters must be JSON serializable.")
 
     summary = {
-        "initial_capital": result.initial_capital,
-        "final_capital": result.final_capital,
-        "total_return_pct": result.total_return_pct,
-        "buy_hold_return_pct": result.buy_hold_return_pct,
-        "cagr_pct": result.cagr_pct,
-        "exposure_pct": result.exposure_pct,
-        "trade_count": result.trade_count,
-        "win_rate_pct": result.win_rate_pct,
-        "max_drawdown_pct": result.max_drawdown_pct,
-        "profit_factor": result.profit_factor,
-        "best_trade_pct": result.best_trade_pct,
-        "worst_trade_pct": result.worst_trade_pct,
-        "avg_hold_days": result.avg_hold_days,
-        "sharpe_ratio": result.sharpe_ratio,
-        "sortino_ratio": result.sortino_ratio,
-        "avg_profit": result.avg_profit,
-        "avg_loss": result.avg_loss,
+        "initial_capital": _normalize_float(result.initial_capital, "initial_capital"),
+        "final_capital": _normalize_float(result.final_capital, "final_capital"),
+        "total_return_pct": _normalize_float(result.total_return_pct, "total_return_pct"),
+        "buy_hold_return_pct": _normalize_float(result.buy_hold_return_pct, "buy_hold_return_pct"),
+        "cagr_pct": _normalize_float(result.cagr_pct, "cagr_pct"),
+        "exposure_pct": _normalize_float(result.exposure_pct, "exposure_pct"),
+        "trade_count": _normalize_int(result.trade_count, "trade_count"),
+        "win_rate_pct": _normalize_float(result.win_rate_pct, "win_rate_pct"),
+        "max_drawdown_pct": _normalize_float(result.max_drawdown_pct, "max_drawdown_pct"),
+        "profit_factor": _normalize_float(result.profit_factor, "profit_factor"),
+        "best_trade_pct": _normalize_float(result.best_trade_pct, "best_trade_pct"),
+        "worst_trade_pct": _normalize_float(result.worst_trade_pct, "worst_trade_pct"),
+        "avg_hold_days": _normalize_float(result.avg_hold_days, "avg_hold_days"),
+        "sharpe_ratio": _normalize_float(result.sharpe_ratio, "sharpe_ratio"),
+        "sortino_ratio": _normalize_float(result.sortino_ratio, "sortino_ratio"),
+        "avg_profit": _normalize_float(result.avg_profit, "avg_profit"),
+        "avg_loss": _normalize_float(result.avg_loss, "avg_loss"),
         "stock": result.stock,
         "strategy": result.strategy,
         "parameters": parameters,
         "start_date": _format_datetime(result.start_date),
         "end_date": _format_datetime(result.end_date),
     }
-
-    # Validate numeric values
-    for key, val in summary.items():
-        if key in ["stock", "strategy", "parameters", "start_date", "end_date", "trade_count"]:
-            continue
-        if not _is_finite_number(val):
-            raise BacktestResultSerializationError(f"Numeric value for {key} must be finite, got: {val}")
-
-    if not isinstance(summary["trade_count"], int) or isinstance(summary["trade_count"], bool):
-        raise BacktestResultSerializationError("trade_count must be an integer.")
 
     trades_list = []
     if result.trades is not None and not result.trades.empty:
@@ -90,7 +109,7 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
                 if pd.isna(val):
                     record[str(col)] = None
                 elif _is_finite_number(val):
-                    record[str(col)] = float(val) if isinstance(val, float) else int(val)
+                    record[str(col)] = _normalize_numeric(val, str(col))
                 elif hasattr(val, "isoformat"):
                     record[str(col)] = val.isoformat()
                 else:
@@ -100,11 +119,9 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
     equity_list = []
     if result.equity_curve is not None and not result.equity_curve.empty:
         for date, equity in result.equity_curve.items():
-            if not _is_finite_number(equity):
-                raise BacktestResultSerializationError(f"Equity value must be finite, got: {equity}")
             equity_list.append({
                 "date": _format_datetime(date),
-                "equity": float(equity),
+                "equity": _normalize_float(equity, "equity"),
             })
 
     return {
@@ -164,17 +181,6 @@ def deserialize_backtest_result(data: dict[str, Any]) -> BacktestResult:
     if not _is_json_serializable(parameters):
         raise BacktestResultSerializationError("parameters must be JSON serializable.")
 
-    # Validate numeric summary fields
-    for key in expected_summary_keys:
-        if key in ["stock", "strategy", "parameters", "start_date", "end_date", "trade_count"]:
-            continue
-        val = summary[key]
-        if not _is_finite_number(val):
-            raise BacktestResultSerializationError(f"Numeric value for {key} must be finite, got: {val}")
-
-    if not isinstance(summary["trade_count"], int) or isinstance(summary["trade_count"], bool):
-        raise BacktestResultSerializationError("trade_count must be an integer.")
-
     trades = data["trades"]
     if not isinstance(trades, list):
         raise BacktestResultSerializationError("trades must be a list.")
@@ -190,32 +196,30 @@ def deserialize_backtest_result(data: dict[str, Any]) -> BacktestResult:
     for item in equity_curve_data:
         if not isinstance(item, dict) or "date" not in item or "equity" not in item:
             raise BacktestResultSerializationError("Invalid equity_curve record format.")
-        eq = item["equity"]
-        if not _is_finite_number(eq):
-            raise BacktestResultSerializationError(f"Equity value must be finite, got: {eq}")
+        eq = _normalize_float(item["equity"], "equity")
         equity_index.append(item["date"])
         equity_values.append(eq)
 
     equity_curve = pd.Series(equity_values, index=equity_index, name="Equity", dtype=float)
 
     return BacktestResult(
-        initial_capital=float(summary["initial_capital"]),
-        final_capital=float(summary["final_capital"]),
-        total_return_pct=float(summary["total_return_pct"]),
-        buy_hold_return_pct=float(summary["buy_hold_return_pct"]),
-        cagr_pct=float(summary["cagr_pct"]),
-        exposure_pct=float(summary["exposure_pct"]),
-        trade_count=int(summary["trade_count"]),
-        win_rate_pct=float(summary["win_rate_pct"]),
-        max_drawdown_pct=float(summary["max_drawdown_pct"]),
-        profit_factor=float(summary["profit_factor"]),
-        best_trade_pct=float(summary["best_trade_pct"]),
-        worst_trade_pct=float(summary["worst_trade_pct"]),
-        avg_hold_days=float(summary["avg_hold_days"]),
-        sharpe_ratio=float(summary["sharpe_ratio"]),
-        sortino_ratio=float(summary["sortino_ratio"]),
-        avg_profit=float(summary["avg_profit"]),
-        avg_loss=float(summary["avg_loss"]),
+        initial_capital=_normalize_float(summary["initial_capital"], "initial_capital"),
+        final_capital=_normalize_float(summary["final_capital"], "final_capital"),
+        total_return_pct=_normalize_float(summary["total_return_pct"], "total_return_pct"),
+        buy_hold_return_pct=_normalize_float(summary["buy_hold_return_pct"], "buy_hold_return_pct"),
+        cagr_pct=_normalize_float(summary["cagr_pct"], "cagr_pct"),
+        exposure_pct=_normalize_float(summary["exposure_pct"], "exposure_pct"),
+        trade_count=_normalize_int(summary["trade_count"], "trade_count"),
+        win_rate_pct=_normalize_float(summary["win_rate_pct"], "win_rate_pct"),
+        max_drawdown_pct=_normalize_float(summary["max_drawdown_pct"], "max_drawdown_pct"),
+        profit_factor=_normalize_float(summary["profit_factor"], "profit_factor"),
+        best_trade_pct=_normalize_float(summary["best_trade_pct"], "best_trade_pct"),
+        worst_trade_pct=_normalize_float(summary["worst_trade_pct"], "worst_trade_pct"),
+        avg_hold_days=_normalize_float(summary["avg_hold_days"], "avg_hold_days"),
+        sharpe_ratio=_normalize_float(summary["sharpe_ratio"], "sharpe_ratio"),
+        sortino_ratio=_normalize_float(summary["sortino_ratio"], "sortino_ratio"),
+        avg_profit=_normalize_float(summary["avg_profit"], "avg_profit"),
+        avg_loss=_normalize_float(summary["avg_loss"], "avg_loss"),
         trades=trades_df,
         equity_curve=equity_curve,
         stock=summary["stock"],

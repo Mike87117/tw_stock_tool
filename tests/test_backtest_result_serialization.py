@@ -176,5 +176,48 @@ class TestBacktestResultSerialization(unittest.TestCase):
         for mod in forbidden:
             self.assertNotIn(mod, sys.modules, f"Forbidden module {mod} was imported.")
 
+    def test_numpy_types_normalized(self):
+        self.backtest_result.trade_count = np.int64(1)
+        self.backtest_result.final_capital = np.float64(110000.0)
+        
+        self.backtest_result.trades = pd.DataFrame([
+            {
+                "Entry Date": "2024-01-01",
+                "Exit Date": "2024-01-05",
+                "Entry Price": np.float64(100.0),
+                "Exit Price": np.float64(110.0),
+                "Shares": np.int64(1000),
+                "PnL": np.float64(10000.0),
+            }
+        ])
+        
+        self.backtest_result.equity_curve = pd.Series(
+            [np.float64(100000.0), np.float64(110000.0)],
+            index=["2024-01-01", "2024-01-05"]
+        )
+
+        data = serialize_backtest_result(self.backtest_result)
+        
+        # Summary checks
+        self.assertIsInstance(data["summary"]["trade_count"], int)
+        self.assertNotIsInstance(data["summary"]["trade_count"], np.integer)
+        self.assertIsInstance(data["summary"]["final_capital"], float)
+        self.assertNotIsInstance(data["summary"]["final_capital"], np.floating)
+        
+        # Trades check
+        self.assertIsInstance(data["trades"][0]["Entry Price"], float)
+        self.assertNotIsInstance(data["trades"][0]["Entry Price"], np.floating)
+        self.assertIsInstance(data["trades"][0]["Shares"], int)
+        self.assertNotIsInstance(data["trades"][0]["Shares"], np.integer)
+        
+        # Equity curve check
+        self.assertIsInstance(data["equity_curve"][0]["equity"], float)
+        self.assertNotIsInstance(data["equity_curve"][0]["equity"], np.floating)
+
+        # Deserialize roundtrip
+        loaded = deserialize_backtest_result(data)
+        self.assertIsInstance(loaded.trade_count, int)
+        self.assertIsInstance(loaded.final_capital, float)
+
 if __name__ == "__main__":
     unittest.main()
