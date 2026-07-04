@@ -232,6 +232,26 @@ class TwStockCliTest(unittest.TestCase):
             "--output-markdown", "out.md",
         ])
 
+    def test_backtest_artifact_subcommand_dispatches_to_cli(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.backtest_artifact_cli, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main([
+                "backtest-artifact",
+                "validate",
+                "result.json",
+            ])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], [
+            "backtest_artifact_cli.py",
+            "validate",
+            "result.json",
+        ])
+
     def test_top_level_help_exits_successfully(self) -> None:
         out = StringIO()
         with redirect_stdout(out):
@@ -255,6 +275,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("backtest-report", output)
         self.assertIn("walk-forward", output)
         self.assertIn("simulated-paper-trading-export", output)
+        self.assertIn("backtest-artifact", output)
 
     def test_no_banned_data_freshness_wording_in_cli_help(self) -> None:
         banned_phrases = (
@@ -280,6 +301,7 @@ class TwStockCliTest(unittest.TestCase):
             ["cache", "--help"],
             ["scan", "--help"],
             ["simulated-paper-trading-export", "--help"],
+            ["backtest-artifact", "--help"],
         ]
 
         for cmd in subcommands:
