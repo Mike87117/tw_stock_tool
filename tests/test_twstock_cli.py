@@ -212,6 +212,26 @@ class TwStockCliTest(unittest.TestCase):
 
         self.assertNotEqual(ctx.exception.code, 0)
 
+    def test_simulated_paper_trading_export_subcommand_dispatches_to_cli(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.simulated_paper_trading_export_cli, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main([
+                "simulated-paper-trading-export",
+                "result.json",
+                "--output-markdown", "out.md",
+            ])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], [
+            "simulated_paper_trading_export_cli.py",
+            "result.json",
+            "--output-markdown", "out.md",
+        ])
+
     def test_top_level_help_exits_successfully(self) -> None:
         out = StringIO()
         with redirect_stdout(out):
@@ -234,6 +254,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("parameter-sweep", output)
         self.assertIn("backtest-report", output)
         self.assertIn("walk-forward", output)
+        self.assertIn("simulated-paper-trading-export", output)
 
     def test_no_banned_data_freshness_wording_in_cli_help(self) -> None:
         banned_phrases = (
@@ -258,6 +279,7 @@ class TwStockCliTest(unittest.TestCase):
             ["stock-list", "update", "--help"],
             ["cache", "--help"],
             ["scan", "--help"],
+            ["simulated-paper-trading-export", "--help"],
         ]
 
         for cmd in subcommands:
@@ -373,6 +395,17 @@ class TwStockCliTest(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn("usage:", out.getvalue())
+
+    def test_simulated_paper_trading_export_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["simulated-paper-trading-export", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        output = out.getvalue()
+        self.assertIn("usage:", output)
+        self.assertIn("simulated paper trading", output)
 
     def test_doctor_help_exits_successfully(self) -> None:
         out = StringIO()
