@@ -134,6 +134,7 @@ twstock doctor --live
 | 產生歷史回測報告 | `twstock backtest-report --stock 2330 --strategy ma_cross --output-excel` |
 | Parameter Sweep | `twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel` |
 | Walk Forward | `twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel` |
+| 匯出模擬紙上交易報告 | `twstock simulated-paper-trading-export result.json --output-markdown report.md` |
 | 檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
 | 查看快取摘要 | `twstock cache --summary` |
 | 列出快取檔案 | `twstock cache --list` |
@@ -197,6 +198,7 @@ twstock strategy-compare --stock 2330 --period 2y
 twstock backtest-report --stock 2330 --strategy ma_cross --output-excel
 twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel
 twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
+twstock simulated-paper-trading-export result.json --output-markdown report.md
 twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md
 twstock stock-list update --market all --output stocks.txt
@@ -801,6 +803,29 @@ python daily_watchlist.py --auto-stock-list --auto-stock-list-output stocks.txt
 
 這會修改 tracked `stocks.txt`，建議確認 git diff 後再 commit。
 
+## 匯出模擬紙上交易報告 (Simulated Paper Trading Artifact Export)
+
+`twstock simulated-paper-trading-export` 是一個 artifact-only format conversion CLI。
+它只轉換已存在、已經計算完成的 simulated paper trading result JSON artifact。
+它不會下載市場資料、不會執行策略、不會產生交易訊號、不會連接券商、不會下單，也不提供投資建議或買賣建議。
+
+報表中的 `BUY` / `SELL` 僅代表已存在 JSON artifact 內的歷史模擬方向記錄，不是即時訊號、下單指令、買賣建議或投資建議。
+
+功能：
+- 將已存在的 simulated paper trading result JSON 檔案轉換為 Markdown 或 CSV 報表。
+- 至少需要指定 `--output-markdown` 或 `--output-csv-dir` 其中一個輸出選項。
+- 兩個輸出選項可以同時使用。
+- `--basename` 參數僅會影響匯出的 CSV 檔案名稱字首（預設為 `simulated_paper_trading`）。
+- `--overwrite` 參數允許覆蓋已存在的輸出檔案。
+
+CLI 範例：
+
+```bash
+twstock simulated-paper-trading-export result.json --output-markdown report.md
+twstock simulated-paper-trading-export result.json --output-csv-dir output_csv
+twstock simulated-paper-trading-export result.json --output-markdown report.md --output-csv-dir output_csv --overwrite
+```
+
 ## Benchmark
 
 benchmark 工具檔名維持 `benchmark.py`，輸出分為三段：
@@ -1239,6 +1264,8 @@ python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --out
 This library-level helper API exports an already constructed simulated paper trading result to markdown or CSV formats.
 
 > **Safety Boundary**: This is a research-only simulated reporting feature. It is not live trading, broker integration, investment advice, or a buy/sell/hold recommendation system, and it does not guarantee profit.
+
+> **CLI 工具**: 若需要從命令列直接轉換已存在的 JSON artifact，請參考 [匯出模擬紙上交易報告 (Simulated Paper Trading Artifact Export)](#匯出模擬紙上交易報告-simulated-paper-trading-artifact-export) 區塊，使用 `twstock simulated-paper-trading-export` 指令。
 
 ### 1. Markdown string export
 
