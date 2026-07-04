@@ -1259,6 +1259,45 @@ python backtest_report.py --stock 2330 --strategy ma_cross --period 2y --output-
 python backtest_report.py --stock 2330 --strategy ma_cross --force-refresh --output-md
 ```
 
+## Backtest to Simulated Paper Trading Converter API
+
+This library-level API acts as an offline data transformer. It converts an already-computed internal `BacktestResult` object into a `SimulatedPaperTradingResult` artifact.
+
+> **Safety Boundary**: The converted BUY / SELL values are retrospective historical backtest-side records. They are not live trading signals, order instructions, buy/sell recommendations, or investment advice.
+
+**What it does:**
+- Converts a structured `BacktestResult` object into a `SimulatedPaperTradingResult` artifact.
+- It integrates seamlessly with Phase 29 APIs: the converted object can be serialized to JSON and subsequently exported to Markdown or CSV using existing export APIs.
+
+**What it does NOT do:**
+- Does not run a backtest.
+- Does not execute a strategy.
+- Does not fetch market data.
+- Does not generate new signals.
+- Does not connect to a broker.
+- Does not place orders.
+- Does not provide investment advice.
+
+**Current Limitations:**
+- The converter accepts only the internal structured `BacktestResult` object.
+- It does not currently accept the legacy dict returned by the public `run_backtest()`.
+- There is no CLI command for this converter yet. JSON input for backtests and CLI commands remain future work.
+
+**Minimal Example:**
+
+```python
+from tw_stock_tool.paper_trading.backtest_converter import (
+    convert_backtest_result_to_simulated_paper_trading_result,
+)
+from tw_stock_tool.paper_trading.serialization import (
+    export_simulated_paper_trading_result_json,
+)
+
+# `backtest_result` must be a pre-computed BacktestResult object.
+result = convert_backtest_result_to_simulated_paper_trading_result(backtest_result)
+json_content = export_simulated_paper_trading_result_json(result)
+```
+
 ## Simulated Paper Trading Export APIs
 
 This library-level helper API exports an already constructed simulated paper trading result to markdown or CSV formats.
