@@ -48,7 +48,7 @@ def _ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
-def run_backtest(
+def run_backtest_result(
     df: pd.DataFrame,
     initial_capital: float = 100000,
     fee_rate: float = 0.001425,
@@ -57,7 +57,7 @@ def run_backtest(
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
     position_size: float = 1.0,
-) -> dict[str, Any]:
+) -> BacktestResult:
     _validate_inputs(df, position_size)
     from tw_stock_tool.backtesting.signals import ensure_standard_signals
     df_exec = ensure_standard_signals(df)
@@ -176,7 +176,7 @@ def run_backtest(
     losses = [t for t in closed_trades if t["PnL"] <= 0]
     trade_pcts = [t["PnL_pct"] for t in closed_trades]
 
-    result = BacktestResult(
+    return BacktestResult(
         initial_capital=initial_capital,
         final_capital=final_capital,
         total_return_pct=calculate_total_return(initial_capital, final_capital),
@@ -198,5 +198,27 @@ def run_backtest(
         equity_curve=equity,
         start_date=df.index[0],
         end_date=df.index[-1],
+    )
+
+
+def run_backtest(
+    df: pd.DataFrame,
+    initial_capital: float = 100000,
+    fee_rate: float = 0.001425,
+    tax_rate: float = 0.003,
+    stop_loss_pct: float | None = None,
+    take_profit_pct: float | None = None,
+    max_hold_days: int | None = None,
+    position_size: float = 1.0,
+) -> dict[str, Any]:
+    result = run_backtest_result(
+        df=df,
+        initial_capital=initial_capital,
+        fee_rate=fee_rate,
+        tax_rate=tax_rate,
+        stop_loss_pct=stop_loss_pct,
+        take_profit_pct=take_profit_pct,
+        max_hold_days=max_hold_days,
+        position_size=position_size,
     )
     return result.to_legacy_dict()
