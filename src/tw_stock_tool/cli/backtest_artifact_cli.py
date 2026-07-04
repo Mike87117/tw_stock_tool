@@ -94,19 +94,14 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Trade Count:     {result.trade_count}")
 
         elif args.command == "convert-to-simulated-paper-trading":
-            import os
-            
-            if not args.overwrite and os.path.exists(args.output_json):
-                raise FileExistsError(f"{args.output_json} already exists. Use --overwrite to replace existing files.")
-            
             result = load_backtest_result_json_file(args.input_json)
             paper_trading_result = convert_backtest_result_to_simulated_paper_trading_result(result)
-            export_simulated_paper_trading_result_json_file(paper_trading_result, args.output_json, overwrite=args.overwrite)
-            print(f"Simulated paper trading artifact written: {args.output_json}")
+            written_path = export_simulated_paper_trading_result_json_file(paper_trading_result, args.output_json, overwrite=args.overwrite)
+            print(f"Simulated paper trading artifact written: {written_path}")
 
             
     except FileExistsError as e:
-        parser.exit(1, f"error: {e}\n")
+        parser.exit(1, f"error: {e}. Use --overwrite to replace existing files.\n")
     except FileNotFoundError as e:
         parser.exit(1, f"error: {e}\n")
     except IsADirectoryError as e:

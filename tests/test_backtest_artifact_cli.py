@@ -274,6 +274,25 @@ class TestBacktestArtifactCli(unittest.TestCase):
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
 
+    def test_convert_invalid_schema(self):
+        schema_path = self.temp_dir / "schema.json"
+        schema_path.write_text('{"schema_version": 999}', encoding="utf-8")
+        output_json = self.temp_dir / "converted.json"
+
+        err = StringIO()
+        with patch("sys.stderr", err):
+            with self.assertRaises(SystemExit) as cm:
+                backtest_artifact_cli.main([
+                    "convert-to-simulated-paper-trading",
+                    str(schema_path),
+                    "--output-json",
+                    str(output_json),
+                ])
+            self.assertEqual(cm.exception.code, 1)
+
+        self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
     def test_convert_missing_file(self):
         missing_path = self.temp_dir / "missing.json"
         output_json = self.temp_dir / "converted.json"
