@@ -1286,7 +1286,7 @@ This library-level API acts as an offline data transformer. It converts an alrea
 **Minimal Example:**
 
 ```python
-from tw_stock_tool.paper_trading.backtest_converter import (
+from tw_stock_tool.paper_trading import (
     convert_backtest_result_to_simulated_paper_trading_result,
 )
 from tw_stock_tool.paper_trading.serialization import (
