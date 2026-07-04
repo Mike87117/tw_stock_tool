@@ -25,6 +25,7 @@ from tw_stock_tool.cli import price_data_smoke_check
 from tw_stock_tool.cli import scan_stocks
 from tw_stock_tool.cli import stock_list_smoke_check
 from tw_stock_tool.cli import simulated_paper_trading_export_cli
+from tw_stock_tool.cli import backtest_artifact_cli
 from tw_stock_tool.data import cache_manager
 from tw_stock_tool.data import stock_list_updater
 
@@ -127,6 +128,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         handler=lambda args: _dispatch_existing_main(
             simulated_paper_trading_export_cli.main,
             "simulated_paper_trading_export_cli.py",
+            args.args,
+        )
+    )
+
+    backtest_artifact_parser = subparsers.add_parser(
+        "backtest-artifact",
+        help="Validate or inspect BacktestResult JSON artifacts",
+        description="Validate or inspect existing research-only BacktestResult JSON artifacts.\n"
+                    "Does not fetch market data, run strategies, execute backtests, connect to brokers, "
+                    "place orders, produce live signals, or provide investment advice."
+    )
+    backtest_artifact_parser.set_defaults(
+        handler=lambda args: _dispatch_existing_main(
+            backtest_artifact_cli.main,
+            "backtest_artifact_cli.py",
             args.args,
         )
     )
