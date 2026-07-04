@@ -12,12 +12,12 @@ from tw_stock_tool.paper_trading.models import (
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
 
 
+import numbers
+
 def _is_strictly_positive_int(val: Any) -> bool:
     if isinstance(val, bool):
         return False
-    if not isinstance(val, (int, float)):
-        return False
-    if isinstance(val, float) and not val.is_integer():
+    if not isinstance(val, numbers.Integral):
         return False
     return int(val) > 0
 
@@ -64,15 +64,19 @@ def convert_backtest_result_to_simulated_paper_trading_result(
     if not isinstance(backtest_result.trades, pd.DataFrame):
         raise PaperTradingModelError("trades must be a pandas DataFrame.")
 
-    base_metadata = {
+    SYSTEM_METADATA = {
         "source": "backtest_result",
         "conversion": "backtest_to_simulated_paper_trading_result",
         "semantics": "retrospective_offline_mapping",
     }
-    if metadata:
-        base_metadata.update(metadata)
+    
+    metadata_payload = dict(SYSTEM_METADATA)
+    if metadata is not None:
+        if not isinstance(metadata, dict):
+            raise PaperTradingModelError("metadata must be a dict.")
+        metadata_payload["user_metadata"] = metadata
 
-    if not _is_json_serializable(base_metadata):
+    if not _is_json_serializable(metadata_payload):
         raise PaperTradingModelError("metadata must be JSON serializable.")
 
     orders = []
@@ -89,7 +93,7 @@ def convert_backtest_result_to_simulated_paper_trading_result(
             if col not in df.columns:
                 raise PaperTradingModelError(f"Missing required trade column: {col}")
 
-        for idx, row in df.iterrows():
+        for trade_number, (_, row) in enumerate(df.iterrows()):
             shares = row["Shares"]
             if not _is_strictly_positive_int(shares):
                 raise PaperTradingModelError(f"Shares must be a strict positive integer, got: {shares}")
@@ -109,15 +113,15 @@ def convert_backtest_result_to_simulated_paper_trading_result(
             entry_date = str(row["Entry Date"])
             exit_date = str(row["Exit Date"])
 
-            sell_metadata = dict(base_metadata)
+            sell_metadata = dict(metadata_payload)
             if "Exit Reason" in df.columns:
                 sell_metadata["Exit Reason"] = str(row["Exit Reason"])
             if "Type" in df.columns:
                 sell_metadata["Type"] = str(row["Type"])
 
             # Generate stable deterministic order IDs based on trade index
-            buy_order_id = f"backtest-{idx:06d}-buy"
-            sell_order_id = f"backtest-{idx:06d}-sell"
+            buy_order_id = f"backtest-{trade_number:06d}-buy"
+            sell_order_id = f"backtest-{trade_number:06d}-sell"
 
             # BUY Order and Fill
             orders.append(
@@ -129,7 +133,7 @@ def convert_backtest_result_to_simulated_paper_trading_result(
                     signal_time=entry_date,
                     created_at=entry_date,
                     strategy=backtest_result.strategy,
-                    metadata=dict(base_metadata),
+                    metadata=dict(metadata_payload),
                 )
             )
             fills.append(

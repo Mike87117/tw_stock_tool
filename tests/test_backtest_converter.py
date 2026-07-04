@@ -318,5 +318,69 @@ class TestBacktestConverter(unittest.TestCase):
             has_forbidden = any(f in m for m in sys.modules)
             self.assertFalse(has_forbidden, f"Forbidden module {f} was loaded")
 
+    def test_non_dict_metadata_rejected(self):
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=0, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=self.empty_df, equity_curve=pd.Series(),
+            stock="2330", strategy="Test"
+        )
+        with self.assertRaisesRegex(PaperTradingModelError, "metadata must be a dict"):
+            convert_backtest_result_to_simulated_paper_trading_result(br, metadata="invalid")
+
+    def test_metadata_cannot_override_system_keys(self):
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=0, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=self.empty_df, equity_curve=pd.Series(),
+            stock="2330", strategy="Test"
+        )
+        malicious_metadata = {"source": "hacked", "semantics": "live_signal"}
+        res = convert_backtest_result_to_simulated_paper_trading_result(br, metadata=malicious_metadata)
+        # Even if trades are empty, let's verify if metadata is passed down or at least not leaked.
+        # But wait, we can just test with one trade to inspect order metadata:
+        br.trades = self.one_trade_df
+        res = convert_backtest_result_to_simulated_paper_trading_result(br, metadata=malicious_metadata)
+        order_meta = res.orders[0].metadata
+        self.assertEqual(order_meta["source"], "backtest_result")
+        self.assertEqual(order_meta["semantics"], "retrospective_offline_mapping")
+        self.assertEqual(order_meta["user_metadata"]["semantics"], "live_signal")
+
+    def test_float_shares_rejected(self):
+        df = self.one_trade_df.copy()
+        df["Shares"] = df["Shares"].astype(float)
+        df.loc[0, "Shares"] = 1000.0
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=1, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=df, equity_curve=pd.Series(),
+            stock="2330", strategy="Test"
+        )
+        with self.assertRaisesRegex(PaperTradingModelError, "Shares must be a strict positive integer"):
+            convert_backtest_result_to_simulated_paper_trading_result(br)
+
+    def test_deterministic_order_ids_with_non_default_index(self):
+        df = self.multi_trade_df.copy()
+        df.index = [100, 200]
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=2, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=df, equity_curve=pd.Series(),
+            stock="2330", strategy="Test"
+        )
+        res = convert_backtest_result_to_simulated_paper_trading_result(br)
+        self.assertEqual(res.orders[0].order_id, "backtest-000000-buy")
+        self.assertEqual(res.orders[1].order_id, "backtest-000000-sell")
+        self.assertEqual(res.orders[2].order_id, "backtest-000001-buy")
+        self.assertEqual(res.orders[3].order_id, "backtest-000001-sell")
+
 if __name__ == "__main__":
     unittest.main()
