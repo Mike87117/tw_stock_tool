@@ -5,13 +5,21 @@ No production converter is implemented in this phase.
 # Current Model Summary
 
 **BacktestResult** (`src/tw_stock_tool/backtesting/results.py`):
-- `stock`: string symbol
+- `stock`: string symbol or `None`
 - `initial_capital`: float
 - `final_capital`: float
-- `trades`: pandas DataFrame containing backtest trade history
-- `strategy`: string
-- `parameters`: dict
+- `trades`: pandas DataFrame containing backtest trade history (Columns: `Entry Date`, `Exit Date`, `Entry Price`, `Exit Price`, `Shares`, `PnL`, `PnL_pct`, `Hold Days`, `Exit Reason`, `Type`)
+- `strategy`: string or `None`
+- `parameters`: dict (defaults to empty)
+- `start_date`: Any or `None`
+- `end_date`: Any or `None`
 - Various metrics (total_return_pct, max_drawdown_pct, etc.)
+
+**Note on run_backtest() output**: The internal structured model is `BacktestResult`. However, the current public `run_backtest()` returns a legacy dict (`return result.to_legacy_dict()`). Therefore, Phase 30.3 must explicitly decide whether the converter accepts:
+1. `BacktestResult` object
+2. legacy backtest dict
+3. both
+This also reinforces why the future CLI should remain deferred until a concrete serialized backtest artifact format exists.
 
 **SimulatedPaperTradingResult** (`src/tw_stock_tool/paper_trading/results.py`):
 - `symbol`: str
@@ -35,18 +43,24 @@ No production converter is implemented in this phase.
 
 | Source (`BacktestResult`) | Target (`SimulatedPaperTradingResult`) | Mapping Rule / Conversion | Default / Validation | Open Question |
 |---|---|---|---|---|
-| `stock` | `symbol` | Direct mapping | Reject if empty string | |
+| `stock` | `symbol` | Direct mapping | Future validation must decide if missing `stock` (None) should be rejected, defaulted, or supplied externally | |
 | `initial_capital` | `initial_cash` | Direct mapping | Must be >= 0, finite float | |
 | `final_capital` | `final_cash` | Direct mapping | Must be >= 0, finite float | |
 | `trades` DataFrame | `final_position_quantity` | Net open quantity | `0` | Are open trades represented clearly in the DF? |
 | `trades` DataFrame | `average_cost` | Weighted avg of open entries | `0.0` | |
-| Sum of PnL | `realized_pnl` | Sum of closed trades PnL | `0.0` | |
+| `PnL` | `realized_pnl` | Sum of closed trades PnL | `0.0` | |
 | Open positions PnL | `unrealized_pnl` | Floating PnL | `0.0` | How is current price retrieved for open trades? |
 | `final_capital` | `total_equity` | `final_cash + unrealized_pnl` | Must be finite float | |
 | Count of entries/exits | `order_count` | Number of mapped orders | `>= 0` | |
 | Count of entries/exits | `fill_count` | Number of mapped fills | `>= 0` | |
 | Open position check | `open_position_count` | 1 if open else 0 | `0` | |
-| `trades` rows | `orders` & `fills` | Each trade maps to BUY and SELL pairs | | Does the DF contain exact fee/tax values? |
+| `trades` rows | `orders` & `fills` | Each trade maps to BUY and SELL pairs explicitly using DF columns | | |
+
+**Trades Mapping Rule (BUY / SELL generation)**:
+- **BUY order/fill side**: mapped from `Entry Date`, `Entry Price`, `Shares`
+- **SELL order/fill side**: mapped from `Exit Date`, `Exit Price`, `Shares`
+- **Realized PnL**: mapped from `PnL`
+- **Metadata**: mapped from `Exit Reason` / `Type`
 
 # Retrospective Semantics
 
@@ -57,7 +71,7 @@ Any BUY / SELL values in the converted artifact are retrospective historical bac
 # Edge Cases
 
 - **Empty backtest result / No trades**: Must correctly generate an artifact with initial cash == final cash, 0 orders/fills, and 0 PnL.
-- **Open positions**: If `BacktestResult` contains unclosed trades, the mapping must decide how to represent `last_price` to accurately calculate `unrealized_pnl`.
+- **Open positions**: Current legacy `run_backtest()` output appears to be closed-trade-only because remaining shares are force-closed as `SELL_EOD` at the end of data. Open-position conversion should remain a future compatibility edge case. If future backtest variants preserve open positions, the converter will need a defined last price / mark price policy for `unrealized_pnl`.
 - **Missing optional metadata**: `strategy` or `parameters` might be `None`.
 - **Non-finite numeric values**: NaNs from pandas DataFrames must be sanitized or rejected.
 - **Decimal / float precision**: Float differences must not break serialization boundaries.
