@@ -70,7 +70,35 @@ def convert_backtest_result_to_simulated_paper_trading_result(
         "semantics": "retrospective_offline_mapping",
     }
     
+    strategy = backtest_result.strategy
+    if strategy is not None and not isinstance(strategy, str):
+        strategy = str(strategy)
+
+    parameters = backtest_result.parameters
+    if parameters is None:
+        parameters = {}
+    elif not isinstance(parameters, dict):
+        raise PaperTradingModelError("Backtest parameters must be a dict.")
+
+    if not _is_json_serializable(parameters):
+        raise PaperTradingModelError("Backtest parameters must be JSON serializable.")
+
+    start_date = backtest_result.start_date
+    if start_date is not None:
+        start_date = str(start_date)
+
+    end_date = backtest_result.end_date
+    if end_date is not None:
+        end_date = str(end_date)
+
     metadata_payload = dict(SYSTEM_METADATA)
+    metadata_payload["backtest"] = {
+        "strategy": strategy,
+        "parameters": parameters,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
     if metadata is not None:
         if not isinstance(metadata, dict):
             raise PaperTradingModelError("metadata must be a dict.")
@@ -132,7 +160,7 @@ def convert_backtest_result_to_simulated_paper_trading_result(
                     quantity=qty,
                     signal_time=entry_date,
                     created_at=entry_date,
-                    strategy=backtest_result.strategy,
+                    strategy=strategy,
                     metadata=dict(metadata_payload),
                 )
             )
@@ -159,7 +187,7 @@ def convert_backtest_result_to_simulated_paper_trading_result(
                     quantity=qty,
                     signal_time=exit_date,
                     created_at=exit_date,
-                    strategy=backtest_result.strategy,
+                    strategy=strategy,
                     metadata=sell_metadata,
                 )
             )

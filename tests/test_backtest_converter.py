@@ -382,5 +382,73 @@ class TestBacktestConverter(unittest.TestCase):
         self.assertEqual(res.orders[2].order_id, "backtest-000001-buy")
         self.assertEqual(res.orders[3].order_id, "backtest-000001-sell")
 
+    def test_backtest_metadata_propagated(self):
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=1, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=self.one_trade_df, equity_curve=pd.Series(),
+            stock="2330",
+            strategy="MA_Cross",
+            parameters={"short_window": 5, "long_window": 20},
+            start_date="2024-01-01",
+            end_date="2024-03-31"
+        )
+        res = convert_backtest_result_to_simulated_paper_trading_result(br)
+        
+        for order in res.orders:
+            meta = order.metadata
+            self.assertEqual(meta["source"], "backtest_result")
+            self.assertEqual(meta["semantics"], "retrospective_offline_mapping")
+            self.assertEqual(meta["backtest"]["strategy"], "MA_Cross")
+            self.assertEqual(meta["backtest"]["parameters"], {"short_window": 5, "long_window": 20})
+            self.assertEqual(meta["backtest"]["start_date"], "2024-01-01")
+            self.assertEqual(meta["backtest"]["end_date"], "2024-03-31")
+
+    def test_user_metadata_cannot_override_backtest_metadata(self):
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=1, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=self.one_trade_df, equity_curve=pd.Series(),
+            stock="2330", strategy="ActualStrategy"
+        )
+        malicious_metadata = {
+            "source": "malicious_source",
+            "semantics": "live_signal",
+            "backtest": {
+                "strategy": "malicious_strategy"
+            }
+        }
+        res = convert_backtest_result_to_simulated_paper_trading_result(br, metadata=malicious_metadata)
+        meta = res.orders[0].metadata
+        self.assertEqual(meta["source"], "backtest_result")
+        self.assertEqual(meta["semantics"], "retrospective_offline_mapping")
+        self.assertEqual(meta["backtest"]["strategy"], "ActualStrategy")
+        self.assertEqual(meta["user_metadata"]["backtest"]["strategy"], "malicious_strategy")
+
+    def test_invalid_parameters_rejected(self):
+        br = BacktestResult(
+            initial_capital=100.0, final_capital=100.0,
+            total_return_pct=0, buy_hold_return_pct=0, cagr_pct=0, exposure_pct=0,
+            trade_count=0, win_rate_pct=0, max_drawdown_pct=0, profit_factor=0,
+            best_trade_pct=0, worst_trade_pct=0, avg_hold_days=0, sharpe_ratio=0, sortino_ratio=0,
+            avg_profit=0, avg_loss=0, trades=self.empty_df, equity_curve=pd.Series(),
+            stock="2330", strategy="Test"
+        )
+        
+        br.parameters = "not-a-dict"
+        with self.assertRaisesRegex(PaperTradingModelError, "Backtest parameters must be a dict"):
+            convert_backtest_result_to_simulated_paper_trading_result(br)
+
+        class UnserializableObject:
+            pass
+
+        br.parameters = {"bad": UnserializableObject()}
+        with self.assertRaisesRegex(PaperTradingModelError, "Backtest parameters must be JSON serializable"):
+            convert_backtest_result_to_simulated_paper_trading_result(br)
+
 if __name__ == "__main__":
     unittest.main()
