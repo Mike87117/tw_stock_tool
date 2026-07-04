@@ -152,24 +152,34 @@ class TestBacktestConverterRoundtrip(unittest.TestCase):
             self.assertEqual(loaded_result.orders[0].metadata["semantics"], "retrospective_offline_mapping")
 
     def test_no_live_data_or_broker_modules_imported(self):
-        # We ensure that this roundtrip test module does not require forbidden dependencies
-        forbidden_modules = [
-            "shioaji",
-            "yfinance",
-            "tw_stock_tool.data",
-            "tw_stock_tool.data_loader",
-            "tw_stock_tool.cli",
-            "tw_stock_tool.broker",
-        ]
+        import subprocess
+        import sys
+        import textwrap
         
-        for forbidden in forbidden_modules:
-            # We check if they were imported as a side-effect. Since this test runs 
-            # after imports, if they were required, they would be in sys.modules
-            self.assertNotIn(
-                forbidden, 
-                sys.modules, 
-                f"Forbidden module {forbidden} was loaded during backtest artifact roundtrip test"
-            )
+        script = textwrap.dedent("""
+            import sys
+            from tw_stock_tool.backtesting.results import BacktestResult
+            from tw_stock_tool.paper_trading import convert_backtest_result_to_simulated_paper_trading_result
+            from tw_stock_tool.paper_trading.serialization import export_simulated_paper_trading_result_json, load_simulated_paper_trading_result_json
+            from tw_stock_tool.paper_trading.serialization_files import export_simulated_paper_trading_result_json_file, load_simulated_paper_trading_result_json_file
+            
+            forbidden = [
+                "shioaji",
+                "yfinance",
+                "tw_stock_tool.data",
+                "tw_stock_tool.data_loader",
+                "tw_stock_tool.cli",
+                "tw_stock_tool.broker"
+            ]
+            
+            found = [m for m in forbidden if m in sys.modules]
+            if found:
+                print(f"Forbidden modules found: {found}", file=sys.stderr)
+                sys.exit(1)
+        """)
+        
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, f"Subprocess failed:\n{result.stderr}")
 
 if __name__ == "__main__":
     unittest.main()

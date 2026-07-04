@@ -183,16 +183,33 @@ class TestBacktestResultSerializationRoundtrip(unittest.TestCase):
         self.assertEqual(sell_order.metadata["backtest"]["parameters"], {"param1": 1, "param2": "b"})
 
     def test_forbidden_dependency_sanity(self):
-        forbidden = [
-            "shioaji",
-            "yfinance",
-            "tw_stock_tool.data",
-            "tw_stock_tool.data_loader",
-            "tw_stock_tool.cli",
-            "tw_stock_tool.broker"
-        ]
-        for mod in forbidden:
-            self.assertNotIn(mod, sys.modules, f"Forbidden module {mod} was imported.")
+        import subprocess
+        import sys
+        import textwrap
+        
+        script = textwrap.dedent("""
+            import sys
+            from tw_stock_tool.backtesting.serialization import export_backtest_result_json, load_backtest_result_json
+            from tw_stock_tool.paper_trading import convert_backtest_result_to_simulated_paper_trading_result
+            from tw_stock_tool.paper_trading.serialization import export_simulated_paper_trading_result_json, load_simulated_paper_trading_result_json
+            
+            forbidden = [
+                "shioaji",
+                "yfinance",
+                "tw_stock_tool.data",
+                "tw_stock_tool.data_loader",
+                "tw_stock_tool.cli",
+                "tw_stock_tool.broker"
+            ]
+            
+            found = [m for m in forbidden if m in sys.modules]
+            if found:
+                print(f"Forbidden modules found: {found}", file=sys.stderr)
+                sys.exit(1)
+        """)
+        
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, f"Subprocess failed:\n{result.stderr}")
 
 if __name__ == "__main__":
     unittest.main()

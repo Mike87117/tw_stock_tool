@@ -165,16 +165,31 @@ class TestBacktestResultSerialization(unittest.TestCase):
             deserialize_backtest_result(data)
 
     def test_no_forbidden_dependencies_imported(self):
-        forbidden = [
-            "shioaji",
-            "yfinance",
-            "tw_stock_tool.data",
-            "tw_stock_tool.data_loader",
-            "tw_stock_tool.cli",
-            "tw_stock_tool.broker"
-        ]
-        for mod in forbidden:
-            self.assertNotIn(mod, sys.modules, f"Forbidden module {mod} was imported.")
+        import subprocess
+        import sys
+        import textwrap
+        
+        script = textwrap.dedent("""
+            import sys
+            from tw_stock_tool.backtesting.serialization import serialize_backtest_result, deserialize_backtest_result, export_backtest_result_json, load_backtest_result_json
+            
+            forbidden = [
+                "shioaji",
+                "yfinance",
+                "tw_stock_tool.data",
+                "tw_stock_tool.data_loader",
+                "tw_stock_tool.cli",
+                "tw_stock_tool.broker"
+            ]
+            
+            found = [m for m in forbidden if m in sys.modules]
+            if found:
+                print(f"Forbidden modules found: {found}", file=sys.stderr)
+                sys.exit(1)
+        """)
+        
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, f"Subprocess failed:\n{result.stderr}")
 
     def test_numpy_types_normalized(self):
         self.backtest_result.trade_count = np.int64(1)
