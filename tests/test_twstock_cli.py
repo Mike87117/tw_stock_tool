@@ -252,6 +252,28 @@ class TwStockCliTest(unittest.TestCase):
             "result.json",
         ])
 
+    def test_backtest_artifact_convert_subcommand_dispatches_to_cli(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch.object(twstock_cli.backtest_artifact_cli, "main", side_effect=fake_main) as mocked:
+            twstock_cli.main([
+                "backtest-artifact",
+                "convert-to-simulated-paper-trading",
+                "in.json",
+                "--output-json", "out.json",
+            ])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], [
+            "backtest_artifact_cli.py",
+            "convert-to-simulated-paper-trading",
+            "in.json",
+            "--output-json", "out.json",
+        ])
+
     def test_top_level_help_exits_successfully(self) -> None:
         out = StringIO()
         with redirect_stdout(out):
