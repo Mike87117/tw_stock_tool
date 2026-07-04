@@ -309,14 +309,31 @@ class TestBacktestConverter(unittest.TestCase):
         self.assertEqual(len(json_dict["orders"]), 2)
 
     def test_no_live_data_or_broker_imports(self):
-        import tw_stock_tool.paper_trading.backtest_converter as conv
-        # Check that sys.modules doesn't contain forbidden modules that might have been imported
-        # We know we shouldn't see shioaji or live fetchers
-        forbidden = ["shioaji", "yfinance", "twstock.live", "broker"]
-        for f in forbidden:
-            # We just do a substring search for strictness
-            has_forbidden = any(f in m for m in sys.modules)
-            self.assertFalse(has_forbidden, f"Forbidden module {f} was loaded")
+        import subprocess
+        import sys
+        import textwrap
+        
+        script = textwrap.dedent("""
+            import sys
+            from tw_stock_tool.paper_trading.backtest_converter import convert_backtest_result_to_simulated_paper_trading_result
+            
+            forbidden = [
+                "shioaji",
+                "yfinance",
+                "tw_stock_tool.data",
+                "tw_stock_tool.data_loader",
+                "tw_stock_tool.cli",
+                "tw_stock_tool.broker"
+            ]
+            
+            found = [m for m in forbidden if m in sys.modules]
+            if found:
+                print(f"Forbidden modules found: {found}", file=sys.stderr)
+                sys.exit(1)
+        """)
+        
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, f"Subprocess failed:\n{result.stderr}")
 
     def test_non_dict_metadata_rejected(self):
         br = BacktestResult(
