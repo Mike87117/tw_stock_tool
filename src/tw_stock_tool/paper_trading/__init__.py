@@ -26,6 +26,10 @@ from .serialization import (
     export_simulated_paper_trading_result_json,
     load_simulated_paper_trading_result_json,
 )
+from .serialization_files import (
+    export_simulated_paper_trading_result_json_file,
+    load_simulated_paper_trading_result_json_file,
+)
 
 __all__ = [
     "run_simulated_paper_trading",
@@ -44,4 +48,6 @@ __all__ = [
     "deserialize_simulated_paper_trading_result",
     "export_simulated_paper_trading_result_json",
     "load_simulated_paper_trading_result_json",
+    "export_simulated_paper_trading_result_json_file",
+    "load_simulated_paper_trading_result_json_file",
 ]
