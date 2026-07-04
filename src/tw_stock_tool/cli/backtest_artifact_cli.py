@@ -1,6 +1,4 @@
 import argparse
-import sys
-from pathlib import Path
 
 from tw_stock_tool.backtesting.serialization import BacktestResultSerializationError
 from tw_stock_tool.backtesting.serialization_files import load_backtest_result_json_file
@@ -60,9 +58,10 @@ def main(argv: list[str] | None = None) -> None:
             print(f"End Date:        {result.end_date}")
             print(f"Initial Capital: {result.initial_capital:.2f}")
             print(f"Final Capital:   {result.final_capital:.2f}")
-            print(f"Total Return:    {result.total_return_pct * 100:.2f}%")
-            print(f"Max Drawdown:    {result.max_drawdown_pct * 100:.2f}%")
+            print(f"Total Return:    {result.total_return_pct:.2f}%")
+            print(f"Max Drawdown:    {result.max_drawdown_pct:.2f}%")
             print(f"Trade Count:     {result.trade_count}")
+
             
     except FileNotFoundError as e:
         parser.exit(1, f"error: {e}\n")

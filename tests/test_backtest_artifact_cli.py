@@ -37,13 +37,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
         self.backtest_result = BacktestResult(
             initial_capital=100000.0,
             final_capital=110000.0,
-            total_return_pct=0.1,
+            total_return_pct=10.0,
             buy_hold_return_pct=0.05,
             cagr_pct=0.1,
             exposure_pct=0.5,
             trade_count=1,
             win_rate_pct=1.0,
-            max_drawdown_pct=0.0,
+            max_drawdown_pct=-5.0,
             profit_factor=0.0,
             best_trade_pct=0.1,
             worst_trade_pct=0.1,
@@ -117,6 +117,10 @@ class TestBacktestArtifactCli(unittest.TestCase):
         self.assertIn("Start Date:      2024-01-01", output)
         self.assertIn("End Date:        2024-01-05", output)
         self.assertIn("Trade Count:     1", output)
+        self.assertIn("Total Return:    10.00%", output)
+        self.assertIn("Max Drawdown:    -5.00%", output)
+        self.assertNotIn("1000.00%", output)
+        self.assertNotIn("-500.00%", output)
         
         forbidden_words = [
             "buy", "sell", "signal", "recommendation", "advice"
@@ -135,6 +139,7 @@ class TestBacktestArtifactCli(unittest.TestCase):
             self.assertEqual(cm.exception.code, 1)
         
         self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
 
     def test_invalid_schema(self):
         schema_path = self.temp_dir / "schema.json"
@@ -147,6 +152,7 @@ class TestBacktestArtifactCli(unittest.TestCase):
             self.assertEqual(cm.exception.code, 1)
             
         self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
 
     def test_missing_file(self):
         missing_path = self.temp_dir / "missing.json"
@@ -158,6 +164,7 @@ class TestBacktestArtifactCli(unittest.TestCase):
             self.assertEqual(cm.exception.code, 1)
             
         self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
 
     def test_no_forbidden_dependencies_imported(self):
         script = textwrap.dedent("""
