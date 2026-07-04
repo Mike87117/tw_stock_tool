@@ -24,6 +24,7 @@ from tw_stock_tool.utils import doctor
 from tw_stock_tool.cli import price_data_smoke_check
 from tw_stock_tool.cli import scan_stocks
 from tw_stock_tool.cli import stock_list_smoke_check
+from tw_stock_tool.cli import simulated_paper_trading_export_cli
 from tw_stock_tool.data import cache_manager
 from tw_stock_tool.data import stock_list_updater
 
@@ -112,6 +113,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         handler=lambda args: _dispatch_existing_main(
             walk_forward_report.main,
             "walk_forward_report.py",
+            args.args,
+        )
+    )
+
+    simulated_paper_trading_export_parser = subparsers.add_parser(
+        "simulated-paper-trading-export", 
+        help="Export reports from a simulated paper trading JSON artifact",
+        description="Export reports from an existing research-only simulated paper trading JSON artifact.\n"
+                    "Does not fetch market data, run strategies, connect to brokers, or place orders."
+    )
+    simulated_paper_trading_export_parser.set_defaults(
+        handler=lambda args: _dispatch_existing_main(
+            simulated_paper_trading_export_cli.main,
+            "simulated_paper_trading_export_cli.py",
             args.args,
         )
     )
