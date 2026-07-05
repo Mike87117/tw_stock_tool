@@ -2043,5 +2043,5 @@ pip install -e .
 - [Auto Trading Safety](docs/AUTO_TRADING_SAFETY.md)
 
 自動下單是長期目標，不是目前功能；在任何真實下單前，必須完成 Backtest 標準化、Parameter Sweep、Walk Forward、Paper Trading、Risk Manager、Kill Switch 與 Trade Log。
-目前專案尚未開始 Paper Trading / Broker / AI 自動決策。
+目前專案已完成研究用的 simulated paper trading artifact/export 邊界；尚未開始 live paper trading、Broker integration、半自動下單、自動下單或 AI 自動決策。
 
