@@ -407,5 +407,71 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
         self.assertEqual(crre, combine_risk_rule_evaluations)
 
+    def test_build_risk_evaluation_summary_all_allowed(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        e2 = RiskRuleEvaluation(rule_name="rule2", decision=RiskDecision.allow())
+        summary = build_risk_evaluation_summary([e1, e2])
+        self.assertTrue(summary.decision.allowed)
+        self.assertEqual(summary.evaluations, (e1, e2))
+        self.assertEqual(summary.metadata["evaluation_count"], 2)
+        self.assertEqual(summary.metadata["allowed_count"], 2)
+        self.assertEqual(summary.metadata["rejected_count"], 0)
+        self.assertTrue(summary.metadata["all_allowed"])
+        self.assertEqual(summary.metadata["rule_names"], ["rule1", "rule2"])
+        self.assertEqual(summary.metadata["rejected_rule_names"], [])
+
+    def test_build_risk_evaluation_summary_any_rejected(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        e2 = RiskRuleEvaluation(rule_name="rule2", decision=RiskDecision.reject(reasons=["r1"]))
+        e3 = RiskRuleEvaluation(rule_name="rule3", decision=RiskDecision.allow())
+        summary = build_risk_evaluation_summary([e1, e2, e3])
+        self.assertTrue(summary.decision.is_rejected)
+        self.assertEqual(summary.evaluations, (e1, e2, e3))
+        self.assertEqual(summary.decision.reasons, ("rule2: r1",))
+        self.assertEqual(summary.metadata["evaluation_count"], 3)
+        self.assertEqual(summary.metadata["allowed_count"], 2)
+        self.assertEqual(summary.metadata["rejected_count"], 1)
+        self.assertFalse(summary.metadata["all_allowed"])
+        self.assertEqual(summary.metadata["rule_names"], ["rule1", "rule2", "rule3"])
+        self.assertEqual(summary.metadata["rejected_rule_names"], ["rule2"])
+
+    def test_build_risk_evaluation_summary_empty_raises(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        with self.assertRaises(RiskModelError):
+            build_risk_evaluation_summary([])
+
+    def test_build_risk_evaluation_summary_non_sequence_raises(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        with self.assertRaises(RiskModelError):
+            build_risk_evaluation_summary(e1) # type: ignore
+
+    def test_build_risk_evaluation_summary_string_raises(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        with self.assertRaises(RiskModelError):
+            build_risk_evaluation_summary("evals") # type: ignore
+
+    def test_build_risk_evaluation_summary_bytes_raises(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        with self.assertRaises(RiskModelError):
+            build_risk_evaluation_summary(b"evals") # type: ignore
+
+    def test_build_risk_evaluation_summary_non_eval_item_raises(self):
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        with self.assertRaises(RiskModelError):
+            build_risk_evaluation_summary([e1, "not an eval"]) # type: ignore
+
+    def test_build_risk_evaluation_summary_public_import(self):
+        from tw_stock_tool.risk import build_risk_evaluation_summary as bres
+        from tw_stock_tool.risk.rules import build_risk_evaluation_summary
+        self.assertEqual(bres, build_risk_evaluation_summary)
+
 if __name__ == "__main__":
     unittest.main()

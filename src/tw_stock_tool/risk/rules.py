@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from .models import RiskDecision, RiskInputSnapshot, RiskModelError, RiskRuleEvaluation
+from .models import RiskDecision, RiskInputSnapshot, RiskModelError, RiskRuleEvaluation, RiskEvaluationSummary
 
 def check_max_order_notional(snapshot: RiskInputSnapshot, max_order_notional: float) -> RiskDecision:
     if not isinstance(snapshot, RiskInputSnapshot):
@@ -182,3 +182,26 @@ def combine_risk_rule_evaluations(evaluations: Sequence[RiskRuleEvaluation]) -> 
         return RiskDecision.allow(metadata=metadata)
     else:
         return RiskDecision.reject(reasons=reasons, metadata=metadata)
+
+def build_risk_evaluation_summary(evaluations: Sequence[RiskRuleEvaluation]) -> RiskEvaluationSummary:
+    # Check sequence
+    if not isinstance(evaluations, Sequence) or isinstance(evaluations, (str, bytes)):
+        raise RiskModelError("evaluations must be a non-string sequence of RiskRuleEvaluation objects.")
+    
+    if not evaluations:
+        raise RiskModelError("evaluations cannot be empty.")
+        
+    for eval_item in evaluations:
+        if not isinstance(eval_item, RiskRuleEvaluation):
+            raise RiskModelError(f"Expected RiskRuleEvaluation, got {type(eval_item).__name__}")
+            
+    # Combine decisions
+    aggregate_decision = combine_risk_rule_evaluations(evaluations)
+    
+    # The summary takes normalized tuple, aggregate decision, and metadata.
+    # Metadata is copied from aggregate_decision metadata.
+    return RiskEvaluationSummary(
+        evaluations=tuple(evaluations),
+        decision=aggregate_decision,
+        metadata=dict(aggregate_decision.metadata)
+    )
