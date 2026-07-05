@@ -161,6 +161,26 @@ class TestRiskModels(unittest.TestCase):
         from tw_stock_tool.risk import RiskInputSnapshot as RIS
         self.assertEqual(RIS, RiskInputSnapshot)
 
+    def test_snapshot_current_open_positions_default_is_zero(self):
+        snapshot = RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=100000.0)
+        self.assertEqual(snapshot.current_open_positions, 0)
+
+    def test_snapshot_current_open_positions_positive(self):
+        snapshot = RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=100000.0, current_open_positions=3)
+        self.assertEqual(snapshot.current_open_positions, 3)
+
+    def test_snapshot_current_open_positions_negative_raises(self):
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=100000.0, current_open_positions=-1)
+
+    def test_snapshot_current_open_positions_bool_raises(self):
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=100000.0, current_open_positions=True) # type: ignore
+
+    def test_snapshot_current_open_positions_non_integer_raises(self):
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=100000.0, current_open_positions=2.5) # type: ignore
+
 class TestRiskRuleEvaluation(unittest.TestCase):
     def test_valid_allowed_evaluation(self):
         from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision

@@ -61,6 +61,7 @@ class RiskInputSnapshot:
     current_position_quantity: int = 0
     current_position_notional: float = 0.0
     total_exposure: float = 0.0
+    current_open_positions: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -87,6 +88,9 @@ class RiskInputSnapshot:
             
         if not isinstance(self.total_exposure, (int, float)) or isinstance(self.total_exposure, bool) or self.total_exposure < 0:
             raise RiskModelError("total_exposure must be a non-negative number.")
+            
+        if not isinstance(self.current_open_positions, int) or isinstance(self.current_open_positions, bool) or self.current_open_positions < 0:
+            raise RiskModelError("current_open_positions must be a non-negative integer.")
             
         if not isinstance(self.metadata, dict):
             raise RiskModelError("metadata must be a dictionary.")

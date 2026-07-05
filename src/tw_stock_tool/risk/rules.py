@@ -105,6 +105,47 @@ def check_max_total_exposure(snapshot: RiskInputSnapshot, max_total_exposure: fl
             reasons=["projected_total_exposure exceeds max_total_exposure"],
             metadata=metadata
         )
+def check_max_open_positions(snapshot: RiskInputSnapshot, max_open_positions: int) -> RiskDecision:
+    if not isinstance(snapshot, RiskInputSnapshot):
+        raise RiskModelError("snapshot must be a RiskInputSnapshot.")
+        
+    if not isinstance(max_open_positions, int) or isinstance(max_open_positions, bool) or max_open_positions <= 0:
+        raise RiskModelError("max_open_positions must be a positive integer.")
+
+    projected_open_positions = snapshot.current_open_positions
+    opens_new_position = False
+    closes_position = False
+
+    if snapshot.side == "BUY" and snapshot.current_position_quantity == 0:
+        projected_open_positions += 1
+        opens_new_position = True
+    elif (
+        snapshot.side == "SELL"
+        and snapshot.current_position_quantity > 0
+        and snapshot.quantity >= snapshot.current_position_quantity
+    ):
+        projected_open_positions = max(0, snapshot.current_open_positions - 1)
+        closes_position = True
+
+    metadata = {
+        "symbol": snapshot.symbol,
+        "side": snapshot.side,
+        "quantity": snapshot.quantity,
+        "current_position_quantity": snapshot.current_position_quantity,
+        "current_open_positions": snapshot.current_open_positions,
+        "projected_open_positions": projected_open_positions,
+        "max_open_positions": max_open_positions,
+        "opens_new_position": opens_new_position,
+        "closes_position": closes_position
+    }
+
+    if projected_open_positions <= max_open_positions:
+        return RiskDecision.allow(metadata=metadata)
+    else:
+        return RiskDecision.reject(
+            reasons=["projected_open_positions exceeds max_open_positions"],
+            metadata=metadata
+        )
 
 
 def combine_risk_decisions(decisions: Sequence[RiskDecision]) -> RiskDecision:

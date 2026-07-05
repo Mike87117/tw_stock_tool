@@ -256,6 +256,90 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk.rules import check_max_total_exposure
         self.assertEqual(cmte, check_max_total_exposure)
 
+    def test_max_open_positions_buy_new_below_max_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, current_position_quantity=0, current_open_positions=1)
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        decision = check_max_open_positions(snapshot, 3)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["symbol"], "2330")
+        self.assertEqual(decision.metadata["side"], "BUY")
+        self.assertEqual(decision.metadata["quantity"], 1000)
+        self.assertEqual(decision.metadata["current_position_quantity"], 0)
+        self.assertEqual(decision.metadata["current_open_positions"], 1)
+        self.assertEqual(decision.metadata["projected_open_positions"], 2)
+        self.assertEqual(decision.metadata["max_open_positions"], 3)
+        self.assertTrue(decision.metadata["opens_new_position"])
+        self.assertFalse(decision.metadata["closes_position"])
+
+    def test_max_open_positions_buy_new_equal_max_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, current_position_quantity=0, current_open_positions=2)
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        decision = check_max_open_positions(snapshot, 3)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["projected_open_positions"], 3)
+
+    def test_max_open_positions_buy_new_exceeds_max_rejected(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, current_position_quantity=0, current_open_positions=3)
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        decision = check_max_open_positions(snapshot, 3)
+        self.assertTrue(decision.is_rejected)
+        self.assertIn("projected_open_positions exceeds max_open_positions", decision.reasons)
+        self.assertEqual(decision.metadata["projected_open_positions"], 4)
+
+    def test_max_open_positions_buy_existing_at_max_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, current_position_quantity=1000, current_open_positions=3)
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        decision = check_max_open_positions(snapshot, 3)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["projected_open_positions"], 3)
+        self.assertFalse(decision.metadata["opens_new_position"])
+
+    def test_max_open_positions_sell_partial_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "SELL", 500, 100.0, 100000.0, current_position_quantity=1000, current_open_positions=3)
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        decision = check_max_open_positions(snapshot, 3)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["projected_open_positions"], 3)
+        self.assertFalse(decision.metadata["closes_position"])
+
+    def test_max_open_positions_sell_closing_allowed_decreases(self):
+        snapshot = RiskInputSnapshot("2330", "SELL", 1000, 100.0, 100000.0, current_position_quantity=1000, current_open_positions=3)
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        decision = check_max_open_positions(snapshot, 3)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["projected_open_positions"], 2)
+        self.assertTrue(decision.metadata["closes_position"])
+
+    def test_max_open_positions_invalid_snapshot(self):
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        with self.assertRaises(RiskModelError):
+            check_max_open_positions("not a snapshot", 3) # type: ignore
+
+    def test_max_open_positions_zero_limit_raises(self):
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        with self.assertRaises(RiskModelError):
+            check_max_open_positions(self.snapshot, 0)
+
+    def test_max_open_positions_negative_limit_raises(self):
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        with self.assertRaises(RiskModelError):
+            check_max_open_positions(self.snapshot, -1)
+
+    def test_max_open_positions_bool_limit_raises(self):
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        with self.assertRaises(RiskModelError):
+            check_max_open_positions(self.snapshot, True) # type: ignore
+
+    def test_max_open_positions_non_integer_limit_raises(self):
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        with self.assertRaises(RiskModelError):
+            check_max_open_positions(self.snapshot, 3.5) # type: ignore
+
+    def test_max_open_positions_public_import(self):
+        from tw_stock_tool.risk import check_max_open_positions as cmop
+        from tw_stock_tool.risk.rules import check_max_open_positions
+        self.assertEqual(cmop, check_max_open_positions)
+
     def test_combine_risk_decisions_all_allowed(self):
         from tw_stock_tool.risk.rules import combine_risk_decisions
         from tw_stock_tool.risk.models import RiskDecision
