@@ -1377,6 +1377,7 @@ And returns:
     "orders": Path(...),
     "fills": Path(...),
 }
+```
 
 ## BacktestResult Artifact Workflow
 
