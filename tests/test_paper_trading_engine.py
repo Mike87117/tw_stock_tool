@@ -8,6 +8,8 @@ from tw_stock_tool.paper_trading.engine import (
 )
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
 from tw_stock_tool.paper_trading.models import PaperTradingModelError
+from tw_stock_tool.simulated_paper_trading_guard import SimulatedPaperTradingGuardDecision
+from unittest.mock import patch, PropertyMock
 
 
 class TestSimulatedPaperTradingEngine(unittest.TestCase):
@@ -273,3 +275,77 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
     def test_paper_trading_init_exports_run_result_helper(self):
         import tw_stock_tool.paper_trading as pt
         self.assertTrue(hasattr(pt, "run_simulated_paper_trading_result"))
+
+    def test_guard_decision_allowed_preserves_behavior(self):
+        """Allowed guard decision preserves existing simulated behavior."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        guard = SimulatedPaperTradingGuardDecision.allow()
+        portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision=guard)
+        self.assertEqual(len(portfolio.trade_log.orders), 1)
+        self.assertEqual(len(portfolio.trade_log.fills), 1)
+
+    def test_guard_decision_blocked_prevents_buy_intent(self):
+        """Blocked guard decision prevents BUY order intent from being recorded."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        guard = SimulatedPaperTradingGuardDecision.block(["Blocked buy"])
+        portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision=guard)
+        self.assertEqual(len(portfolio.trade_log.orders), 0)
+        self.assertEqual(len(portfolio.trade_log.fills), 0)
+        self.assertEqual(portfolio.cash, 200000.0)
+
+    @patch('tw_stock_tool.simulated_paper_trading_guard.models.SimulatedPaperTradingGuardDecision.is_blocked', new_callable=PropertyMock)
+    def test_guard_decision_blocked_prevents_sell_intent_and_fill(self, mock_is_blocked):
+        """Blocked guard decision prevents SELL order intent and fill."""
+        # First check is for BUY (allow), second check is for SELL (block)
+        mock_is_blocked.side_effect = [False, True]
+        
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        self.df.loc[self.dates[2], "exit_signal"] = True
+        
+        guard = SimulatedPaperTradingGuardDecision.allow()
+        portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision=guard)
+        
+        # BUY should happen at pos 0
+        self.assertEqual(len(portfolio.trade_log.orders), 1)
+        self.assertEqual(portfolio.trade_log.orders[0].side, "BUY")
+        
+        # SELL should be blocked at pos 2
+        self.assertTrue(all(o.side == "BUY" for o in portfolio.trade_log.orders))
+        
+        # Fills: only BUY fill
+        self.assertEqual(len(portfolio.trade_log.fills), 1)
+        self.assertEqual(portfolio.trade_log.fills[0].side, "BUY")
+
+    def test_invalid_guard_decision_raises(self):
+        """Invalid non-guard object raises PaperTradingModelError."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision="invalid") # type: ignore
+
+    def test_run_simulated_result_wrapper_accepts_allowed_guard(self):
+        """run_simulated_paper_trading_result accepts allowed guard decision and preserves result behavior."""
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0],
+            "entry_signal": [True, False],
+            "exit_signal": [False, False],
+        })
+        guard = SimulatedPaperTradingGuardDecision.allow()
+        result = run_simulated_paper_trading_result(
+            df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000, last_price=101.0, guard_decision=guard
+        )
+        self.assertEqual(result.fill_count, 1)
+
+    def test_run_simulated_result_wrapper_accepts_blocked_guard(self):
+        """run_simulated_paper_trading_result accepts blocked guard decision and produces a no-order result."""
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0],
+            "entry_signal": [True, False],
+            "exit_signal": [False, False],
+        })
+        guard = SimulatedPaperTradingGuardDecision.block(["Blocked"])
+        result = run_simulated_paper_trading_result(
+            df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000, last_price=101.0, guard_decision=guard
+        )
+        self.assertEqual(result.fill_count, 0)
+        self.assertEqual(result.order_count, 0)
+
