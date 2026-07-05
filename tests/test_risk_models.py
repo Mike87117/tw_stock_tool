@@ -71,6 +71,20 @@ class TestRiskModels(unittest.TestCase):
         self.assertEqual(snapshot.projected_position_quantity, 1000)
         self.assertEqual(snapshot.projected_position_notional, 100000.0)
 
+    def test_invalid_metadata_type(self):
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(
+                symbol="2330",
+                side="BUY",
+                quantity=1000,
+                price=500.0,
+                cash=100000.0,
+                current_position_quantity=0,
+                current_position_notional=0.0,
+                total_exposure=0.0,
+                metadata="invalid" # type: ignore
+            )
+
     def test_valid_sell_snapshot(self):
         snapshot = RiskInputSnapshot(
             symbol="2330",
@@ -146,6 +160,58 @@ class TestRiskModels(unittest.TestCase):
     def test_snapshot_public_import(self):
         from tw_stock_tool.risk import RiskInputSnapshot as RIS
         self.assertEqual(RIS, RiskInputSnapshot)
+
+class TestRiskRuleEvaluation(unittest.TestCase):
+    def test_valid_allowed_evaluation(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        decision = RiskDecision.allow()
+        eval_item = RiskRuleEvaluation(rule_name="rule1", decision=decision)
+        self.assertEqual(eval_item.rule_name, "rule1")
+        self.assertTrue(eval_item.decision.allowed)
+        self.assertEqual(eval_item.metadata, {})
+
+    def test_valid_rejected_evaluation(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        decision = RiskDecision.reject(reasons=["r1"])
+        eval_item = RiskRuleEvaluation(rule_name="rule2", decision=decision)
+        self.assertEqual(eval_item.rule_name, "rule2")
+        self.assertTrue(eval_item.decision.is_rejected)
+
+    def test_blank_rule_name_raises(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision, RiskModelError
+        decision = RiskDecision.allow()
+        with self.assertRaises(RiskModelError):
+            RiskRuleEvaluation(rule_name="", decision=decision)
+        with self.assertRaises(RiskModelError):
+            RiskRuleEvaluation(rule_name="   ", decision=decision)
+
+    def test_non_string_rule_name_raises(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision, RiskModelError
+        decision = RiskDecision.allow()
+        with self.assertRaises(RiskModelError):
+            RiskRuleEvaluation(rule_name=123, decision=decision) # type: ignore
+
+    def test_non_decision_decision_raises(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskModelError
+        with self.assertRaises(RiskModelError):
+            RiskRuleEvaluation(rule_name="rule1", decision="allowed") # type: ignore
+
+    def test_non_dict_metadata_raises(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision, RiskModelError
+        decision = RiskDecision.allow()
+        with self.assertRaises(RiskModelError):
+            RiskRuleEvaluation(rule_name="rule1", decision=decision, metadata="not a dict") # type: ignore
+
+    def test_metadata_preserved(self):
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        decision = RiskDecision.allow()
+        eval_item = RiskRuleEvaluation(rule_name="rule1", decision=decision, metadata={"key": "val"})
+        self.assertEqual(eval_item.metadata, {"key": "val"})
+
+    def test_public_import(self):
+        from tw_stock_tool.risk import RiskRuleEvaluation as rre
+        from tw_stock_tool.risk.models import RiskRuleEvaluation
+        self.assertEqual(rre, RiskRuleEvaluation)
 
 if __name__ == "__main__":
     unittest.main()
