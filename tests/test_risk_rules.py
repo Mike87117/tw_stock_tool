@@ -55,5 +55,68 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk import check_max_order_notional as cmon
         self.assertEqual(cmon, check_max_order_notional)
 
+    def test_max_position_quantity_allowed_below(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, 1000) # projected = 2000
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        decision = check_max_position_quantity(snapshot, 3000)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["symbol"], "2330")
+        self.assertEqual(decision.metadata["side"], "BUY")
+        self.assertEqual(decision.metadata["quantity"], 1000)
+        self.assertEqual(decision.metadata["current_position_quantity"], 1000)
+        self.assertEqual(decision.metadata["projected_position_quantity"], 2000)
+        self.assertEqual(decision.metadata["max_position_quantity"], 3000)
+
+    def test_max_position_quantity_allowed_equal(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, 1000) # projected = 2000
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        decision = check_max_position_quantity(snapshot, 2000)
+        self.assertTrue(decision.allowed)
+
+    def test_max_position_quantity_rejected_exceeds(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 100000.0, 1000) # projected = 2000
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        decision = check_max_position_quantity(snapshot, 1500)
+        self.assertTrue(decision.is_rejected)
+        self.assertIn("projected_position_quantity exceeds max_position_quantity", decision.reasons)
+        self.assertEqual(decision.metadata["projected_position_quantity"], 2000)
+        self.assertEqual(decision.metadata["max_position_quantity"], 1500)
+
+    def test_max_position_quantity_sell_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "SELL", 1000, 100.0, 100000.0, 1000) # projected = 0
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        decision = check_max_position_quantity(snapshot, 2000)
+        self.assertTrue(decision.allowed)
+
+    def test_max_position_quantity_invalid_snapshot(self):
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        with self.assertRaises(RiskModelError):
+            check_max_position_quantity("not a snapshot", 1000) # type: ignore
+
+    def test_max_position_quantity_zero_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        with self.assertRaises(RiskModelError):
+            check_max_position_quantity(self.snapshot, 0)
+
+    def test_max_position_quantity_negative_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        with self.assertRaises(RiskModelError):
+            check_max_position_quantity(self.snapshot, -100)
+
+    def test_max_position_quantity_bool_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        with self.assertRaises(RiskModelError):
+            check_max_position_quantity(self.snapshot, True) # type: ignore
+
+    def test_max_position_quantity_non_int_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        with self.assertRaises(RiskModelError):
+            check_max_position_quantity(self.snapshot, 1000.0) # type: ignore
+
+    def test_max_position_quantity_public_import(self):
+        from tw_stock_tool.risk import check_max_position_quantity as cmpq
+        from tw_stock_tool.risk.rules import check_max_position_quantity
+        self.assertEqual(cmpq, check_max_position_quantity)
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,3 +22,27 @@ def check_max_order_notional(snapshot: RiskInputSnapshot, max_order_notional: fl
             reasons=["order_notional exceeds max_order_notional"],
             metadata=metadata
         )
+
+def check_max_position_quantity(snapshot: RiskInputSnapshot, max_position_quantity: int) -> RiskDecision:
+    if not isinstance(snapshot, RiskInputSnapshot):
+        raise RiskModelError("snapshot must be a RiskInputSnapshot.")
+        
+    if not isinstance(max_position_quantity, int) or isinstance(max_position_quantity, bool) or max_position_quantity <= 0:
+        raise RiskModelError("max_position_quantity must be a positive integer.")
+
+    metadata = {
+        "symbol": snapshot.symbol,
+        "side": snapshot.side,
+        "quantity": snapshot.quantity,
+        "current_position_quantity": snapshot.current_position_quantity,
+        "projected_position_quantity": snapshot.projected_position_quantity,
+        "max_position_quantity": max_position_quantity
+    }
+
+    if snapshot.projected_position_quantity <= max_position_quantity:
+        return RiskDecision.allow(metadata=metadata)
+    else:
+        return RiskDecision.reject(
+            reasons=["projected_position_quantity exceeds max_position_quantity"],
+            metadata=metadata
+        )
