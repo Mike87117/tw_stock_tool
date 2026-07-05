@@ -85,6 +85,8 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         )
         mock_run.return_value = mock_result
         
+        mock_export.return_value = "test.json"
+        
         out = StringIO()
         err = StringIO()
         with redirect_stdout(out), redirect_stderr(err):
@@ -107,6 +109,9 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         
         # Verify file export uses export_backtest_result_json_file
         mock_export.assert_called_once_with(mock_result, "test.json", overwrite=False)
+
+        # Verify success message
+        self.assertIn("BacktestResult artifact written: test.json", out.getvalue())
         
         # Verify no forbidden words in output
         forbidden_words = [

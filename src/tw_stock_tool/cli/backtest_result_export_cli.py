@@ -120,7 +120,8 @@ def main(argv: list[str] | None = None) -> None:
             "resolved_strategy": strategy_name,
         }
 
-        export_backtest_result_json_file(result, args.output_json, overwrite=args.overwrite)
+        written_path = export_backtest_result_json_file(result, args.output_json, overwrite=args.overwrite)
+        print(f"BacktestResult artifact written: {written_path}")
 
     except FileExistsError as exc:
         print(f"error: {exc}. Use --overwrite to replace existing files.", file=sys.stderr)
