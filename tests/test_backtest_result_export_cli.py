@@ -1,5 +1,8 @@
 import unittest
 import sys
+import os
+import tempfile
+from pathlib import Path
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 from unittest.mock import patch, MagicMock
@@ -9,6 +12,7 @@ import pandas as pd
 from tw_stock_tool.cli.backtest_result_export_cli import main, _parse_args
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.backtesting.backtest import BacktestError
+from tw_stock_tool.cli import backtest_artifact_cli
 
 
 class TestBacktestResultExportCLI(unittest.TestCase):
@@ -63,7 +67,8 @@ class TestBacktestResultExportCLI(unittest.TestCase):
     @patch("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.run_backtest_result")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.export_backtest_result_json_file")
-    def test_successful_export_sets_metadata_and_calls_export(self, mock_export, mock_run, mock_strategies, mock_analyze):
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.load_backtest_result_json_file")
+    def test_successful_export_sets_metadata_and_calls_export(self, mock_load, mock_export, mock_run, mock_strategies, mock_analyze):
         # Setup mocks
         mock_strategy_func = MagicMock()
         mock_strategies.__contains__.side_effect = lambda k: True
@@ -109,6 +114,7 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         
         # Verify file export uses export_backtest_result_json_file
         mock_export.assert_called_once_with(mock_result, "test.json", overwrite=False)
+        mock_load.assert_called_once_with("test.json")
 
         # Verify success message
         self.assertIn("BacktestResult artifact written: test.json", out.getvalue())
@@ -127,13 +133,15 @@ class TestBacktestResultExportCLI(unittest.TestCase):
     @patch("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.run_backtest_result")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.export_backtest_result_json_file")
-    def test_overwrite_flag_passes_true(self, mock_export, mock_run, mock_strategies, mock_analyze):
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.load_backtest_result_json_file")
+    def test_overwrite_flag_passes_true(self, mock_load, mock_export, mock_run, mock_strategies, mock_analyze):
         mock_strategy_func = MagicMock()
         mock_strategies.__contains__.side_effect = lambda k: True
         mock_strategies.__getitem__.return_value = mock_strategy_func
         mock_analyze.return_value = MagicMock()
         mock_strategy_func.return_value = pd.DataFrame({"Open": [100]}, index=pd.date_range("2024-01-01", periods=1))
         mock_run.return_value = MagicMock()
+        mock_export.return_value = "overwrite-test.json"
         
         out = StringIO()
         err = StringIO()
@@ -147,12 +155,14 @@ class TestBacktestResultExportCLI(unittest.TestCase):
             
         mock_export.assert_called_once()
         self.assertTrue(mock_export.call_args[1]["overwrite"])
+        mock_load.assert_called_once_with("overwrite-test.json")
 
     @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.run_backtest_result")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.export_backtest_result_json_file")
-    def test_existing_output_error_exits_cleanly(self, mock_export, mock_run, mock_strategies, mock_analyze):
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.load_backtest_result_json_file")
+    def test_existing_output_error_exits_cleanly(self, mock_load, mock_export, mock_run, mock_strategies, mock_analyze):
         mock_strategy_func = MagicMock()
         mock_strategies.__contains__.side_effect = lambda k: True
         mock_strategies.__getitem__.return_value = mock_strategy_func
@@ -174,6 +184,7 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         self.assertIn("error:", err.getvalue())
         self.assertIn("Use --overwrite", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
+        mock_load.assert_not_called()
 
     @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
     def test_unknown_strategy_exits_cleanly(self, mock_analyze):
@@ -214,6 +225,106 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
+
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES")
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.run_backtest_result")
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.export_backtest_result_json_file")
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.load_backtest_result_json_file")
+    def test_readback_validation_error_exits_cleanly_without_success_message(
+        self, mock_load, mock_export, mock_run, mock_strategies, mock_analyze
+    ):
+        mock_strategy_func = MagicMock()
+        mock_strategies.__contains__.side_effect = lambda k: True
+        mock_strategies.__getitem__.return_value = mock_strategy_func
+        mock_analyze.return_value = MagicMock()
+        mock_strategy_func.return_value = pd.DataFrame({"Open": [100]}, index=pd.date_range("2024-01-01", periods=1))
+        mock_run.return_value = MagicMock()
+        mock_export.return_value = "test.json"
+        
+        from tw_stock_tool.backtesting.serialization import BacktestResultSerializationError
+        mock_load.side_effect = BacktestResultSerializationError("invalid artifact")
+        
+        out = StringIO()
+        err = StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                main([
+                    "--stock", "2330", 
+                    "--strategy", "ma_cross", 
+                    "--output-json", "test.json"
+                ])
+                
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertNotIn("BacktestResult artifact written", out.getvalue())
+        mock_export.assert_called_once()
+        mock_load.assert_called_once_with("test.json")
+
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
+    def test_exported_artifact_validates_and_inspects_with_backtest_artifact_cli(self, mock_analyze):
+        mock_analysis = MagicMock()
+        
+        df = pd.DataFrame(
+            {
+                "Open": [100.0, 90.0, 80.0, 85.0, 95.0, 100.0],
+                "Close": [100.0, 90.0, 80.0, 85.0, 95.0, 100.0],
+                "Signal": ["BUY", "SELL", "HOLD", "BUY", "SELL", "HOLD"],
+            },
+            index=pd.date_range("2024-01-01", periods=6, freq="D"),
+        )
+        mock_analysis.indicator_df = df
+        mock_analyze.return_value = mock_analysis
+
+        def dummy_strategy(df_in, **kwargs):
+            return df_in.copy()
+            
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_json = Path(tmpdir) / "test_artifact.json"
+            
+            with patch.dict("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES", {"roundtrip_strategy": dummy_strategy}):
+                out = StringIO()
+                with redirect_stdout(out):
+                    main([
+                        "--stock", "2330",
+                        "--strategy", "roundtrip_strategy",
+                        "--output-json", str(output_json)
+                    ])
+                
+                self.assertTrue(output_json.exists())
+                self.assertIn("BacktestResult artifact written:", out.getvalue())
+                
+                # Validate
+                val_out = StringIO()
+                with redirect_stdout(val_out):
+                    backtest_artifact_cli.main(["validate", str(output_json)])
+                self.assertIn("BacktestResult artifact is valid", val_out.getvalue())
+                
+                # Inspect
+                ins_out = StringIO()
+                with redirect_stdout(ins_out):
+                    backtest_artifact_cli.main(["inspect", str(output_json)])
+                
+                ins_text = ins_out.getvalue()
+                self.assertIn("BacktestResult Artifact Summary", ins_text)
+                self.assertIn("Stock:           2330", ins_text)
+                self.assertIn("Strategy:", ins_text)
+                self.assertIn("Trade Count:", ins_text)
+                self.assertIn("Total Return:", ins_text)
+                self.assertIn("Max Drawdown:", ins_text)
+                
+                self.assertNotIn("Traceback", ins_text)
+                
+                forbidden_words = [
+                    "recommendation", "advice", "live signal", "order signal",
+                    "buy/sell/hold advice", "investment recommendation",
+                    "recommended stocks", "best stocks to buy", "guaranteed profit",
+                    "guaranteed return", "broker order", "order placement",
+                    "live trading", "auto trading"
+                ]
+                for word in forbidden_words:
+                    self.assertNotIn(word.lower(), ins_text.lower())
 
 
 if __name__ == "__main__":

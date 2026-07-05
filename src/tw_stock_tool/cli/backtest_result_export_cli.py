@@ -5,7 +5,7 @@ from typing import Any
 from tw_stock_tool.analysis.analysis import analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest_result, BacktestError
 from tw_stock_tool.backtesting.serialization import BacktestResultSerializationError
-from tw_stock_tool.backtesting.serialization_files import export_backtest_result_json_file
+from tw_stock_tool.backtesting.serialization_files import export_backtest_result_json_file, load_backtest_result_json_file
 from tw_stock_tool.backtesting.strategies import STRATEGIES
 from tw_stock_tool.utils.config import DEFAULT_PERIOD
 
@@ -121,6 +121,7 @@ def main(argv: list[str] | None = None) -> None:
         }
 
         written_path = export_backtest_result_json_file(result, args.output_json, overwrite=args.overwrite)
+        load_backtest_result_json_file(written_path)
         print(f"BacktestResult artifact written: {written_path}")
 
     except FileExistsError as exc:

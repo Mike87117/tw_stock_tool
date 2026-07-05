@@ -322,6 +322,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("walk-forward", output)
         self.assertIn("simulated-paper-trading-export", output)
         self.assertIn("backtest-artifact", output)
+        self.assertIn("backtest-result-export", output)
 
     def test_no_banned_data_freshness_wording_in_cli_help(self) -> None:
         banned_phrases = (
@@ -348,6 +349,7 @@ class TwStockCliTest(unittest.TestCase):
             ["scan", "--help"],
             ["simulated-paper-trading-export", "--help"],
             ["backtest-artifact", "--help"],
+            ["backtest-result-export", "--help"],
         ]
 
         for cmd in subcommands:
