@@ -147,6 +147,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         )
     )
 
+    backtest_result_export_parser = subparsers.add_parser(
+        "backtest-result-export",
+        help="Export historical BacktestResult JSON artifact",
+        description="Export a structured BacktestResult JSON artifact from a historical backtest execution.\n"
+                    "This is a historical backtest artifact for offline research only. Not investment advice."
+    )
+    from tw_stock_tool.cli import backtest_result_export_cli
+    backtest_result_export_parser.set_defaults(
+        handler=lambda args: _dispatch_existing_main(
+            backtest_result_export_cli.main,
+            "backtest_result_export_cli.py",
+            args.args,
+        )
+    )
+
     args, passthrough_args = parser.parse_known_args(argv)
     args.args = passthrough_args
     return args

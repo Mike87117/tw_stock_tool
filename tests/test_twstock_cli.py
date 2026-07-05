@@ -451,6 +451,17 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("usage:", output)
         self.assertIn("simulated paper trading", output)
 
+    def test_backtest_result_export_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["backtest-result-export", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        output = out.getvalue()
+        self.assertIn("usage:", output)
+        self.assertIn("historical backtest artifact", output.lower() + output)
+
     def test_doctor_help_exits_successfully(self) -> None:
         out = StringIO()
         with redirect_stdout(out):
