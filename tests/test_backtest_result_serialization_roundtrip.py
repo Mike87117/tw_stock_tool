@@ -16,6 +16,18 @@ from tw_stock_tool.paper_trading.serialization import (
     export_simulated_paper_trading_result_json,
     load_simulated_paper_trading_result_json,
 )
+from tw_stock_tool.backtesting.backtest import run_backtest, run_backtest_result
+
+
+def _execution_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Open": [99.0, 105.0, 119.0, 95.0],
+            "Close": [100.0, 110.0, 120.0, 90.0],
+            "Signal": ["BUY", "HOLD", "SELL", "HOLD"],
+        },
+        index=pd.date_range("2024-01-01", periods=4, freq="D"),
+    )
 
 
 class TestBacktestResultSerializationRoundtrip(unittest.TestCase):
@@ -181,6 +193,90 @@ class TestBacktestResultSerializationRoundtrip(unittest.TestCase):
         # nested metadata["backtest"]["parameters"] matches
         self.assertEqual(buy_order.metadata["backtest"]["parameters"], {"param1": 1, "param2": "b"})
         self.assertEqual(sell_order.metadata["backtest"]["parameters"], {"param1": 1, "param2": "b"})
+
+    def test_run_backtest_result_json_roundtrip(self):
+        frame = _execution_frame()
+
+        result = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+        )
+
+        json_str = export_backtest_result_json(result)
+        loaded = load_backtest_result_json(json_str)
+
+        self.assertIsInstance(loaded, BacktestResult)
+        self.assertEqual(loaded.initial_capital, result.initial_capital)
+        self.assertEqual(loaded.final_capital, result.final_capital)
+        self.assertEqual(loaded.trade_count, result.trade_count)
+        self.assertEqual(loaded.total_return_pct, result.total_return_pct)
+        self.assertEqual(loaded.max_drawdown_pct, result.max_drawdown_pct)
+
+        self.assertIsInstance(loaded.trades, pd.DataFrame)
+        self.assertEqual(len(loaded.trades), len(result.trades))
+        self.assertEqual(loaded.trades.iloc[0]["Entry Price"], result.trades.iloc[0]["Entry Price"])
+        self.assertEqual(loaded.trades.iloc[0]["Exit Price"], result.trades.iloc[0]["Exit Price"])
+
+        self.assertIsInstance(loaded.equity_curve, pd.Series)
+        self.assertEqual(len(loaded.equity_curve), len(result.equity_curve))
+        self.assertEqual(loaded.equity_curve.iloc[-1], result.equity_curve.iloc[-1])
+
+    def test_run_backtest_result_roundtrip_legacy_dict_matches_run_backtest(self):
+        frame = _execution_frame()
+
+        result = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+        )
+
+        loaded = load_backtest_result_json(export_backtest_result_json(result))
+        legacy_from_loaded = loaded.to_legacy_dict()
+
+        legacy_direct = run_backtest(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+        )
+
+        self.assertEqual(set(legacy_from_loaded.keys()), set(legacy_direct.keys()))
+        self.assertEqual(legacy_from_loaded["Initial Capital"], legacy_direct["Initial Capital"])
+        self.assertEqual(legacy_from_loaded["Final Capital"], legacy_direct["Final Capital"])
+        self.assertEqual(legacy_from_loaded["Trade Count"], legacy_direct["Trade Count"])
+        self.assertEqual(legacy_from_loaded["Total Return %"], legacy_direct["Total Return %"])
+        self.assertEqual(legacy_from_loaded["Max Drawdown %"], legacy_direct["Max Drawdown %"])
+        self.assertEqual(len(legacy_from_loaded["Trades"]), len(legacy_direct["Trades"]))
+        self.assertEqual(len(legacy_from_loaded["Equity Curve"]), len(legacy_direct["Equity Curve"]))
+
+    def test_run_backtest_result_to_simulated_paper_trading_chain(self):
+        frame = _execution_frame()
+
+        result = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+        )
+
+        # The converter requires stock to be present.
+        result.stock = "2330"
+        result.strategy = "ExecutionRoundtripTest"
+        result.parameters = {"source": "run_backtest_result"}
+
+        loaded = load_backtest_result_json(export_backtest_result_json(result))
+        simulated_result = convert_backtest_result_to_simulated_paper_trading_result(loaded)
+        simulated_json = export_simulated_paper_trading_result_json(simulated_result)
+        loaded_simulated = load_simulated_paper_trading_result_json(simulated_json)
+
+        self.assertEqual(loaded_simulated.symbol, "2330")
+        self.assertEqual(loaded_simulated.order_count, 2)
+        self.assertEqual(loaded_simulated.fill_count, 2)
+        self.assertEqual(loaded_simulated.orders[0].metadata["semantics"], "retrospective_offline_mapping")
+        self.assertEqual(loaded_simulated.orders[0].metadata["backtest"]["strategy"], "ExecutionRoundtripTest")
 
     def test_forbidden_dependency_sanity(self):
         import subprocess

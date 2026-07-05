@@ -232,6 +232,30 @@ class TwStockCliTest(unittest.TestCase):
             "--output-markdown", "out.md",
         ])
 
+    def test_backtest_result_export_subcommand_dispatches_to_cli(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch("tw_stock_tool.cli.backtest_result_export_cli.main", side_effect=fake_main) as mocked:
+            twstock_cli.main([
+                "backtest-result-export",
+                "--stock", "2330",
+                "--strategy", "ma_cross",
+                "--output-json", "out.json",
+                "--overwrite",
+            ])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], [
+            "backtest_result_export_cli.py",
+            "--stock", "2330",
+            "--strategy", "ma_cross",
+            "--output-json", "out.json",
+            "--overwrite",
+        ])
+
     def test_backtest_artifact_subcommand_dispatches_to_cli(self) -> None:
         captured: list[list[str]] = []
 
@@ -450,6 +474,17 @@ class TwStockCliTest(unittest.TestCase):
         output = out.getvalue()
         self.assertIn("usage:", output)
         self.assertIn("simulated paper trading", output)
+
+    def test_backtest_result_export_help_exits_successfully(self) -> None:
+        out = StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                twstock_cli.main(["backtest-result-export", "--help"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        output = out.getvalue()
+        self.assertIn("usage:", output)
+        self.assertIn("historical backtest artifact", output.lower() + output)
 
     def test_doctor_help_exits_successfully(self) -> None:
         out = StringIO()
