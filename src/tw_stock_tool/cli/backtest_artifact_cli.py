@@ -4,8 +4,10 @@ from tw_stock_tool.backtesting.serialization import BacktestResultSerializationE
 from tw_stock_tool.backtesting.serialization_files import load_backtest_result_json_file
 from tw_stock_tool.paper_trading import convert_backtest_result_to_simulated_paper_trading_result
 from tw_stock_tool.paper_trading.models import PaperTradingModelError
-from tw_stock_tool.paper_trading.serialization_files import export_simulated_paper_trading_result_json_file
-
+from tw_stock_tool.paper_trading.serialization_files import (
+    export_simulated_paper_trading_result_json_file,
+    load_simulated_paper_trading_result_json_file,
+)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -97,6 +99,7 @@ def main(argv: list[str] | None = None) -> None:
             result = load_backtest_result_json_file(args.input_json)
             paper_trading_result = convert_backtest_result_to_simulated_paper_trading_result(result)
             written_path = export_simulated_paper_trading_result_json_file(paper_trading_result, args.output_json, overwrite=args.overwrite)
+            load_simulated_paper_trading_result_json_file(written_path)
             print(f"Simulated paper trading artifact written: {written_path}")
 
             

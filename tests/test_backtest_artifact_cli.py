@@ -225,6 +225,45 @@ class TestBacktestArtifactCli(unittest.TestCase):
         if len(result.orders) > 0:
             self.assertEqual(result.orders[0].metadata["semantics"], "retrospective_offline_mapping")
 
+    @patch("tw_stock_tool.cli.backtest_artifact_cli.export_simulated_paper_trading_result_json_file")
+    @patch("tw_stock_tool.cli.backtest_artifact_cli.load_simulated_paper_trading_result_json_file")
+    def test_convert_readback_receives_exact_path(self, mock_load, mock_export):
+        mock_export.return_value = "dummy-written-path.json"
+        output_json = self.temp_dir / "converted_dummy.json"
+        
+        out = StringIO()
+        with patch("sys.stdout", out):
+            backtest_artifact_cli.main([
+                "convert-to-simulated-paper-trading",
+                str(self.valid_json_path),
+                "--output-json",
+                str(output_json),
+            ])
+            
+        mock_load.assert_called_once_with("dummy-written-path.json")
+
+    @patch("tw_stock_tool.cli.backtest_artifact_cli.load_simulated_paper_trading_result_json_file")
+    def test_convert_readback_validation_failure(self, mock_load):
+        from tw_stock_tool.paper_trading.models import PaperTradingModelError
+        mock_load.side_effect = PaperTradingModelError("Simulated read-back error")
+        output_json = self.temp_dir / "converted_readback_fail.json"
+        
+        err = StringIO()
+        out = StringIO()
+        with patch("sys.stderr", err), patch("sys.stdout", out):
+            with self.assertRaises(SystemExit) as cm:
+                backtest_artifact_cli.main([
+                    "convert-to-simulated-paper-trading",
+                    str(self.valid_json_path),
+                    "--output-json",
+                    str(output_json),
+                ])
+            self.assertEqual(cm.exception.code, 1)
+            
+        self.assertIn("error: Simulated read-back error", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertNotIn("Simulated paper trading artifact written", out.getvalue())
+
     def test_convert_overwrite_behavior(self):
         output_json = self.temp_dir / "converted.json"
         output_json.write_text('{"dummy": true}', encoding="utf-8")

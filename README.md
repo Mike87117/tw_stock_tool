@@ -1379,6 +1379,32 @@ And returns:
 }
 ```
 
+## BacktestResult Artifact Workflow
+
+The intended offline research artifact workflow is:
+
+```text
+twstock backtest-result-export
+→ BacktestResult JSON artifact
+→ twstock backtest-artifact validate
+→ twstock backtest-artifact inspect
+→ optional convert-to-simulated-paper-trading
+```
+
+- `backtest-result-export` is the historical execution export path.
+- `backtest-artifact` is artifact-input-only.
+- `backtest-artifact validate` validates an existing artifact.
+- `backtest-artifact inspect` prints only a safe summary.
+- `convert-to-simulated-paper-trading` converts an existing BacktestResult artifact to a simulated paper trading artifact.
+- This is an offline research artifact workflow.
+- This is not live trading, not broker integration, not auto trading, not order placement, not investment advice, and not a buy/sell/hold signal generator.
+
+### Future Boundary Planning
+
+- Do not add `backtest-report --output-backtest-json` yet.
+- If that is considered later, it must first have explicit boundary planning.
+- Future planning must decide whether it uses `run_backtest_result()`, how it interacts with existing Excel/Markdown report output, and how it avoids legacy dict normalization issues.
+
 ## 輸出檔案位置總覽
 
 | 工具 | 功能 | 預設輸出位置 | 備註 |
