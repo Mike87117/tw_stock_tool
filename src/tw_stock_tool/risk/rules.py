@@ -72,3 +72,34 @@ def check_max_position_notional(snapshot: RiskInputSnapshot, max_position_notion
             reasons=["projected_position_notional exceeds max_position_notional"],
             metadata=metadata
         )
+
+def check_max_total_exposure(snapshot: RiskInputSnapshot, max_total_exposure: float) -> RiskDecision:
+    if not isinstance(snapshot, RiskInputSnapshot):
+        raise RiskModelError("snapshot must be a RiskInputSnapshot.")
+        
+    if not isinstance(max_total_exposure, (int, float)) or isinstance(max_total_exposure, bool) or max_total_exposure <= 0:
+        raise RiskModelError("max_total_exposure must be a positive number.")
+
+    if snapshot.side == "BUY":
+        projected_total_exposure = snapshot.total_exposure + snapshot.order_notional
+    else:
+        projected_total_exposure = max(0.0, snapshot.total_exposure - snapshot.order_notional)
+
+    metadata = {
+        "symbol": snapshot.symbol,
+        "side": snapshot.side,
+        "quantity": snapshot.quantity,
+        "price": snapshot.price,
+        "order_notional": snapshot.order_notional,
+        "total_exposure": snapshot.total_exposure,
+        "projected_total_exposure": projected_total_exposure,
+        "max_total_exposure": max_total_exposure
+    }
+
+    if projected_total_exposure <= max_total_exposure:
+        return RiskDecision.allow(metadata=metadata)
+    else:
+        return RiskDecision.reject(
+            reasons=["projected_total_exposure exceeds max_total_exposure"],
+            metadata=metadata
+        )
