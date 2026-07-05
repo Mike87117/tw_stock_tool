@@ -316,6 +316,33 @@ Risk Manager 必須獨立於策略與 Broker Interface。
 
 策略只能提出交易意圖，Risk Manager 才能決定該意圖是否可執行。
 
+### 11.1 Phase Boundary: Research-Only Risk Model Planning
+
+Risk Manager is the next Roadmap-aligned area after Paper Trading. Initial work should be a research-only risk boundary and simulated paper trading risk check only. It must not connect to brokers, must not place orders, must not produce investment recommendations, and must not produce real-time buy/sell/hold instructions.
+
+Future implementation planning must ensure the Risk Manager first exposes pure Python model/result objects. It should be independent from strategies, data loading, CLI execution, and any broker interface. It should evaluate simulated order intent or simulated portfolio state only, and return a structured risk decision (allow/reject) with reasons. It should be designed so Paper Trading can later refuse simulated orders when risk checks fail. This remains strictly offline validation.
+
+Initial candidate checks for future phases:
+
+- max single order notional
+- max position quantity
+- max position notional
+- max total exposure
+- insufficient cash / shares should remain a simulated portfolio concern unless intentionally moved later
+- daily loss / consecutive loss checks should be deferred until there is a stable trade log or equity timeline boundary
+
+Explicit non-goals:
+
+- no Broker Interface implementation
+- no Shioaji
+- no live trading
+- no auto trading
+- no real order placement
+- no semi-automatic order confirmation flow
+- no investment advice
+- no guaranteed return
+- no recommended stocks
+
 ## 12. Kill Switch
 
 Kill Switch 是任何真實下單能力的必要前置條件。
