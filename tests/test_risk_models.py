@@ -49,5 +49,13 @@ class TestRiskModels(unittest.TestCase):
         self.assertIsInstance(decision.reasons, tuple)
         self.assertEqual(decision.reasons, ("ok reason",))
 
+    def test_reject_string_reason_raises(self):
+        with self.assertRaises(RiskModelError):
+            RiskDecision.reject(reasons="too risky") # type: ignore
+            
+    def test_allow_string_reason_raises(self):
+        with self.assertRaises(RiskModelError):
+            RiskDecision.allow(reasons="ok") # type: ignore
+
 if __name__ == "__main__":
     unittest.main()

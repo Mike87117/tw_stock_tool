@@ -33,12 +33,16 @@ class RiskDecision:
             object.__setattr__(self, "reasons", tuple(self.reasons))
 
     @classmethod
-    def allow(cls, reasons: Union[Sequence[str], None] = None, metadata: dict[str, Any] = None) -> "RiskDecision":
+    def allow(cls, reasons: Union[Tuple[str, ...], list[str], None] = None, metadata: dict[str, Any] = None) -> "RiskDecision":
+        if isinstance(reasons, str):
+            raise RiskModelError("reasons must be a tuple or list, not a string.")
         reasons_tup = tuple(reasons) if reasons is not None else ()
         return cls(allowed=True, reasons=reasons_tup, metadata=metadata or {})
 
     @classmethod
-    def reject(cls, reasons: Sequence[str], metadata: dict[str, Any] = None) -> "RiskDecision":
+    def reject(cls, reasons: Union[Tuple[str, ...], list[str]], metadata: dict[str, Any] = None) -> "RiskDecision":
+        if isinstance(reasons, str):
+            raise RiskModelError("reasons must be a tuple or list, not a string.")
         if not reasons:
             raise RiskModelError("A rejected decision must have at least one reason.")
         return cls(allowed=False, reasons=tuple(reasons), metadata=metadata or {})
