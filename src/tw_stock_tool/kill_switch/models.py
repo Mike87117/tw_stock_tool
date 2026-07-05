@@ -1,3 +1,9 @@
+"""
+Kill Switch State Models.
+
+Defines the offline `KillSwitchState` and pure functions for activating
+and releasing the kill switch.
+"""
 from dataclasses import dataclass
 from datetime import datetime
 

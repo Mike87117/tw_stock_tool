@@ -1,3 +1,8 @@
+"""
+Kill Switch Decision Boundary.
+
+Defines the offline `KillSwitchDecision` model and evaluation logic.
+"""
 from dataclasses import dataclass
 from .models import KillSwitchState, KillSwitchModelError
 
