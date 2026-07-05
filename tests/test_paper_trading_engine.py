@@ -7,7 +7,7 @@ from tw_stock_tool.paper_trading.engine import (
     run_simulated_paper_trading_result,
 )
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
-from tw_stock_tool.paper_trading.models import PaperTradingModelError
+from tw_stock_tool.paper_trading.models import PaperTradingModelError, SimulatedPortfolio
 from tw_stock_tool.simulated_paper_trading_guard import SimulatedPaperTradingGuardDecision
 from unittest.mock import patch, PropertyMock
 
@@ -345,6 +345,94 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         guard = SimulatedPaperTradingGuardDecision.block(["Blocked"])
         result = run_simulated_paper_trading_result(
             df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000, last_price=101.0, guard_decision=guard
+        )
+        self.assertEqual(result.fill_count, 0)
+        self.assertEqual(result.order_count, 0)
+
+    def test_provider_allowed_decision_records_intent(self):
+        """Provider allowed decision records simulated BUY order intent and fill normally."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        
+        provider_calls = []
+        def provider(order, portfolio):
+            provider_calls.append((order, portfolio))
+            return SimulatedPaperTradingGuardDecision.allow()
+            
+        portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider)
+        
+        self.assertEqual(len(portfolio.trade_log.orders), 1)
+        self.assertEqual(len(portfolio.trade_log.fills), 1)
+        self.assertEqual(len(provider_calls), 1)
+        self.assertEqual(provider_calls[0][0].symbol, "2330")
+        self.assertEqual(provider_calls[0][0].side, "BUY")
+        self.assertIsInstance(provider_calls[0][1], SimulatedPortfolio)
+
+    def test_provider_blocked_decision_prevents_buy_intent(self):
+        """Provider blocked decision prevents simulated BUY order intent from being recorded."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        
+        provider_calls = []
+        def provider(order, portfolio):
+            provider_calls.append(order)
+            return SimulatedPaperTradingGuardDecision.block(["Blocked buy"])
+            
+        portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider)
+        
+        self.assertEqual(len(portfolio.trade_log.orders), 0)
+        self.assertEqual(len(portfolio.trade_log.fills), 0)
+        self.assertEqual(len(provider_calls), 1)
+
+    def test_provider_blocked_decision_prevents_sell_intent(self):
+        """Provider blocked decision prevents simulated SELL order intent and fill."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        self.df.loc[self.dates[2], "exit_signal"] = True
+        
+        provider_calls = []
+        def provider(order, portfolio):
+            provider_calls.append(order)
+            if order.side == "BUY":
+                return SimulatedPaperTradingGuardDecision.allow()
+            return SimulatedPaperTradingGuardDecision.block(["Blocked sell"])
+            
+        portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider)
+        
+        self.assertEqual(len(portfolio.trade_log.orders), 1)
+        self.assertEqual(portfolio.trade_log.orders[0].side, "BUY")
+        self.assertEqual(len(portfolio.trade_log.fills), 1)
+        self.assertEqual(len(provider_calls), 2)
+        self.assertEqual(provider_calls[1].side, "SELL")
+
+    def test_invalid_provider_raises(self):
+        """Non-callable provider raises PaperTradingModelError."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider="not callable") # type: ignore
+
+    def test_provider_returning_non_guard_raises(self):
+        """Provider returning a non-guard object raises PaperTradingModelError."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        def provider(o, p): return "invalid return"
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider) # type: ignore
+
+    def test_both_static_and_dynamic_guard_raises(self):
+        """Providing both static guard_decision and dynamic guard_decision_provider raises PaperTradingModelError."""
+        self.df.loc[self.dates[0], "entry_signal"] = True
+        guard = SimulatedPaperTradingGuardDecision.allow()
+        def provider(o, p): return guard
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision=guard, guard_decision_provider=provider)
+
+    def test_run_simulated_result_wrapper_passes_provider(self):
+        """run_simulated_paper_trading_result passes provider through to the engine."""
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0],
+            "entry_signal": [True, False],
+            "exit_signal": [False, False],
+        })
+        def provider(o, p): return SimulatedPaperTradingGuardDecision.block(["Blocked"])
+        result = run_simulated_paper_trading_result(
+            df=df, symbol="2330", initial_cash=200000.0, quantity_per_trade=1000, last_price=101.0, guard_decision_provider=provider
         )
         self.assertEqual(result.fill_count, 0)
         self.assertEqual(result.order_count, 0)

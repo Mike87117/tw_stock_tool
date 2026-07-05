@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Callable
 
 from tw_stock_tool.backtesting.signals import validate_standard_signals
 from tw_stock_tool.paper_trading.models import (
@@ -13,6 +14,21 @@ from tw_stock_tool.paper_trading.results import (
 )
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardDecision
 
+def _should_record_order_intent(
+    candidate: SimulatedOrder,
+    portfolio: SimulatedPortfolio,
+    static_guard: SimulatedPaperTradingGuardDecision | None,
+    dynamic_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None,
+) -> bool:
+    if dynamic_provider is not None:
+        decision = dynamic_provider(candidate, portfolio)
+        if not isinstance(decision, SimulatedPaperTradingGuardDecision):
+            raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
+        return not decision.is_blocked
+    if static_guard is not None:
+        return not static_guard.is_blocked
+    return True
+
 
 
 def run_simulated_paper_trading(
@@ -24,6 +40,7 @@ def run_simulated_paper_trading(
     tax_rate: float = 0.0,
     slippage_per_share: float = 0.0,
     guard_decision: SimulatedPaperTradingGuardDecision | None = None,
+    guard_decision_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None = None,
 ) -> SimulatedPortfolio:
     """
     Run a minimal, research-only simulated paper trading engine on historical data.
@@ -43,8 +60,12 @@ def run_simulated_paper_trading(
         raise ValueError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
     if "Open" not in df.columns:
         raise ValueError("DataFrame must contain 'Open' column.")
+    if guard_decision is not None and guard_decision_provider is not None:
+        raise PaperTradingModelError("Cannot provide both guard_decision and guard_decision_provider.")
     if guard_decision is not None and not isinstance(guard_decision, SimulatedPaperTradingGuardDecision):
         raise PaperTradingModelError("guard_decision must be a SimulatedPaperTradingGuardDecision or None.")
+    if guard_decision_provider is not None and not callable(guard_decision_provider):
+        raise PaperTradingModelError("guard_decision_provider must be callable or None.")
 
     validate_standard_signals(df)
 
@@ -84,32 +105,30 @@ def run_simulated_paper_trading(
         shares = pos_model.quantity
 
         if shares > 0 and exit_sig:
-            if guard_decision is not None and guard_decision.is_blocked:
-                pass
-            else:
-                order_id = f"{symbol}-SELL-{pos}"
-                pending_order = SimulatedOrder(
-                    order_id=order_id,
-                    symbol=symbol,
-                    side="SELL",
-                    quantity=shares,
-                    signal_time=index_label,
-                    created_at=index_label,
-                )
+            order_id = f"{symbol}-SELL-{pos}"
+            candidate_order = SimulatedOrder(
+                order_id=order_id,
+                symbol=symbol,
+                side="SELL",
+                quantity=shares,
+                signal_time=index_label,
+                created_at=index_label,
+            )
+            if _should_record_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider):
+                pending_order = candidate_order
                 portfolio.trade_log.record_order(pending_order)
         elif shares == 0 and entry_sig:
-            if guard_decision is not None and guard_decision.is_blocked:
-                pass
-            else:
-                order_id = f"{symbol}-BUY-{pos}"
-                pending_order = SimulatedOrder(
-                    order_id=order_id,
-                    symbol=symbol,
-                    side="BUY",
-                    quantity=quantity_per_trade,
-                    signal_time=index_label,
-                    created_at=index_label,
-                )
+            order_id = f"{symbol}-BUY-{pos}"
+            candidate_order = SimulatedOrder(
+                order_id=order_id,
+                symbol=symbol,
+                side="BUY",
+                quantity=quantity_per_trade,
+                signal_time=index_label,
+                created_at=index_label,
+            )
+            if _should_record_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider):
+                pending_order = candidate_order
                 portfolio.trade_log.record_order(pending_order)
 
     return portfolio
@@ -125,6 +144,7 @@ def run_simulated_paper_trading_result(
     slippage_per_share: float = 0.0,
     last_price: float | None = None,
     guard_decision: SimulatedPaperTradingGuardDecision | None = None,
+    guard_decision_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None = None,
 ) -> SimulatedPaperTradingResult:
     """
     Run simulated paper trading and build a stable summary result object.
@@ -138,6 +158,7 @@ def run_simulated_paper_trading_result(
         tax_rate=tax_rate,
         slippage_per_share=slippage_per_share,
         guard_decision=guard_decision,
+        guard_decision_provider=guard_decision_provider,
     )
     return build_simulated_paper_trading_result(
         portfolio=portfolio,
