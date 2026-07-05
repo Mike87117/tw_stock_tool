@@ -118,5 +118,70 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk.rules import check_max_position_quantity
         self.assertEqual(cmpq, check_max_position_quantity)
 
+    def test_max_position_notional_allowed_below(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 1000000.0, 1000, 100000.0) # projected = 200000.0
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        decision = check_max_position_notional(snapshot, 300000.0)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["symbol"], "2330")
+        self.assertEqual(decision.metadata["side"], "BUY")
+        self.assertEqual(decision.metadata["quantity"], 1000)
+        self.assertEqual(decision.metadata["price"], 100.0)
+        self.assertEqual(decision.metadata["order_notional"], 100000.0)
+        self.assertEqual(decision.metadata["current_position_notional"], 100000.0)
+        self.assertEqual(decision.metadata["projected_position_notional"], 200000.0)
+        self.assertEqual(decision.metadata["max_position_notional"], 300000.0)
+
+    def test_max_position_notional_allowed_equal(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 1000000.0, 1000, 100000.0) # projected = 200000.0
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        decision = check_max_position_notional(snapshot, 200000.0)
+        self.assertTrue(decision.allowed)
+
+    def test_max_position_notional_rejected_exceeds(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 1000000.0, 1000, 100000.0) # projected = 200000.0
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        decision = check_max_position_notional(snapshot, 150000.0)
+        self.assertTrue(decision.is_rejected)
+        self.assertIn("projected_position_notional exceeds max_position_notional", decision.reasons)
+        self.assertEqual(decision.metadata["projected_position_notional"], 200000.0)
+        self.assertEqual(decision.metadata["max_position_notional"], 150000.0)
+
+    def test_max_position_notional_sell_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "SELL", 1000, 100.0, 1000000.0, 1000, 100000.0) # projected = 0.0
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        decision = check_max_position_notional(snapshot, 200000.0)
+        self.assertTrue(decision.allowed)
+
+    def test_max_position_notional_invalid_snapshot(self):
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        with self.assertRaises(RiskModelError):
+            check_max_position_notional("not a snapshot", 100000.0) # type: ignore
+
+    def test_max_position_notional_zero_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        with self.assertRaises(RiskModelError):
+            check_max_position_notional(self.snapshot, 0.0)
+
+    def test_max_position_notional_negative_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        with self.assertRaises(RiskModelError):
+            check_max_position_notional(self.snapshot, -100.0)
+
+    def test_max_position_notional_bool_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        with self.assertRaises(RiskModelError):
+            check_max_position_notional(self.snapshot, True) # type: ignore
+
+    def test_max_position_notional_non_number_limit(self):
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        with self.assertRaises(RiskModelError):
+            check_max_position_notional(self.snapshot, "1000") # type: ignore
+
+    def test_max_position_notional_public_import(self):
+        from tw_stock_tool.risk import check_max_position_notional as cmpn
+        from tw_stock_tool.risk.rules import check_max_position_notional
+        self.assertEqual(cmpn, check_max_position_notional)
+
 if __name__ == "__main__":
     unittest.main()
