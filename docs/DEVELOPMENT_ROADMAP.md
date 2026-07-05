@@ -166,6 +166,14 @@ Broker Interface
 - Phase 16.5：完成 (Report Exporter PermissionError Consistency Audit)
 - Phase 16.6：完成 (Report Exporter PermissionError Consistency Patch)
   - Added localized `try/except PermissionError` blocks to all missing exporters (`backtest_report`, `parameter_sweep_report`, `walk_forward_report`, `daily_watchlist`, `verify_batch`) to consistently raise `ValueError` with a user-friendly message when Excel files are locked.
+- Phase 17–27：完成 (Architecture refactoring, test hardening, AI/ML extensions, codebase maintenance)
+- Phase 28：完成 (Simulated Paper Trading export / file output)
+- Phase 31：完成 (BacktestResult artifact serialization boundary)
+- Phase 32.x：完成 (BacktestResult artifact CLI planning, validate/inspect, and convert-to-simulated-paper-trading)
+- Phase 33.x：完成 (Structured `run_backtest_result(...)`, artifact roundtrip / compatibility tests, and `backtest-result-export`)
+- Phase 34.x：完成 (BacktestResult export CLI UX / roundtrip smoke tests / read-back validation)
+- Phase 35.1：完成 (BacktestResult artifact workflow documentation)
+- Phase 35.3：完成 (`backtest-artifact convert-to-simulated-paper-trading` read-back validation)
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。
