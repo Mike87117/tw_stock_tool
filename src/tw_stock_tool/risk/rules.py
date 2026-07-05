@@ -1,5 +1,7 @@
+from collections.abc import Sequence
 from typing import Any
-from .models import RiskInputSnapshot, RiskDecision, RiskModelError
+
+from .models import RiskDecision, RiskInputSnapshot, RiskModelError, RiskRuleEvaluation
 
 def check_max_order_notional(snapshot: RiskInputSnapshot, max_order_notional: float) -> RiskDecision:
     if not isinstance(snapshot, RiskInputSnapshot):
@@ -104,7 +106,6 @@ def check_max_total_exposure(snapshot: RiskInputSnapshot, max_total_exposure: fl
             metadata=metadata
         )
 
-from collections.abc import Sequence
 
 def combine_risk_decisions(decisions: Sequence[RiskDecision]) -> RiskDecision:
     if not isinstance(decisions, Sequence) or isinstance(decisions, (str, bytes)):
@@ -140,7 +141,6 @@ def combine_risk_decisions(decisions: Sequence[RiskDecision]) -> RiskDecision:
     else:
         return RiskDecision.reject(reasons=reasons, metadata=metadata)
 
-from .models import RiskRuleEvaluation
 
 def combine_risk_rule_evaluations(evaluations: Sequence[RiskRuleEvaluation]) -> RiskDecision:
     if not isinstance(evaluations, Sequence) or isinstance(evaluations, (str, bytes)):
