@@ -139,3 +139,46 @@ def combine_risk_decisions(decisions: Sequence[RiskDecision]) -> RiskDecision:
         return RiskDecision.allow(metadata=metadata)
     else:
         return RiskDecision.reject(reasons=reasons, metadata=metadata)
+
+from .models import RiskRuleEvaluation
+
+def combine_risk_rule_evaluations(evaluations: Sequence[RiskRuleEvaluation]) -> RiskDecision:
+    if not isinstance(evaluations, Sequence) or isinstance(evaluations, (str, bytes)):
+        raise RiskModelError("evaluations must be a non-string sequence of RiskRuleEvaluation objects.")
+    
+    if not evaluations:
+        raise RiskModelError("evaluations cannot be empty.")
+
+    evaluation_count = len(evaluations)
+    allowed_count = 0
+    rejected_count = 0
+    rule_names = []
+    rejected_rule_names = []
+    reasons = []
+
+    for eval_item in evaluations:
+        if not isinstance(eval_item, RiskRuleEvaluation):
+            raise RiskModelError(f"Expected RiskRuleEvaluation, got {type(eval_item).__name__}")
+        
+        rule_names.append(eval_item.rule_name)
+        if eval_item.decision.allowed:
+            allowed_count += 1
+        else:
+            rejected_count += 1
+            rejected_rule_names.append(eval_item.rule_name)
+            for reason in eval_item.decision.reasons:
+                reasons.append(f"{eval_item.rule_name}: {reason}")
+
+    metadata = {
+        "evaluation_count": evaluation_count,
+        "allowed_count": allowed_count,
+        "rejected_count": rejected_count,
+        "all_allowed": rejected_count == 0,
+        "rule_names": rule_names,
+        "rejected_rule_names": rejected_rule_names
+    }
+
+    if rejected_count == 0:
+        return RiskDecision.allow(metadata=metadata)
+    else:
+        return RiskDecision.reject(reasons=reasons, metadata=metadata)

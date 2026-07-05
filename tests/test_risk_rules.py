@@ -328,5 +328,84 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk.rules import combine_risk_decisions
         self.assertEqual(crd, combine_risk_decisions)
 
+    def test_combine_risk_rule_evaluations_all_allowed(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        e2 = RiskRuleEvaluation(rule_name="rule2", decision=RiskDecision.allow())
+        combined = combine_risk_rule_evaluations([e1, e2])
+        self.assertTrue(combined.allowed)
+        self.assertEqual(combined.metadata["evaluation_count"], 2)
+        self.assertEqual(combined.metadata["allowed_count"], 2)
+        self.assertEqual(combined.metadata["rejected_count"], 0)
+        self.assertTrue(combined.metadata["all_allowed"])
+        self.assertEqual(combined.metadata["rule_names"], ["rule1", "rule2"])
+        self.assertEqual(combined.metadata["rejected_rule_names"], [])
+
+    def test_combine_risk_rule_evaluations_any_rejected(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        e2 = RiskRuleEvaluation(rule_name="rule2", decision=RiskDecision.reject(reasons=["r1"]))
+        e3 = RiskRuleEvaluation(rule_name="rule3", decision=RiskDecision.allow())
+        combined = combine_risk_rule_evaluations([e1, e2, e3])
+        self.assertTrue(combined.is_rejected)
+        self.assertEqual(combined.reasons, ("rule2: r1",))
+        self.assertEqual(combined.metadata["evaluation_count"], 3)
+        self.assertEqual(combined.metadata["allowed_count"], 2)
+        self.assertEqual(combined.metadata["rejected_count"], 1)
+        self.assertFalse(combined.metadata["all_allowed"])
+        self.assertEqual(combined.metadata["rule_names"], ["rule1", "rule2", "rule3"])
+        self.assertEqual(combined.metadata["rejected_rule_names"], ["rule2"])
+
+    def test_combine_risk_rule_evaluations_multiple_rejected(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.reject(reasons=["r1"]))
+        e2 = RiskRuleEvaluation(rule_name="rule2", decision=RiskDecision.reject(reasons=["r2", "r3"]))
+        combined = combine_risk_rule_evaluations((e1, e2))
+        self.assertTrue(combined.is_rejected)
+        self.assertEqual(combined.reasons, ("rule1: r1", "rule2: r2", "rule2: r3"))
+        self.assertEqual(combined.metadata["evaluation_count"], 2)
+        self.assertEqual(combined.metadata["allowed_count"], 0)
+        self.assertEqual(combined.metadata["rejected_count"], 2)
+        self.assertFalse(combined.metadata["all_allowed"])
+        self.assertEqual(combined.metadata["rule_names"], ["rule1", "rule2"])
+        self.assertEqual(combined.metadata["rejected_rule_names"], ["rule1", "rule2"])
+
+    def test_combine_risk_rule_evaluations_empty_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        with self.assertRaises(RiskModelError):
+            combine_risk_rule_evaluations([])
+
+    def test_combine_risk_rule_evaluations_non_sequence_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        with self.assertRaises(RiskModelError):
+            combine_risk_rule_evaluations(e1) # type: ignore
+
+    def test_combine_risk_rule_evaluations_string_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        with self.assertRaises(RiskModelError):
+            combine_risk_rule_evaluations("evals") # type: ignore
+
+    def test_combine_risk_rule_evaluations_bytes_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        with self.assertRaises(RiskModelError):
+            combine_risk_rule_evaluations(b"evals") # type: ignore
+
+    def test_combine_risk_rule_evaluations_non_eval_item_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
+        e1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        with self.assertRaises(RiskModelError):
+            combine_risk_rule_evaluations([e1, "not an eval"]) # type: ignore
+
+    def test_combine_risk_rule_evaluations_public_import(self):
+        from tw_stock_tool.risk import combine_risk_rule_evaluations as crre
+        from tw_stock_tool.risk.rules import combine_risk_rule_evaluations
+        self.assertEqual(crre, combine_risk_rule_evaluations)
+
 if __name__ == "__main__":
     unittest.main()
