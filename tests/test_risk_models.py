@@ -97,9 +97,17 @@ class TestRiskModels(unittest.TestCase):
         with self.assertRaises(RiskModelError):
             RiskInputSnapshot(symbol="2330", side="BUY", quantity=-1000, price=100.0, cash=10000.0)
             
+    def test_snapshot_zero_quantity(self):
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=0, price=100.0, cash=10000.0)
+            
     def test_snapshot_negative_price(self):
         with self.assertRaises(RiskModelError):
             RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=-100.0, cash=10000.0)
+            
+    def test_snapshot_zero_price(self):
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=0.0, cash=10000.0)
             
     def test_snapshot_negative_cash(self):
         with self.assertRaises(RiskModelError):
@@ -128,6 +136,12 @@ class TestRiskModels(unittest.TestCase):
             RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=True, cash=10000.0) # type: ignore
         with self.assertRaises(RiskModelError):
             RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=True) # type: ignore
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=10000.0, current_position_quantity=True) # type: ignore
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=10000.0, current_position_notional=True) # type: ignore
+        with self.assertRaises(RiskModelError):
+            RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=10000.0, total_exposure=True) # type: ignore
 
     def test_snapshot_public_import(self):
         from tw_stock_tool.risk import RiskInputSnapshot as RIS
