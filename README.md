@@ -13,6 +13,7 @@
 - Backtest Report
 - Parameter Sweep Report
 - Walk Forward Report
+- BacktestResult artifact export
 - Stock list updater / smoke check
 - Cache manager
 - Benchmark
@@ -134,6 +135,7 @@ twstock doctor --live
 | 產生歷史回測報告 | `twstock backtest-report --stock 2330 --strategy ma_cross --output-excel` |
 | Parameter Sweep | `twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel` |
 | Walk Forward | `twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel` |
+| 匯出 BacktestResult JSON artifact | `twstock backtest-result-export --stock 2330 --strategy ma_cross --output-json output/backtest_result.json` |
 | 匯出模擬紙上交易報告 | `twstock simulated-paper-trading-export result.json --output-markdown report.md` |
 | 檢查股票清單 | `twstock stock-list clean --file stocks.txt --output --write-clean-file` |
 | 查看快取摘要 | `twstock cache --summary` |
@@ -198,6 +200,7 @@ twstock strategy-compare --stock 2330 --period 2y
 twstock backtest-report --stock 2330 --strategy ma_cross --output-excel
 twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel
 twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
+twstock backtest-result-export --stock 2330 --strategy ma_cross --output-json output/backtest_result.json
 twstock simulated-paper-trading-export result.json --output-markdown report.md
 twstock scan --auto-stock-list --stock-limit 50
 twstock daily --auto-stock-list --stock-limit 50 --output-md
