@@ -202,6 +202,7 @@ class TestRiskRuleEvaluation(unittest.TestCase):
         with self.assertRaises(RiskModelError):
             RiskRuleEvaluation(rule_name="rule1", decision=decision, metadata="not a dict") # type: ignore
 
+class TestRiskEvaluationSummary(unittest.TestCase):
     def test_risk_evaluation_summary_valid_tuple(self):
         from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskDecision
         eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
