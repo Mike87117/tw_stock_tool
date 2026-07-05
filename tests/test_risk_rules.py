@@ -183,5 +183,78 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk.rules import check_max_position_notional
         self.assertEqual(cmpn, check_max_position_notional)
 
+    def test_max_total_exposure_allowed_below(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 1000000.0, 1000, 100000.0, total_exposure=1000000.0) # order_notional = 100000.0, total_exposure = 1000000.0, projected = 1100000.0
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        decision = check_max_total_exposure(snapshot, 1500000.0)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["symbol"], "2330")
+        self.assertEqual(decision.metadata["side"], "BUY")
+        self.assertEqual(decision.metadata["quantity"], 1000)
+        self.assertEqual(decision.metadata["price"], 100.0)
+        self.assertEqual(decision.metadata["order_notional"], 100000.0)
+        self.assertEqual(decision.metadata["total_exposure"], 1000000.0)
+        self.assertEqual(decision.metadata["projected_total_exposure"], 1100000.0)
+        self.assertEqual(decision.metadata["max_total_exposure"], 1500000.0)
+
+    def test_max_total_exposure_allowed_equal(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 1000000.0, 1000, 100000.0, total_exposure=1000000.0) # projected = 1100000.0
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        decision = check_max_total_exposure(snapshot, 1100000.0)
+        self.assertTrue(decision.allowed)
+
+    def test_max_total_exposure_rejected_exceeds(self):
+        snapshot = RiskInputSnapshot("2330", "BUY", 1000, 100.0, 1000000.0, 1000, 100000.0, total_exposure=1000000.0) # projected = 1100000.0
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        decision = check_max_total_exposure(snapshot, 1050000.0)
+        self.assertTrue(decision.is_rejected)
+        self.assertIn("projected_total_exposure exceeds max_total_exposure", decision.reasons)
+        self.assertEqual(decision.metadata["projected_total_exposure"], 1100000.0)
+        self.assertEqual(decision.metadata["max_total_exposure"], 1050000.0)
+
+    def test_max_total_exposure_sell_allowed(self):
+        snapshot = RiskInputSnapshot("2330", "SELL", 1000, 100.0, 1000000.0, 1000, 100000.0, total_exposure=1000000.0) # projected = 900000.0
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        decision = check_max_total_exposure(snapshot, 1000000.0)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["projected_total_exposure"], 900000.0)
+
+    def test_max_total_exposure_sell_clamped(self):
+        snapshot = RiskInputSnapshot("2330", "SELL", 15000, 100.0, 1000000.0, 1000, 100000.0, total_exposure=1000000.0) # order_notional = 1500000.0, projected = max(0, 1000000 - 1500000) = 0.0
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        decision = check_max_total_exposure(snapshot, 500000.0)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.metadata["projected_total_exposure"], 0.0)
+
+    def test_max_total_exposure_invalid_snapshot(self):
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        with self.assertRaises(RiskModelError):
+            check_max_total_exposure("not a snapshot", 100000.0) # type: ignore
+
+    def test_max_total_exposure_zero_limit(self):
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        with self.assertRaises(RiskModelError):
+            check_max_total_exposure(self.snapshot, 0.0)
+
+    def test_max_total_exposure_negative_limit(self):
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        with self.assertRaises(RiskModelError):
+            check_max_total_exposure(self.snapshot, -100.0)
+
+    def test_max_total_exposure_bool_limit(self):
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        with self.assertRaises(RiskModelError):
+            check_max_total_exposure(self.snapshot, True) # type: ignore
+
+    def test_max_total_exposure_non_number_limit(self):
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        with self.assertRaises(RiskModelError):
+            check_max_total_exposure(self.snapshot, "1000") # type: ignore
+
+    def test_max_total_exposure_public_import(self):
+        from tw_stock_tool.risk import check_max_total_exposure as cmte
+        from tw_stock_tool.risk.rules import check_max_total_exposure
+        self.assertEqual(cmte, check_max_total_exposure)
+
 if __name__ == "__main__":
     unittest.main()
