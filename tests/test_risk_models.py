@@ -202,6 +202,65 @@ class TestRiskRuleEvaluation(unittest.TestCase):
         with self.assertRaises(RiskModelError):
             RiskRuleEvaluation(rule_name="rule1", decision=decision, metadata="not a dict") # type: ignore
 
+    def test_risk_evaluation_summary_valid_tuple(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskDecision
+        eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        summary = RiskEvaluationSummary(evaluations=(eval1,), decision=RiskDecision.allow(), metadata={"key": "val"})
+        self.assertEqual(summary.evaluations, (eval1,))
+        self.assertTrue(summary.decision.allowed)
+        self.assertEqual(summary.metadata, {"key": "val"})
+
+    def test_risk_evaluation_summary_valid_list_normalized(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskDecision
+        eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        summary = RiskEvaluationSummary(evaluations=[eval1], decision=RiskDecision.allow())
+        self.assertEqual(summary.evaluations, (eval1,))
+        
+    def test_risk_evaluation_summary_rejected_decision(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskDecision
+        eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.reject(reasons=["r1"]))
+        summary = RiskEvaluationSummary(evaluations=(eval1,), decision=RiskDecision.reject(reasons=["r1"]))
+        self.assertTrue(summary.decision.is_rejected)
+        self.assertEqual(summary.decision.reasons, ("r1",))
+
+    def test_risk_evaluation_summary_empty_raises(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskDecision, RiskModelError
+        with self.assertRaises(RiskModelError):
+            RiskEvaluationSummary(evaluations=(), decision=RiskDecision.allow())
+
+    def test_risk_evaluation_summary_string_raises(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskDecision, RiskModelError
+        with self.assertRaises(RiskModelError):
+            RiskEvaluationSummary(evaluations="string", decision=RiskDecision.allow()) # type: ignore
+
+    def test_risk_evaluation_summary_bytes_raises(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskDecision, RiskModelError
+        with self.assertRaises(RiskModelError):
+            RiskEvaluationSummary(evaluations=b"bytes", decision=RiskDecision.allow()) # type: ignore
+            
+    def test_risk_evaluation_summary_non_eval_item_raises(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskDecision, RiskModelError
+        eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        with self.assertRaises(RiskModelError):
+            RiskEvaluationSummary(evaluations=[eval1, "not eval"], decision=RiskDecision.allow()) # type: ignore
+
+    def test_risk_evaluation_summary_non_decision_raises(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskModelError
+        eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow()) # type: ignore
+        with self.assertRaises(RiskModelError):
+            RiskEvaluationSummary(evaluations=(eval1,), decision="not decision") # type: ignore
+
+    def test_risk_evaluation_summary_non_dict_metadata_raises(self):
+        from tw_stock_tool.risk.models import RiskEvaluationSummary, RiskRuleEvaluation, RiskDecision, RiskModelError
+        eval1 = RiskRuleEvaluation(rule_name="rule1", decision=RiskDecision.allow())
+        with self.assertRaises(RiskModelError):
+            RiskEvaluationSummary(evaluations=(eval1,), decision=RiskDecision.allow(), metadata="not dict") # type: ignore
+
+    def test_risk_evaluation_summary_public_import(self):
+        from tw_stock_tool.risk import RiskEvaluationSummary as RES1
+        from tw_stock_tool.risk.models import RiskEvaluationSummary as RES2
+        self.assertEqual(RES1, RES2)
+
     def test_metadata_preserved(self):
         from tw_stock_tool.risk.models import RiskRuleEvaluation, RiskDecision
         decision = RiskDecision.allow()

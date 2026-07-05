@@ -124,3 +124,29 @@ class RiskRuleEvaluation:
             
         if not isinstance(self.metadata, dict):
             raise RiskModelError("metadata must be a dictionary.")
+
+@dataclass(slots=True)
+class RiskEvaluationSummary:
+    evaluations: tuple[RiskRuleEvaluation, ...]
+    decision: RiskDecision
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not isinstance(self.evaluations, (tuple, list)):
+            raise RiskModelError("evaluations must be a tuple or list.")
+        
+        if not self.evaluations:
+            raise RiskModelError("evaluations cannot be empty.")
+            
+        for eval_item in self.evaluations:
+            if not isinstance(eval_item, RiskRuleEvaluation):
+                raise RiskModelError(f"Expected RiskRuleEvaluation in evaluations, got {type(eval_item).__name__}")
+                
+        if not isinstance(self.decision, RiskDecision):
+            raise RiskModelError("decision must be a RiskDecision object.")
+            
+        if not isinstance(self.metadata, dict):
+            raise RiskModelError("metadata must be a dictionary.")
+            
+        if isinstance(self.evaluations, list):
+            object.__setattr__(self, "evaluations", tuple(self.evaluations))
