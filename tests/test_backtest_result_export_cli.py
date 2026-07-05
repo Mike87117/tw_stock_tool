@@ -141,6 +141,7 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         mock_analyze.return_value = MagicMock()
         mock_strategy_func.return_value = pd.DataFrame({"Open": [100]}, index=pd.date_range("2024-01-01", periods=1))
         mock_run.return_value = MagicMock()
+        mock_export.return_value = "overwrite-test.json"
         
         out = StringIO()
         err = StringIO()
@@ -154,6 +155,7 @@ class TestBacktestResultExportCLI(unittest.TestCase):
             
         mock_export.assert_called_once()
         self.assertTrue(mock_export.call_args[1]["overwrite"])
+        mock_load.assert_called_once_with("overwrite-test.json")
 
     @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES")
