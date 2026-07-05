@@ -1,5 +1,8 @@
 import unittest
 import sys
+import os
+import tempfile
+from pathlib import Path
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 from unittest.mock import patch, MagicMock
@@ -9,6 +12,7 @@ import pandas as pd
 from tw_stock_tool.cli.backtest_result_export_cli import main, _parse_args
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.backtesting.backtest import BacktestError
+from tw_stock_tool.cli import backtest_artifact_cli
 
 
 class TestBacktestResultExportCLI(unittest.TestCase):
@@ -214,6 +218,70 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
+
+    @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
+    def test_exported_artifact_validates_and_inspects_with_backtest_artifact_cli(self, mock_analyze):
+        mock_analysis = MagicMock()
+        
+        df = pd.DataFrame(
+            {
+                "Open": [100.0, 90.0, 80.0, 85.0, 95.0, 100.0],
+                "Close": [100.0, 90.0, 80.0, 85.0, 95.0, 100.0],
+                "Signal": ["BUY", "SELL", "HOLD", "BUY", "SELL", "HOLD"],
+            },
+            index=pd.date_range("2024-01-01", periods=6, freq="D"),
+        )
+        mock_analysis.indicator_df = df
+        mock_analyze.return_value = mock_analysis
+
+        def dummy_strategy(df_in, **kwargs):
+            return df_in.copy()
+            
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_json = Path(tmpdir) / "test_artifact.json"
+            
+            with patch.dict("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES", {"roundtrip_strategy": dummy_strategy}):
+                out = StringIO()
+                with redirect_stdout(out):
+                    main([
+                        "--stock", "2330",
+                        "--strategy", "roundtrip_strategy",
+                        "--output-json", str(output_json)
+                    ])
+                
+                self.assertTrue(output_json.exists())
+                self.assertIn("BacktestResult artifact written:", out.getvalue())
+                
+                # Validate
+                val_out = StringIO()
+                with redirect_stdout(val_out):
+                    backtest_artifact_cli.main(["validate", str(output_json)])
+                self.assertIn("BacktestResult artifact is valid", val_out.getvalue())
+                
+                # Inspect
+                ins_out = StringIO()
+                with redirect_stdout(ins_out):
+                    backtest_artifact_cli.main(["inspect", str(output_json)])
+                
+                ins_text = ins_out.getvalue()
+                self.assertIn("BacktestResult Artifact Summary", ins_text)
+                self.assertIn("Stock:           2330", ins_text)
+                self.assertIn("Strategy:", ins_text)
+                self.assertIn("Trade Count:", ins_text)
+                self.assertIn("Total Return:", ins_text)
+                self.assertIn("Max Drawdown:", ins_text)
+                
+                self.assertNotIn("Traceback", ins_text)
+                
+                forbidden_words = [
+                    "recommendation", "advice", "live signal", "order signal",
+                    "buy/sell/hold advice", "investment recommendation",
+                    "recommended stocks", "best stocks to buy", "guaranteed profit",
+                    "guaranteed return", "broker order", "order placement",
+                    "live trading", "auto trading"
+                ]
+                for word in forbidden_words:
+                    self.assertNotIn(word.lower(), ins_text.lower())
 
 
 if __name__ == "__main__":
