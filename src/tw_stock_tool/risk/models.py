@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Tuple, Union, Sequence
+from typing import Any, Tuple, Union, Sequence, Literal
 
 class RiskModelError(Exception):
     """Custom exception for invalid risk model data."""
@@ -50,3 +50,61 @@ class RiskDecision:
     @property
     def is_rejected(self) -> bool:
         return not self.allowed
+
+@dataclass(slots=True)
+class RiskInputSnapshot:
+    symbol: str
+    side: Literal["BUY", "SELL"]
+    quantity: int
+    price: float
+    cash: float
+    current_position_quantity: int = 0
+    current_position_notional: float = 0.0
+    total_exposure: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not isinstance(self.symbol, str) or not self.symbol.strip():
+            raise RiskModelError("symbol must be a non-empty string.")
+        
+        if self.side not in ("BUY", "SELL"):
+            raise RiskModelError("side must be 'BUY' or 'SELL'.")
+            
+        if not isinstance(self.quantity, int) or isinstance(self.quantity, bool) or self.quantity <= 0:
+            raise RiskModelError("quantity must be a positive integer.")
+            
+        if not isinstance(self.price, (int, float)) or isinstance(self.price, bool) or self.price <= 0:
+            raise RiskModelError("price must be a positive number.")
+            
+        if not isinstance(self.cash, (int, float)) or isinstance(self.cash, bool) or self.cash < 0:
+            raise RiskModelError("cash must be a non-negative number.")
+            
+        if not isinstance(self.current_position_quantity, int) or isinstance(self.current_position_quantity, bool) or self.current_position_quantity < 0:
+            raise RiskModelError("current_position_quantity must be a non-negative integer.")
+            
+        if not isinstance(self.current_position_notional, (int, float)) or isinstance(self.current_position_notional, bool) or self.current_position_notional < 0:
+            raise RiskModelError("current_position_notional must be a non-negative number.")
+            
+        if not isinstance(self.total_exposure, (int, float)) or isinstance(self.total_exposure, bool) or self.total_exposure < 0:
+            raise RiskModelError("total_exposure must be a non-negative number.")
+            
+        if not isinstance(self.metadata, dict):
+            raise RiskModelError("metadata must be a dictionary.")
+
+    @property
+    def order_notional(self) -> float:
+        return self.quantity * self.price
+
+    @property
+    def projected_position_quantity(self) -> int:
+        if self.side == "BUY":
+            return self.current_position_quantity + self.quantity
+        else:
+            return self.current_position_quantity - self.quantity
+
+    @property
+    def projected_position_notional(self) -> float:
+        if self.side == "BUY":
+            return self.current_position_notional + self.order_notional
+        else:
+            return max(0.0, self.current_position_notional - self.order_notional)
