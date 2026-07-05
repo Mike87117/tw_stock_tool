@@ -166,6 +166,17 @@ Broker Interface
 - Phase 16.5：完成 (Report Exporter PermissionError Consistency Audit)
 - Phase 16.6：完成 (Report Exporter PermissionError Consistency Patch)
   - Added localized `try/except PermissionError` blocks to all missing exporters (`backtest_report`, `parameter_sweep_report`, `walk_forward_report`, `daily_watchlist`, `verify_batch`) to consistently raise `ValueError` with a user-friendly message when Excel files are locked.
+- Phase 17–27：完成 (Architecture refactoring, test hardening, AI/ML extensions, codebase maintenance)
+- Phase 28：完成 (Simulated Paper Trading export / file output)
+- Phase 29.x：完成 (Simulated Paper Trading JSON serialization, file I/O, artifact export CLI, and README documentation)
+- Phase 30.x：完成 (Backtest artifact converter, public converter API, and metadata propagation)
+- Phase 31：完成 (BacktestResult artifact serialization boundary)
+- Phase 32.x：完成 (BacktestResult artifact CLI planning, validate/inspect, and convert-to-simulated-paper-trading)
+- Phase 33.x：完成 (Structured `run_backtest_result(...)`, artifact roundtrip / compatibility tests, and `backtest-result-export`)
+- Phase 34.x：完成 (BacktestResult export CLI UX / roundtrip smoke tests / read-back validation)
+- Phase 35.1：完成 (BacktestResult artifact workflow documentation)
+- Phase 35.3：完成 (`backtest-artifact convert-to-simulated-paper-trading` read-back validation)
+
 ## 3. 台股資料取得
 
 目標是穩定取得台股價格資料與股票清單，降低單一資料源失效造成的影響。
@@ -304,6 +315,33 @@ Risk Manager 必須獨立於策略與 Broker Interface。
 - 風控失敗時禁止下單。
 
 策略只能提出交易意圖，Risk Manager 才能決定該意圖是否可執行。
+
+### 11.1 Phase Boundary: Research-Only Risk Model Planning
+
+Risk Manager is the next Roadmap-aligned area after Paper Trading. Initial work should be a research-only risk boundary and simulated paper trading risk check only. It must not connect to brokers, must not place orders, must not produce investment recommendations, and must not produce real-time buy/sell/hold instructions.
+
+Future implementation planning must ensure the Risk Manager first exposes pure Python model/result objects. It should be independent from strategies, data loading, CLI execution, and any broker interface. It should evaluate simulated order intent or simulated portfolio state only, and return a structured risk decision (allow/reject) with reasons. It should be designed so Paper Trading can later refuse simulated orders when risk checks fail. This remains strictly offline validation.
+
+Initial candidate checks for future phases:
+
+- max single order notional
+- max position quantity
+- max position notional
+- max total exposure
+- insufficient cash / shares should remain a simulated portfolio concern unless intentionally moved later
+- daily loss / consecutive loss checks should be deferred until there is a stable trade log or equity timeline boundary
+
+Explicit non-goals:
+
+- no Broker Interface implementation
+- no Shioaji
+- no live trading
+- no auto trading
+- no real order placement
+- no semi-automatic order confirmation flow
+- no investment advice
+- no guaranteed return
+- no recommended stocks
 
 ## 12. Kill Switch
 
