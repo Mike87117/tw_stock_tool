@@ -256,5 +256,77 @@ class TestRiskRules(unittest.TestCase):
         from tw_stock_tool.risk.rules import check_max_total_exposure
         self.assertEqual(cmte, check_max_total_exposure)
 
+    def test_combine_risk_decisions_all_allowed(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        from tw_stock_tool.risk.models import RiskDecision
+        d1 = RiskDecision.allow()
+        d2 = RiskDecision.allow()
+        combined = combine_risk_decisions([d1, d2])
+        self.assertTrue(combined.allowed)
+        self.assertEqual(combined.metadata["decision_count"], 2)
+        self.assertEqual(combined.metadata["allowed_count"], 2)
+        self.assertEqual(combined.metadata["rejected_count"], 0)
+        self.assertTrue(combined.metadata["all_allowed"])
+
+    def test_combine_risk_decisions_any_rejected(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        from tw_stock_tool.risk.models import RiskDecision
+        d1 = RiskDecision.allow()
+        d2 = RiskDecision.reject(reasons=["r1"])
+        d3 = RiskDecision.allow()
+        combined = combine_risk_decisions([d1, d2, d3])
+        self.assertTrue(combined.is_rejected)
+        self.assertEqual(combined.reasons, ("r1",))
+        self.assertEqual(combined.metadata["decision_count"], 3)
+        self.assertEqual(combined.metadata["allowed_count"], 2)
+        self.assertEqual(combined.metadata["rejected_count"], 1)
+        self.assertFalse(combined.metadata["all_allowed"])
+
+    def test_combine_risk_decisions_multiple_rejected(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        from tw_stock_tool.risk.models import RiskDecision
+        d1 = RiskDecision.reject(reasons=["r1"])
+        d2 = RiskDecision.reject(reasons=["r2", "r3"])
+        combined = combine_risk_decisions((d1, d2))
+        self.assertTrue(combined.is_rejected)
+        self.assertEqual(combined.reasons, ("r1", "r2", "r3"))
+        self.assertEqual(combined.metadata["decision_count"], 2)
+        self.assertEqual(combined.metadata["allowed_count"], 0)
+        self.assertEqual(combined.metadata["rejected_count"], 2)
+        self.assertFalse(combined.metadata["all_allowed"])
+
+    def test_combine_risk_decisions_empty_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        with self.assertRaises(RiskModelError):
+            combine_risk_decisions([])
+
+    def test_combine_risk_decisions_non_sequence_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        from tw_stock_tool.risk.models import RiskDecision
+        with self.assertRaises(RiskModelError):
+            combine_risk_decisions(RiskDecision.allow()) # type: ignore
+
+    def test_combine_risk_decisions_string_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        with self.assertRaises(RiskModelError):
+            combine_risk_decisions("allowed") # type: ignore
+
+    def test_combine_risk_decisions_bytes_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        with self.assertRaises(RiskModelError):
+            combine_risk_decisions(b"allowed") # type: ignore
+
+    def test_combine_risk_decisions_non_decision_item_raises(self):
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        from tw_stock_tool.risk.models import RiskDecision
+        d1 = RiskDecision.allow()
+        with self.assertRaises(RiskModelError):
+            combine_risk_decisions([d1, "not a decision"]) # type: ignore
+
+    def test_combine_risk_decisions_public_import(self):
+        from tw_stock_tool.risk import combine_risk_decisions as crd
+        from tw_stock_tool.risk.rules import combine_risk_decisions
+        self.assertEqual(crd, combine_risk_decisions)
+
 if __name__ == "__main__":
     unittest.main()

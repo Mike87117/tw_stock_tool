@@ -103,3 +103,39 @@ def check_max_total_exposure(snapshot: RiskInputSnapshot, max_total_exposure: fl
             reasons=["projected_total_exposure exceeds max_total_exposure"],
             metadata=metadata
         )
+
+from collections.abc import Sequence
+
+def combine_risk_decisions(decisions: Sequence[RiskDecision]) -> RiskDecision:
+    if not isinstance(decisions, Sequence) or isinstance(decisions, (str, bytes)):
+        raise RiskModelError("decisions must be a non-string sequence of RiskDecision objects.")
+    
+    if not decisions:
+        raise RiskModelError("decisions cannot be empty.")
+
+    decision_count = len(decisions)
+    allowed_count = 0
+    rejected_count = 0
+    reasons = []
+
+    for decision in decisions:
+        if not isinstance(decision, RiskDecision):
+            raise RiskModelError(f"Expected RiskDecision, got {type(decision).__name__}")
+        
+        if decision.allowed:
+            allowed_count += 1
+        else:
+            rejected_count += 1
+            reasons.extend(decision.reasons)
+
+    metadata = {
+        "decision_count": decision_count,
+        "allowed_count": allowed_count,
+        "rejected_count": rejected_count,
+        "all_allowed": rejected_count == 0
+    }
+
+    if rejected_count == 0:
+        return RiskDecision.allow(metadata=metadata)
+    else:
+        return RiskDecision.reject(reasons=reasons, metadata=metadata)
