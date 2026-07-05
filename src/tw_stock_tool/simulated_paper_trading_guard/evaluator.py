@@ -1,3 +1,9 @@
+"""
+Evaluator logic for the Simulated Paper Trading Guard package.
+
+This module provides pure functional logic to evaluate RiskManager
+and KillSwitch decisions and produce a combined structural decision.
+"""
 from tw_stock_tool.risk.models import RiskDecision
 from tw_stock_tool.kill_switch.decisions import KillSwitchDecision
 from .models import SimulatedPaperTradingGuardDecision, SimulatedPaperTradingGuardError

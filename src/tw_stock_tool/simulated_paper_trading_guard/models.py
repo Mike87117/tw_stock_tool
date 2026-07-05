@@ -1,3 +1,9 @@
+"""
+Models for the Simulated Paper Trading Guard package.
+
+This module defines the decision boundary model used to aggregate
+RiskManager and KillSwitch signals into a single structural decision.
+"""
 from dataclasses import dataclass, field
 from typing import Any
 
