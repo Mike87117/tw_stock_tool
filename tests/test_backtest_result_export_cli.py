@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 import pandas as pd
 
-from tw_stock_tool.cli.backtest_result_export_cli import main
+from tw_stock_tool.cli.backtest_result_export_cli import main, _parse_args
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.backtesting.backtest import BacktestError
 
@@ -36,6 +36,20 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         for word in forbidden_words:
             self.assertNotIn(word.lower(), output.lower())
 
+    def test_parse_args_defaults(self):
+        args = _parse_args([
+            "--stock", "2330",
+            "--strategy", "ma_cross",
+            "--output-json", "out.json",
+        ])
+        
+        self.assertEqual(args.stock, "2330")
+        self.assertEqual(args.strategy, "ma_cross")
+        self.assertEqual(args.output_json, "out.json")
+        self.assertFalse(args.overwrite)
+        self.assertEqual(args.initial_capital, 100000.0)
+        self.assertEqual(args.position_size, 1.0)
+
     def test_missing_required_args_exits_1(self):
         err = StringIO()
         with redirect_stderr(err):
@@ -43,6 +57,7 @@ class TestBacktestResultExportCLI(unittest.TestCase):
                 main(["--stock", "2330"])
         
         self.assertEqual(ctx.exception.code, 2) # argparse missing required returns 2
+        self.assertNotIn("Traceback", err.getvalue())
         
     @patch("tw_stock_tool.cli.backtest_result_export_cli.analyze_stock")
     @patch("tw_stock_tool.cli.backtest_result_export_cli.STRATEGIES")
