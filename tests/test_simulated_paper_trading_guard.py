@@ -108,6 +108,9 @@ class TestSimulatedPaperTradingGuard(unittest.TestCase):
             "SimulatedPaperTradingGuardDecision",
             "SimulatedPaperTradingGuardError",
             "evaluate_simulated_paper_trading_guard",
+            "SimulatedPaperTradingGuardAdapter",
+            "ReferencePriceProvider",
+            "RiskDecisionProvider",
         ]
         self.assertCountEqual(tw_stock_tool.simulated_paper_trading_guard.__all__, expected)
 

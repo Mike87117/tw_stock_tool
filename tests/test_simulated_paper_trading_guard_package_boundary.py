@@ -14,6 +14,9 @@ class TestSimulatedPaperTradingGuardPackageBoundary(unittest.TestCase):
             "SimulatedPaperTradingGuardDecision",
             "SimulatedPaperTradingGuardError",
             "evaluate_simulated_paper_trading_guard",
+            "SimulatedPaperTradingGuardAdapter",
+            "ReferencePriceProvider",
+            "RiskDecisionProvider",
         ]
         self.assertCountEqual(guard_pkg.__all__, expected_exports)
 
