@@ -7,6 +7,7 @@ RiskManager and KillSwitch decisions.
 from .models import SimulatedPaperTradingGuardDecision, SimulatedPaperTradingGuardError
 from .evaluator import evaluate_simulated_paper_trading_guard
 from .adapter import SimulatedPaperTradingGuardAdapter, ReferencePriceProvider, RiskDecisionProvider
+from .workflow import run_simulated_paper_trading_with_guard
 
 __all__ = [
     "SimulatedPaperTradingGuardDecision",
@@ -15,4 +16,5 @@ __all__ = [
     "SimulatedPaperTradingGuardAdapter",
     "ReferencePriceProvider",
     "RiskDecisionProvider",
+    "run_simulated_paper_trading_with_guard",
 ]
