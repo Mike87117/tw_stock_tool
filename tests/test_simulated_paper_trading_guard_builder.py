@@ -43,6 +43,30 @@ class TestGuardBuilder(unittest.TestCase):
         decision = provider(self.order, self.portfolio)
         self.assertTrue(decision.is_allowed)
 
+    def test_empty_config_with_provider_allows(self):
+        config = SimulatedPaperTradingGuardConfig()
+        provider = build_guard_decision_provider_from_config(config, reference_price_provider=self.price_provider)
+        decision = provider(self.order, self.portfolio)
+        self.assertTrue(decision.is_allowed)
+
+    def test_empty_config_with_failing_provider_allows(self):
+        def failing_provider(o, p):
+            raise ValueError("Provider should not be called!")
+        config = SimulatedPaperTradingGuardConfig()
+        provider = build_guard_decision_provider_from_config(config, reference_price_provider=failing_provider)
+        # Should allow and NOT call the provider
+        decision = provider(self.order, self.portfolio)
+        self.assertTrue(decision.is_allowed)
+
+    def test_risk_none_with_failing_provider_allows(self):
+        def failing_provider(o, p):
+            raise ValueError("Provider should not be called!")
+        config = SimulatedPaperTradingGuardConfig(risk=None, kill_switch_enabled=False)
+        provider = build_guard_decision_provider_from_config(config, reference_price_provider=failing_provider)
+        # Should allow and NOT call the provider
+        decision = provider(self.order, self.portfolio)
+        self.assertTrue(decision.is_allowed)
+
     def test_kill_switch_true_raises_error(self):
         config = SimulatedPaperTradingGuardConfig(kill_switch_enabled=True)
         with self.assertRaises(GuardConfigError):

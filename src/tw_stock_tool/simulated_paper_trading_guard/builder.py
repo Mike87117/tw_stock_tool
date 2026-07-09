@@ -36,10 +36,9 @@ def build_guard_decision_provider_from_config(
     # (since True raises an error above, and None/False map to inactive).
     kill_switch_state = KillSwitchState(is_active=False)
 
-    # If no risk rules are configured and no reference price provider is supplied,
-    # we can bypass the adapter entirely to avoid inventing a dummy reference price
-    # just to satisfy the adapter's RiskInputSnapshot building.
-    if not has_risk and reference_price_provider is None:
+    # If no risk rules are configured, we can bypass the adapter entirely 
+    # to avoid evaluating any unused reference price provider and failing on it.
+    if not has_risk:
         def allow_all_provider(order: SimulatedOrder, portfolio: SimulatedPortfolio) -> SimulatedPaperTradingGuardDecision:
             return SimulatedPaperTradingGuardDecision.allow()
         return allow_all_provider
