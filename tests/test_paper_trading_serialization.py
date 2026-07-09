@@ -160,14 +160,124 @@ class TestPaperTradingSerialization(unittest.TestCase):
         with self.assertRaisesRegex(PaperTradingModelError, "Unsupported result_type: invalid"):
             deserialize_simulated_paper_trading_result(data)
 
-    def test_legacy_v1_payload_without_rejections(self):
-        # Create a valid v1 payload without rejections
+    def test_strict_v2_top_level_schema_keys(self):
         data = serialize_simulated_paper_trading_result(self.result)
-        data["schema_version"] = 1
-        del data["rejections"]
+        expected_keys = [
+            "schema_version", "result_type", "symbol", "initial_cash",
+            "final_cash", "final_position_quantity", "average_cost",
+            "realized_pnl", "unrealized_pnl", "total_equity",
+            "order_count", "fill_count", "open_position_count",
+            "orders", "fills", "rejections"
+        ]
+        self.assertCountEqual(list(data.keys()), expected_keys)
+        self.assertEqual(data["schema_version"], 2)
+        self.assertEqual(data["result_type"], "simulated_paper_trading_result")
+        self.assertIsInstance(data["orders"], list)
+        self.assertIsInstance(data["fills"], list)
+        self.assertIsInstance(data["rejections"], list)
+
+    def test_strict_rejection_payload_shape(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        rej = data["rejections"][0]
+        self.assertCountEqual(list(rej.keys()), ["candidate_order", "reasons"])
         
+        cand = rej["candidate_order"]
+        expected_cand_keys = [
+            "order_id", "symbol", "side", "quantity",
+            "signal_time", "created_at", "strategy", "metadata"
+        ]
+        self.assertCountEqual(list(cand.keys()), expected_cand_keys)
+        
+        self.assertIsInstance(rej["reasons"], list)
+        self.assertIsInstance(cand["metadata"], dict)
+        self.assertIsInstance(cand["quantity"], int)
+        self.assertIsInstance(cand["signal_time"], str)
+        self.assertIsInstance(cand["created_at"], str)
+
+    def test_v2_round_trip_stability(self):
+        data1 = serialize_simulated_paper_trading_result(self.result)
+        restored = deserialize_simulated_paper_trading_result(data1)
+        data2 = serialize_simulated_paper_trading_result(restored)
+        self.assertEqual(data1, data2)
+
+    def test_legacy_v1_payload_without_rejections(self):
+        data = {
+            "schema_version": 1,
+            "result_type": "simulated_paper_trading_result",
+            "symbol": "2330",
+            "initial_cash": 1000000.0,
+            "final_cash": 899307.0,
+            "final_position_quantity": 1000,
+            "average_cost": 100.5,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 5000.0,
+            "total_equity": 1004307.0,
+            "order_count": 0,
+            "fill_count": 0,
+            "open_position_count": 1,
+            "orders": [],
+            "fills": []
+        }
         restored = deserialize_simulated_paper_trading_result(data)
         self.assertEqual(restored.rejections, ())
+
+    def test_v1_payload_with_accidental_rejections_rejected(self):
+        data = {
+            "schema_version": 1,
+            "result_type": "simulated_paper_trading_result",
+            "symbol": "2330",
+            "initial_cash": 1000000.0,
+            "final_cash": 899307.0,
+            "final_position_quantity": 1000,
+            "average_cost": 100.5,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 5000.0,
+            "total_equity": 1004307.0,
+            "order_count": 0,
+            "fill_count": 0,
+            "open_position_count": 1,
+            "orders": [],
+            "fills": [],
+            "rejections": []
+        }
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
+
+    def test_v2_missing_rejections_behavior(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        del data["rejections"]
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
+
+    def test_malformed_rejections_not_a_list(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        data["rejections"] = "not a list"
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
+
+    def test_malformed_rejection_item_not_a_dict(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        data["rejections"] = ["not a dict"]
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
+
+    def test_malformed_rejection_candidate_order_missing_field(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        del data["rejections"][0]["candidate_order"]["quantity"]
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
+
+    def test_malformed_rejection_reasons_not_a_list(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        data["rejections"][0]["reasons"] = "not a list"
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
+
+    def test_malformed_rejection_candidate_order_quantity_is_fractional(self):
+        data = serialize_simulated_paper_trading_result(self.result)
+        data["rejections"][0]["candidate_order"]["quantity"] = 1.5
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_paper_trading_result(data)
 
     def test_reject_malformed_orders(self):
         data = serialize_simulated_paper_trading_result(self.result)
