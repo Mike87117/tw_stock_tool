@@ -171,6 +171,151 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
         import tw_stock_tool.simulated_paper_trading_guard as guard_pkg
         self.assertTrue(hasattr(guard_pkg, "run_simulated_paper_trading_with_guard"))
         self.assertIn("run_simulated_paper_trading_with_guard", guard_pkg.__all__)
+        self.assertTrue(hasattr(guard_pkg, "run_simulated_paper_trading_result_with_guard"))
+        self.assertIn("run_simulated_paper_trading_result_with_guard", guard_pkg.__all__)
+
+    def test_result_allowed_path(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
+        
+        def price_prov(order, portfolio): return 100.0
+        def risk_prov(snapshot): return RiskDecision.allow()
+
+        result = run_simulated_paper_trading_result_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.inactive_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov
+        )
+        
+        self.assertIsInstance(result, SimulatedPaperTradingResult)
+        self.assertEqual(result.order_count, 2)
+        self.assertEqual(result.fill_count, 2)
+
+    def test_result_risk_blocked_path(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
+        
+        def price_prov(order, portfolio): return 100.0
+        def risk_prov(snapshot): return RiskDecision.reject(["Position too large"])
+
+        result = run_simulated_paper_trading_result_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.inactive_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov
+        )
+        
+        self.assertIsInstance(result, SimulatedPaperTradingResult)
+        self.assertEqual(result.order_count, 0)
+        self.assertEqual(result.fill_count, 0)
+
+    def test_result_kill_switch_blocked_path(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
+        
+        def price_prov(order, portfolio): return 100.0
+        def risk_prov(snapshot): return RiskDecision.allow()
+
+        result = run_simulated_paper_trading_result_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.active_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov
+        )
+        
+        self.assertIsInstance(result, SimulatedPaperTradingResult)
+        self.assertEqual(result.order_count, 0)
+        self.assertEqual(result.fill_count, 0)
+
+    def test_result_parameter_passthrough(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        
+        def price_prov(order, portfolio): return 100.0
+        def risk_prov(snapshot): return RiskDecision.allow()
+        
+        result = run_simulated_paper_trading_result_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.inactive_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov,
+            fee_rate=0.001,
+            tax_rate=0.003,
+            slippage_per_share=0.5,
+            last_price=109.0
+        )
+        
+        # Fills should reflect the parameters
+        self.assertEqual(result.fill_count, 2)
+        self.assertAlmostEqual(result.final_cash, 202474.0)
+        
+        # final_cash = 202474.0, final_position_quantity = 0.
+        # total_equity = 202474.0 + 0 = 202474.0.
+        self.assertAlmostEqual(result.total_equity, 202474.0)
+
+    def test_result_dependency_injection(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        price_prov_called = False
+        risk_prov_called = False
+        
+        def price_prov(order, portfolio):
+            nonlocal price_prov_called
+            price_prov_called = True
+            return 100.0
+            
+        def risk_prov(snapshot):
+            nonlocal risk_prov_called
+            risk_prov_called = True
+            return RiskDecision.allow()
+
+        run_simulated_paper_trading_result_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.inactive_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov
+        )
+        
+        self.assertTrue(price_prov_called)
+        self.assertTrue(risk_prov_called)
+
+    def test_result_invalid_injected_dependency(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            run_simulated_paper_trading_result_with_guard(
+                df=self.df,
+                symbol=self.symbol,
+                initial_cash=self.initial_cash,
+                quantity_per_trade=self.qty,
+                kill_switch_state=self.inactive_kill_switch,
+                reference_price_provider="not callable", # type: ignore
+                risk_decision_provider=lambda s: RiskDecision.allow()
+            )
+            
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            run_simulated_paper_trading_result_with_guard(
+                df=self.df,
+                symbol=self.symbol,
+                initial_cash=self.initial_cash,
+                quantity_per_trade=self.qty,
+                kill_switch_state=self.inactive_kill_switch,
+                reference_price_provider=lambda o, p: 100.0,
+                risk_decision_provider="not callable" # type: ignore
+            )
 
 if __name__ == '__main__':
     unittest.main()

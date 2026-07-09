@@ -18,6 +18,7 @@ class TestSimulatedPaperTradingGuardPackageBoundary(unittest.TestCase):
             "ReferencePriceProvider",
             "RiskDecisionProvider",
             "run_simulated_paper_trading_with_guard",
+            "run_simulated_paper_trading_result_with_guard",
         ]
         self.assertCountEqual(guard_pkg.__all__, expected_exports)
 
