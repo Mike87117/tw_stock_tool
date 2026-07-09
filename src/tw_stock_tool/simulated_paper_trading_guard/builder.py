@@ -10,6 +10,8 @@ GuardDecisionProvider = Callable[[SimulatedOrder, SimulatedPortfolio], Simulated
 
 def build_guard_decision_provider_from_config(
     config: SimulatedPaperTradingGuardConfig | None,
+    *,
+    reference_price_provider: Callable[[SimulatedOrder, SimulatedPortfolio], float] | None = None,
 ) -> GuardDecisionProvider:
     if config is not None and not isinstance(config, SimulatedPaperTradingGuardConfig):
         raise GuardConfigError("config must be a SimulatedPaperTradingGuardConfig or None.")
@@ -18,21 +20,33 @@ def build_guard_decision_provider_from_config(
         raise GuardConfigError("kill_switch_enabled=True is not supported in the config builder yet.")
 
     risk_config = config.risk if config is not None else None
+    
+    has_risk = risk_config is not None and any([
+        risk_config.max_order_notional is not None,
+        risk_config.max_position_quantity is not None,
+        risk_config.max_position_notional is not None,
+    ])
+
+    if has_risk and reference_price_provider is None:
+        raise GuardConfigError("reference_price_provider is required when risk rules are configured.")
+
     risk_provider = build_risk_decision_provider_from_config(risk_config)
 
     # For now, kill switch is always disabled when built from config
     # (since True raises an error above, and None/False map to inactive).
     kill_switch_state = KillSwitchState(is_active=False)
 
-    # The reference price provider logic used in backtesting engine:
-    # We will use the order metadata price if it exists, otherwise 0.0 (though it should exist).
-    # Since adapter requires a Callable, we provide a simple one.
-    def reference_price_provider(order: SimulatedOrder, portfolio: SimulatedPortfolio) -> float:
-        return float(order.metadata.get("price", 0.0))
+    # If no risk rules are configured and no reference price provider is supplied,
+    # we can bypass the adapter entirely to avoid inventing a dummy reference price
+    # just to satisfy the adapter's RiskInputSnapshot building.
+    if not has_risk and reference_price_provider is None:
+        def allow_all_provider(order: SimulatedOrder, portfolio: SimulatedPortfolio) -> SimulatedPaperTradingGuardDecision:
+            return SimulatedPaperTradingGuardDecision.allow()
+        return allow_all_provider
 
     adapter = SimulatedPaperTradingGuardAdapter(
         kill_switch_state=kill_switch_state,
-        reference_price_provider=reference_price_provider,
+        reference_price_provider=reference_price_provider, # type: ignore
         risk_decision_provider=risk_provider,
     )
 
