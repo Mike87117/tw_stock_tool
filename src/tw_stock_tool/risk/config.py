@@ -37,16 +37,7 @@ class SimulatedPaperTradingRiskConfig:
         if self.max_position_quantity is not None:
             if isinstance(self.max_position_quantity, bool):
                 raise RiskConfigError("max_position_quantity cannot be a boolean.")
-            if not isinstance(self.max_position_quantity, (int, float)):
-                raise RiskConfigError("max_position_quantity must be numeric.")
-            if not math.isfinite(self.max_position_quantity):
-                raise RiskConfigError("max_position_quantity must be finite.")
-            if isinstance(self.max_position_quantity, float) and not self.max_position_quantity.is_integer():
-                raise RiskConfigError("max_position_quantity must be an integer, got fractional value.")
-            
-            # Cast to int if it is a float like 10.0
             if not isinstance(self.max_position_quantity, int):
-                object.__setattr__(self, "max_position_quantity", int(self.max_position_quantity))
-                
+                raise RiskConfigError("max_position_quantity must be an integer.")
             if self.max_position_quantity <= 0:
                 raise RiskConfigError("max_position_quantity must be strictly positive.")

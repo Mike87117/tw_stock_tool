@@ -75,20 +75,24 @@ class TestSimulatedPaperTradingRiskConfig(unittest.TestCase):
             SimulatedPaperTradingRiskConfig(max_position_quantity=-10)
 
     def test_max_position_quantity_rejects_infinity(self):
-        with self.assertRaisesRegex(RiskConfigError, "finite"):
-            SimulatedPaperTradingRiskConfig(max_position_quantity=float("inf"))
+        with self.assertRaisesRegex(RiskConfigError, "integer"):
+            SimulatedPaperTradingRiskConfig(max_position_quantity=float("inf")) # type: ignore
 
     def test_max_position_quantity_rejects_nan(self):
-        with self.assertRaisesRegex(RiskConfigError, "finite"):
-            SimulatedPaperTradingRiskConfig(max_position_quantity=float("nan"))
+        with self.assertRaisesRegex(RiskConfigError, "integer"):
+            SimulatedPaperTradingRiskConfig(max_position_quantity=float("nan")) # type: ignore
 
     def test_max_position_quantity_rejects_bool(self):
         with self.assertRaisesRegex(RiskConfigError, "cannot be a boolean"):
             SimulatedPaperTradingRiskConfig(max_position_quantity=True)
 
     def test_max_position_quantity_rejects_numeric_string(self):
-        with self.assertRaisesRegex(RiskConfigError, "must be numeric"):
+        with self.assertRaisesRegex(RiskConfigError, "integer"):
             SimulatedPaperTradingRiskConfig(max_position_quantity="100") # type: ignore
+
+    def test_max_position_quantity_rejects_float_integer(self):
+        with self.assertRaisesRegex(RiskConfigError, "integer"):
+            SimulatedPaperTradingRiskConfig(max_position_quantity=10.0) # type: ignore
 
     def test_max_position_quantity_rejects_fractional(self):
         with self.assertRaisesRegex(RiskConfigError, "integer"):
