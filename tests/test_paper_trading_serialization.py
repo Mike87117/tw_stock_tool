@@ -61,7 +61,7 @@ class TestPaperTradingSerialization(unittest.TestCase):
 
     def test_serialize_to_dict(self):
         data = serialize_simulated_paper_trading_result(self.result)
-        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["schema_version"], 2)
         self.assertEqual(data["result_type"], "simulated_paper_trading_result")
         
         o = data["orders"][0]
@@ -97,7 +97,7 @@ class TestPaperTradingSerialization(unittest.TestCase):
     def test_json_string_export_import(self):
         json_str = export_simulated_paper_trading_result_json(self.result)
         self.assertIsInstance(json_str, str)
-        self.assertIn('"schema_version": 1', json_str)
+        self.assertIn('"schema_version": 2', json_str)
         
         restored = load_simulated_paper_trading_result_json(json_str)
         self.assertEqual(restored.symbol, "2330")
@@ -127,8 +127,8 @@ class TestPaperTradingSerialization(unittest.TestCase):
 
     def test_reject_wrong_schema_version(self):
         data = serialize_simulated_paper_trading_result(self.result)
-        data["schema_version"] = 2
-        with self.assertRaisesRegex(PaperTradingModelError, "Unsupported schema_version: 2"):
+        data["schema_version"] = 3
+        with self.assertRaisesRegex(PaperTradingModelError, "Unsupported schema_version: 3"):
             deserialize_simulated_paper_trading_result(data)
 
     def test_reject_wrong_result_type(self):

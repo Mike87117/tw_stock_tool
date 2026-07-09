@@ -141,6 +141,24 @@ def build_simulated_fill_rows(
         })
     return rows
 
+def build_simulated_rejection_rows(
+    result: SimulatedPaperTradingResult,
+) -> list[dict[str, object]]:
+    """Convert a SimulatedPaperTradingResult's rejections into a list of flat dictionaries."""
+    rows = []
+    for rejection in result.rejections:
+        rows.append({
+            "order_id": rejection.candidate_order.order_id,
+            "symbol": rejection.candidate_order.symbol,
+            "side": rejection.candidate_order.side,
+            "quantity": rejection.candidate_order.quantity,
+            "signal_time": rejection.candidate_order.signal_time,
+            "created_at": rejection.candidate_order.created_at,
+            "strategy": rejection.candidate_order.strategy,
+            "reasons": " | ".join(rejection.reasons),
+        })
+    return rows
+
 def build_simulated_paper_trading_report_data(
     result: SimulatedPaperTradingResult,
 ) -> dict[str, object]:
@@ -149,4 +167,5 @@ def build_simulated_paper_trading_report_data(
         "summary": build_simulated_paper_trading_summary(result),
         "order_rows": build_simulated_order_rows(result),
         "fill_rows": build_simulated_fill_rows(result),
+        "rejection_rows": build_simulated_rejection_rows(result),
     }

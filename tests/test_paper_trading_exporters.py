@@ -157,7 +157,7 @@ class TestPaperTradingCSVExporter(unittest.TestCase):
         output = export_simulated_paper_trading_csv_bundle(self.result)
 
         self.assertIsInstance(output, dict)
-        self.assertEqual(set(output.keys()), {"summary", "orders", "fills"})
+        self.assertEqual(set(output.keys()), {"summary", "orders", "fills", "rejections"})
 
         for v in output.values():
             self.assertIsInstance(v, str)

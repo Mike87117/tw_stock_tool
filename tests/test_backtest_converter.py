@@ -304,7 +304,7 @@ class TestBacktestConverter(unittest.TestCase):
         res = convert_backtest_result_to_simulated_paper_trading_result(br)
         json_dict = serialize_simulated_paper_trading_result(res)
         
-        self.assertEqual(json_dict["schema_version"], 1)
+        self.assertEqual(json_dict["schema_version"], 2)
         self.assertEqual(json_dict["symbol"], "2330")
         self.assertEqual(len(json_dict["orders"]), 2)
 

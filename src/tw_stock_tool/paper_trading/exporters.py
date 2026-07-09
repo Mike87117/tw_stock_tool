@@ -23,6 +23,7 @@ def export_simulated_paper_trading_markdown(
     summary = report_data["summary"]
     order_rows = report_data["order_rows"]
     fill_rows = report_data["fill_rows"]
+    rejection_rows = report_data.get("rejection_rows", [])
 
     lines = [
         "# Simulated Paper Trading Report",
@@ -102,6 +103,26 @@ def export_simulated_paper_trading_markdown(
 
             lines.append(f"| {order_id} | {symbol} | {side} | {quantity} | {price} | {filled_at} | {fee} | {tax} | {slippage} | {gross_amount} | {net_cash_effect} |")
 
+    lines.append("")
+    lines.append("## Rejected Simulated Order Intents")
+    lines.append("")
+    if not rejection_rows:
+        lines.append("*No rejected simulated order intents.*")
+    else:
+        lines.append("| Order ID | Symbol | Side | Quantity | Signal Time | Created At | Strategy | Reasons |")
+        lines.append("|---|---|---:|---:|---|---|---|---|")
+
+        for row in rejection_rows:
+            order_id = _format_value(row.get("order_id"))
+            symbol = _format_value(row.get("symbol"))
+            side = _format_value(row.get("side"))
+            quantity = _format_value(row.get("quantity"))
+            signal_time = _format_value(row.get("signal_time"))
+            created_at = _format_value(row.get("created_at"))
+            strategy = _format_value(row.get("strategy"))
+            reasons = _format_value(row.get("reasons"))
+            lines.append(f"| {order_id} | {symbol} | {side} | {quantity} | {signal_time} | {created_at} | {strategy} | {reasons} |")
+
     # Append trailing newline
     lines.append("")
     return "\n".join(lines)
@@ -115,6 +136,7 @@ def export_simulated_paper_trading_csv_bundle(
     summary = report_data["summary"]
     order_rows = report_data["order_rows"]
     fill_rows = report_data["fill_rows"]
+    rejection_rows = report_data.get("rejection_rows", [])
 
     # 1. Summary CSV
     summary_keys = [
@@ -193,8 +215,32 @@ def export_simulated_paper_trading_csv_bundle(
             row_vals.append("" if v is None else str(v))
         fills_writer.writerow(row_vals)
 
+    # 4. Rejections CSV
+    rejection_keys = [
+        "order_id",
+        "symbol",
+        "side",
+        "quantity",
+        "signal_time",
+        "created_at",
+        "strategy",
+        "reasons",
+    ]
+
+    rejections_io = io.StringIO()
+    rejections_writer = csv.writer(rejections_io, lineterminator="\n")
+    rejections_writer.writerow(rejection_keys)
+
+    for row in rejection_rows:
+        row_vals = []
+        for k in rejection_keys:
+            v = row.get(k)
+            row_vals.append("" if v is None else str(v))
+        rejections_writer.writerow(row_vals)
+
     return {
         "summary": summary_io.getvalue(),
         "orders": orders_io.getvalue(),
         "fills": fills_io.getvalue(),
+        "rejections": rejections_io.getvalue(),
     }

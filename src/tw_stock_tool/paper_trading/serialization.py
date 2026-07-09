@@ -5,6 +5,7 @@ from typing import Any
 from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedFill,
+    SimulatedOrderRejection,
     PaperTradingModelError,
 )
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
@@ -53,8 +54,25 @@ def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult
             "slippage": _enforce_numeric(f.slippage, float, f"fills[{i}].slippage"),
         })
 
+    rejections = []
+    for i, r in enumerate(result.rejections):
+        c_ord = r.candidate_order
+        rejections.append({
+            "candidate_order": {
+                "order_id": str(c_ord.order_id),
+                "symbol": str(c_ord.symbol),
+                "side": str(c_ord.side),
+                "quantity": _enforce_numeric(c_ord.quantity, int, f"rejections[{i}].candidate_order.quantity"),
+                "signal_time": _serialize_datetime_like(c_ord.signal_time),
+                "created_at": _serialize_datetime_like(c_ord.created_at),
+                "strategy": str(c_ord.strategy) if c_ord.strategy is not None else None,
+                "metadata": dict(c_ord.metadata),
+            },
+            "reasons": list(r.reasons),
+        })
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "result_type": "simulated_paper_trading_result",
         "symbol": str(result.symbol),
         "initial_cash": _enforce_numeric(result.initial_cash, float, "initial_cash"),
@@ -69,6 +87,7 @@ def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult
         "open_position_count": _enforce_numeric(result.open_position_count, int, "open_position_count"),
         "orders": orders,
         "fills": fills,
+        "rejections": rejections,
     }
 
 
@@ -98,12 +117,19 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
     if not isinstance(data, dict):
         raise PaperTradingModelError("Top-level data must be a dict.")
 
+    schema_version = data.get("schema_version")
+    if schema_version not in (1, 2):
+        raise PaperTradingModelError(f"Unsupported schema_version: {schema_version}")
+
     allowed_keys = {
         "schema_version", "result_type", "symbol", "initial_cash", "final_cash",
         "final_position_quantity", "average_cost", "realized_pnl", "unrealized_pnl",
         "total_equity", "order_count", "fill_count", "open_position_count",
         "orders", "fills"
     }
+    if schema_version >= 2:
+        allowed_keys.add("rejections")
+
     missing = allowed_keys - set(data.keys())
     if missing:
         raise PaperTradingModelError(f"Missing required top-level fields: {missing}")
@@ -111,9 +137,6 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
     extra = set(data.keys()) - allowed_keys
     if extra:
         raise PaperTradingModelError(f"Extra unknown top-level fields: {extra}")
-
-    if data["schema_version"] != 1:
-        raise PaperTradingModelError(f"Unsupported schema_version: {data['schema_version']}")
     
     if data["result_type"] != "simulated_paper_trading_result":
         raise PaperTradingModelError(f"Unsupported result_type: {data['result_type']}")
@@ -194,6 +217,54 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
             raise PaperTradingModelError(f"Fill {i} invalid: {e}")
         parsed_fills.append(fill_obj)
 
+    parsed_rejections = []
+    if "rejections" in data:
+        if not isinstance(data["rejections"], list):
+            raise PaperTradingModelError("Field 'rejections' must be a list.")
+        for i, r in enumerate(data["rejections"]):
+            if not isinstance(r, dict):
+                raise PaperTradingModelError(f"Rejection at index {i} must be a dict.")
+            r_allowed = {"candidate_order", "reasons"}
+            r_missing = r_allowed - set(r.keys())
+            if r_missing:
+                raise PaperTradingModelError(f"Rejection {i} missing fields: {r_missing}")
+            r_extra = set(r.keys()) - r_allowed
+            if r_extra:
+                raise PaperTradingModelError(f"Rejection {i} extra fields: {r_extra}")
+            
+            c_ord = r["candidate_order"]
+            if not isinstance(c_ord, dict):
+                raise PaperTradingModelError(f"Rejection {i} candidate_order must be a dict.")
+            
+            c_allowed = {"order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy", "metadata"}
+            c_missing = c_allowed - set(c_ord.keys())
+            if c_missing:
+                raise PaperTradingModelError(f"Rejection {i} candidate_order missing fields: {c_missing}")
+            
+            qty = _enforce_numeric(c_ord["quantity"], int, f"rejections[{i}].candidate_order.quantity")
+            try:
+                candidate_obj = SimulatedOrder(
+                    order_id=str(c_ord["order_id"]),
+                    symbol=str(c_ord["symbol"]),
+                    side=str(c_ord["side"]),
+                    quantity=qty,
+                    signal_time=str(c_ord["signal_time"]) if c_ord["signal_time"] is not None else None,
+                    created_at=str(c_ord["created_at"]) if c_ord["created_at"] is not None else None,
+                    strategy=str(c_ord["strategy"]) if c_ord["strategy"] is not None else None,
+                    metadata=dict(c_ord["metadata"]) if "metadata" in c_ord else {},
+                )
+                
+                if not isinstance(r["reasons"], list):
+                    raise PaperTradingModelError(f"Rejection {i} reasons must be a list.")
+                reasons = tuple(str(x) for x in r["reasons"])
+                rejection_obj = SimulatedOrderRejection(
+                    candidate_order=candidate_obj,
+                    reasons=reasons,
+                )
+            except Exception as e:
+                raise PaperTradingModelError(f"Rejection {i} invalid: {e}")
+            parsed_rejections.append(rejection_obj)
+
     try:
         return SimulatedPaperTradingResult(
             symbol=str(data["symbol"]),
@@ -209,6 +280,7 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
             open_position_count=_enforce_numeric(data["open_position_count"], int, "open_position_count"),
             orders=tuple(parsed_orders),
             fills=tuple(parsed_fills),
+            rejections=tuple(parsed_rejections),
         )
     except PaperTradingModelError:
         raise

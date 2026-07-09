@@ -322,6 +322,8 @@ Risk Manager is the next Roadmap-aligned area after Paper Trading. Initial work 
 
 Future implementation planning must ensure the Risk Manager first exposes pure Python model/result objects. It should be independent from strategies, data loading, CLI execution, and any broker interface. It should evaluate simulated order intent or simulated portfolio state only, and return a structured risk decision (allow/reject) with reasons. It should be designed so Paper Trading can later refuse simulated orders when risk checks fail. This remains strictly offline validation.
 
+**Status Update:** Neutral simulated order rejection capture has been added to the paper trading engine. Rejection data is now being exposed through report, export, and serialization paths. The feature remains strictly research-only and simulated-only. No broker, live trading, or real order behavior has been introduced.
+
 Initial candidate checks for future phases:
 
 - max single order notional

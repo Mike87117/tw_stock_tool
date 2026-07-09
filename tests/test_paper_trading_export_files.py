@@ -80,7 +80,7 @@ class TestPaperTradingExportFiles(unittest.TestCase):
                 self.result, temp_dir_path, basename="test_run"
             )
 
-            self.assertEqual(set(result_paths.keys()), {"summary", "orders", "fills"})
+            self.assertEqual(set(result_paths.keys()), {"summary", "orders", "fills", "rejections"})
 
             for p in result_paths.values():
                 self.assertIsInstance(p, Path)
@@ -89,6 +89,7 @@ class TestPaperTradingExportFiles(unittest.TestCase):
             self.assertEqual(result_paths["summary"].name, "test_run_summary.csv")
             self.assertEqual(result_paths["orders"].name, "test_run_orders.csv")
             self.assertEqual(result_paths["fills"].name, "test_run_fills.csv")
+            self.assertEqual(result_paths["rejections"].name, "test_run_rejections.csv")
 
             with open(result_paths["summary"], "r", encoding="utf-8") as f:
                 self.assertTrue(f.read().startswith("metric,value\n"))
@@ -98,6 +99,9 @@ class TestPaperTradingExportFiles(unittest.TestCase):
 
             with open(result_paths["fills"], "r", encoding="utf-8") as f:
                 self.assertTrue(f.read().startswith("order_id,symbol,side,quantity,price,filled_at,fee,tax,slippage,gross_amount,net_cash_effect\n"))
+
+            with open(result_paths["rejections"], "r", encoding="utf-8") as f:
+                self.assertTrue(f.read().startswith("order_id,symbol,side,quantity,signal_time,created_at,strategy,reasons\n"))
 
             with self.assertRaises(FileExistsError):
                 export_simulated_paper_trading_csv_files(self.result, temp_dir_path, basename="test_run", overwrite=False)
