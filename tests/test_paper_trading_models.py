@@ -137,6 +137,20 @@ class TestPaperTradingModels(unittest.TestCase):
 
         self.assertEqual(len(log.orders), 1)
         self.assertEqual(len(log.fills), 1)
+        self.assertEqual(len(log.rejections), 0)
+
+    def test_simulated_order_rejection(self) -> None:
+        from tw_stock_tool.paper_trading.models import SimulatedOrderRejection
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1000, signal_time=None)
+        rejection = SimulatedOrderRejection(candidate_order=order, reasons=("Risk limit exceeded",))
+        
+        self.assertEqual(rejection.candidate_order.order_id, "1")
+        self.assertEqual(rejection.reasons, ("Risk limit exceeded",))
+        
+        log = SimulatedTradeLog()
+        log.record_rejection(rejection)
+        self.assertEqual(len(log.rejections), 1)
+        self.assertEqual(log.rejections[0], rejection)
 
     def test_simulated_portfolio(self) -> None:
         portfolio = SimulatedPortfolio(cash=200000.0)

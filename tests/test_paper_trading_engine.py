@@ -381,6 +381,9 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         self.assertEqual(len(portfolio.trade_log.orders), 0)
         self.assertEqual(len(portfolio.trade_log.fills), 0)
         self.assertEqual(len(provider_calls), 1)
+        self.assertEqual(len(portfolio.trade_log.rejections), 1)
+        self.assertEqual(portfolio.trade_log.rejections[0].reasons, ("Blocked buy",))
+        self.assertEqual(portfolio.trade_log.rejections[0].candidate_order.side, "BUY")
 
     def test_provider_blocked_decision_prevents_sell_intent(self):
         """Provider blocked decision prevents simulated SELL order intent and fill."""
@@ -401,6 +404,9 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         self.assertEqual(len(portfolio.trade_log.fills), 1)
         self.assertEqual(len(provider_calls), 2)
         self.assertEqual(provider_calls[1].side, "SELL")
+        self.assertEqual(len(portfolio.trade_log.rejections), 1)
+        self.assertEqual(portfolio.trade_log.rejections[0].reasons, ("Blocked sell",))
+        self.assertEqual(portfolio.trade_log.rejections[0].candidate_order.side, "SELL")
 
     def test_invalid_provider_raises(self):
         """Non-callable provider raises PaperTradingModelError."""

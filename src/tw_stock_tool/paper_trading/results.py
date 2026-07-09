@@ -1,6 +1,12 @@
 import math
 from dataclasses import dataclass
-from tw_stock_tool.paper_trading.models import SimulatedPortfolio, SimulatedOrder, SimulatedFill, PaperTradingModelError
+from tw_stock_tool.paper_trading.models import (
+    SimulatedPortfolio,
+    SimulatedOrder,
+    SimulatedFill,
+    SimulatedOrderRejection,
+    PaperTradingModelError,
+)
 
 @dataclass(frozen=True, slots=True)
 class SimulatedPaperTradingResult:
@@ -18,6 +24,7 @@ class SimulatedPaperTradingResult:
     open_position_count: int
     orders: tuple[SimulatedOrder, ...]
     fills: tuple[SimulatedFill, ...]
+    rejections: tuple[SimulatedOrderRejection, ...] = ()
 
 def build_simulated_paper_trading_result(
     portfolio: SimulatedPortfolio,
@@ -66,6 +73,7 @@ def build_simulated_paper_trading_result(
         open_position_count=open_position_count,
         orders=tuple(portfolio.trade_log.orders),
         fills=tuple(portfolio.trade_log.fills),
+        rejections=tuple(portfolio.trade_log.rejections),
     )
 
 def build_simulated_paper_trading_summary(

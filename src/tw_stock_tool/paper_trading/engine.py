@@ -7,6 +7,7 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedFill,
     SimulatedOrder,
     SimulatedPortfolio,
+    SimulatedOrderRejection,
 )
 from tw_stock_tool.paper_trading.results import (
     SimulatedPaperTradingResult,
@@ -14,20 +15,20 @@ from tw_stock_tool.paper_trading.results import (
 )
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardDecision
 
-def _should_record_order_intent(
+def _evaluate_order_intent(
     candidate: SimulatedOrder,
     portfolio: SimulatedPortfolio,
     static_guard: SimulatedPaperTradingGuardDecision | None,
     dynamic_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None,
-) -> bool:
+) -> SimulatedPaperTradingGuardDecision | None:
     if dynamic_provider is not None:
         decision = dynamic_provider(candidate, portfolio)
         if not isinstance(decision, SimulatedPaperTradingGuardDecision):
             raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
-        return not decision.is_blocked
+        return decision
     if static_guard is not None:
-        return not static_guard.is_blocked
-    return True
+        return static_guard
+    return None
 
 
 
@@ -114,9 +115,12 @@ def run_simulated_paper_trading(
                 signal_time=index_label,
                 created_at=index_label,
             )
-            if _should_record_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider):
+            decision = _evaluate_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider)
+            if decision is None or not decision.is_blocked:
                 pending_order = candidate_order
                 portfolio.trade_log.record_order(pending_order)
+            else:
+                portfolio.trade_log.record_rejection(SimulatedOrderRejection(candidate_order=candidate_order, reasons=decision.reasons))
         elif shares == 0 and entry_sig:
             order_id = f"{symbol}-BUY-{pos}"
             candidate_order = SimulatedOrder(
@@ -127,9 +131,12 @@ def run_simulated_paper_trading(
                 signal_time=index_label,
                 created_at=index_label,
             )
-            if _should_record_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider):
+            decision = _evaluate_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider)
+            if decision is None or not decision.is_blocked:
                 pending_order = candidate_order
                 portfolio.trade_log.record_order(pending_order)
+            else:
+                portfolio.trade_log.record_rejection(SimulatedOrderRejection(candidate_order=candidate_order, reasons=decision.reasons))
 
     return portfolio
 

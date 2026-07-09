@@ -33,6 +33,13 @@ class SimulatedOrder:
 
 
 @dataclass(slots=True)
+class SimulatedOrderRejection:
+    """Research-only rejected simulated order intent."""
+    candidate_order: SimulatedOrder
+    reasons: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(slots=True)
 class SimulatedFill:
     """Deterministic simulated fill. Does not represent real execution."""
     order_id: str
@@ -114,12 +121,16 @@ class SimulatedTradeLog:
     """Store simulated orders and fills for traceability."""
     orders: list[SimulatedOrder] = field(default_factory=list)
     fills: list[SimulatedFill] = field(default_factory=list)
+    rejections: list[SimulatedOrderRejection] = field(default_factory=list)
 
     def record_order(self, order: SimulatedOrder) -> None:
         self.orders.append(order)
 
     def record_fill(self, fill: SimulatedFill) -> None:
         self.fills.append(fill)
+
+    def record_rejection(self, rejection: SimulatedOrderRejection) -> None:
+        self.rejections.append(rejection)
 
 
 @dataclass(slots=True)

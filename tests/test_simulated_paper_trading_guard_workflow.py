@@ -215,6 +215,7 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
         self.assertIsInstance(result, SimulatedPaperTradingResult)
         self.assertEqual(result.order_count, 0)
         self.assertEqual(result.fill_count, 0)
+        self.assertEqual(len(result.rejections), 1)
 
     def test_result_kill_switch_blocked_path(self):
         from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
@@ -236,6 +237,7 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
         self.assertIsInstance(result, SimulatedPaperTradingResult)
         self.assertEqual(result.order_count, 0)
         self.assertEqual(result.fill_count, 0)
+        self.assertEqual(len(result.rejections), 1)
 
     def test_result_parameter_passthrough(self):
         from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
