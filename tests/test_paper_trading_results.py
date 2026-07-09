@@ -5,6 +5,7 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedPortfolio,
     SimulatedOrder,
     SimulatedFill,
+    SimulatedOrderRejection,
     PaperTradingModelError,
 )
 from tw_stock_tool.paper_trading.results import (
@@ -13,6 +14,7 @@ from tw_stock_tool.paper_trading.results import (
     build_simulated_paper_trading_summary,
     build_simulated_order_rows,
     build_simulated_fill_rows,
+    build_simulated_rejection_rows,
     build_simulated_paper_trading_report_data,
 )
 import numbers
@@ -489,6 +491,10 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
             tax=0.0,
             slippage=50.0
         )
+        rejection = SimulatedOrderRejection(
+            candidate_order=order,
+            reasons=("Risk limit exceeded", "Kill switch active"),
+        )
         result = SimulatedPaperTradingResult(
             symbol="2330",
             initial_cash=100000.0,
@@ -503,6 +509,7 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
             open_position_count=0,
             orders=(order,),
             fills=(fill,),
+            rejections=(rejection,)
         )
 
         report_data = build_simulated_paper_trading_report_data(result)
@@ -526,3 +533,49 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
         self.assertIs(o_row["signal_time"], signal_time)
         self.assertNotIsInstance(o_row["signal_time"], str)
         self.assertIsInstance(o_row["quantity"], numbers.Integral)
+
+    def test_build_simulated_rejection_rows(self):
+        candidate_order = SimulatedOrder(
+            order_id="blocked-1",
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            signal_time="2026-01-01",
+            created_at="2026-01-01",
+            strategy="unit-test-strategy",
+        )
+        rejection = SimulatedOrderRejection(
+            candidate_order=candidate_order,
+            reasons=("Risk limit exceeded", "Kill switch active"),
+        )
+        result = SimulatedPaperTradingResult(
+            symbol="2330",
+            initial_cash=100000.0,
+            final_cash=100000.0,
+            final_position_quantity=0,
+            average_cost=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            total_equity=100000.0,
+            order_count=0,
+            fill_count=0,
+            open_position_count=0,
+            orders=(),
+            fills=(),
+            rejections=(rejection,),
+        )
+        rows = build_simulated_rejection_rows(result)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["order_id"], "blocked-1")
+        self.assertEqual(row["symbol"], "2330")
+        self.assertEqual(row["side"], "BUY")
+        self.assertEqual(row["quantity"], 1000)
+        self.assertEqual(row["strategy"], "unit-test-strategy")
+        self.assertEqual(row["reasons"], "Risk limit exceeded | Kill switch active")
+
+        report_data = build_simulated_paper_trading_report_data(result)
+        rej_rows = report_data["rejection_rows"]
+        self.assertEqual(len(rej_rows), 1)
+        self.assertEqual(rej_rows[0]["order_id"], "blocked-1")
+        self.assertEqual(rej_rows[0]["reasons"], "Risk limit exceeded | Kill switch active")

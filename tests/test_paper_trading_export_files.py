@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
-from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedFill
+from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedFill, SimulatedOrderRejection
 from tw_stock_tool.paper_trading.export_files import (
     export_simulated_paper_trading_markdown_file,
     export_simulated_paper_trading_csv_files,
@@ -46,6 +46,20 @@ class TestPaperTradingExportFiles(unittest.TestCase):
             open_position_count=1,
             orders=(self.order,),
             fills=(self.fill,),
+            rejections=(
+                SimulatedOrderRejection(
+                    candidate_order=SimulatedOrder(
+                        order_id="blocked-1",
+                        symbol="2330",
+                        side="BUY",
+                        quantity=1000,
+                        signal_time="2026-01-01",
+                        created_at="2026-01-01",
+                        strategy="unit-test-strategy",
+                    ),
+                    reasons=("Risk limit exceeded", "Kill switch active"),
+                ),
+            ),
         )
 
     def test_export_markdown_file(self):
@@ -101,7 +115,10 @@ class TestPaperTradingExportFiles(unittest.TestCase):
                 self.assertTrue(f.read().startswith("order_id,symbol,side,quantity,price,filled_at,fee,tax,slippage,gross_amount,net_cash_effect\n"))
 
             with open(result_paths["rejections"], "r", encoding="utf-8") as f:
-                self.assertTrue(f.read().startswith("order_id,symbol,side,quantity,signal_time,created_at,strategy,reasons\n"))
+                content = f.read()
+                self.assertTrue(content.startswith("order_id,symbol,side,quantity,signal_time,created_at,strategy,reasons\n"))
+                self.assertIn("blocked-1", content)
+                self.assertIn("Risk limit exceeded | Kill switch active", content)
 
             with self.assertRaises(FileExistsError):
                 export_simulated_paper_trading_csv_files(self.result, temp_dir_path, basename="test_run", overwrite=False)

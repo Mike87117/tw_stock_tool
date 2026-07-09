@@ -5,6 +5,7 @@ from datetime import datetime
 from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedFill,
+    SimulatedOrderRejection,
     PaperTradingModelError,
 )
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
@@ -56,7 +57,21 @@ class TestPaperTradingSerialization(unittest.TestCase):
             fill_count=1,
             open_position_count=1,
             orders=(self.order1,),
-            fills=(self.fill1,)
+            fills=(self.fill1,),
+            rejections=(
+                SimulatedOrderRejection(
+                    candidate_order=SimulatedOrder(
+                        order_id="blocked-1",
+                        symbol="2330",
+                        side="BUY",
+                        quantity=1000,
+                        signal_time="2026-01-01",
+                        created_at="2026-01-01",
+                        strategy="unit-test-strategy",
+                    ),
+                    reasons=("Risk limit exceeded", "Kill switch active"),
+                ),
+            )
         )
 
     def test_serialize_to_dict(self):
@@ -72,6 +87,10 @@ class TestPaperTradingSerialization(unittest.TestCase):
         self.assertNotIn("gross_amount", f)
         self.assertNotIn("net_cash_effect", f)
 
+        self.assertEqual(len(data["rejections"]), 1)
+        self.assertEqual(data["rejections"][0]["candidate_order"]["order_id"], "blocked-1")
+        self.assertEqual(data["rejections"][0]["reasons"], ["Risk limit exceeded", "Kill switch active"])
+
     def test_deserialize_to_result(self):
         data = serialize_simulated_paper_trading_result(self.result)
         restored = deserialize_simulated_paper_trading_result(data)
@@ -80,6 +99,10 @@ class TestPaperTradingSerialization(unittest.TestCase):
         self.assertEqual(restored.orders[0].signal_time, self.dt_str)
         self.assertEqual(restored.orders[0].metadata, {"reason": "test"})
         self.assertEqual(restored.fills[0].price, 100.5)
+
+        self.assertEqual(restored.rejections, self.result.rejections)
+        self.assertEqual(restored.rejections[0].candidate_order.order_id, "blocked-1")
+        self.assertEqual(restored.rejections[0].reasons, ("Risk limit exceeded", "Kill switch active"))
 
     def test_round_trip(self):
         # Result -> dict -> Result
@@ -136,6 +159,15 @@ class TestPaperTradingSerialization(unittest.TestCase):
         data["result_type"] = "invalid"
         with self.assertRaisesRegex(PaperTradingModelError, "Unsupported result_type: invalid"):
             deserialize_simulated_paper_trading_result(data)
+
+    def test_legacy_v1_payload_without_rejections(self):
+        # Create a valid v1 payload without rejections
+        data = serialize_simulated_paper_trading_result(self.result)
+        data["schema_version"] = 1
+        del data["rejections"]
+        
+        restored = deserialize_simulated_paper_trading_result(data)
+        self.assertEqual(restored.rejections, ())
 
     def test_reject_malformed_orders(self):
         data = serialize_simulated_paper_trading_result(self.result)

@@ -1,6 +1,6 @@
 import unittest
 
-from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedFill
+from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedFill, SimulatedOrderRejection
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
 from tw_stock_tool.paper_trading.exporters import export_simulated_paper_trading_markdown
 
@@ -41,6 +41,20 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
             open_position_count=1,
             orders=(self.order,),
             fills=(self.fill,),
+            rejections=(
+                SimulatedOrderRejection(
+                    candidate_order=SimulatedOrder(
+                        order_id="blocked-1",
+                        symbol="2330",
+                        side="BUY",
+                        quantity=1000,
+                        signal_time="2026-01-01",
+                        created_at="2026-01-01",
+                        strategy="unit-test-strategy",
+                    ),
+                    reasons=("Risk limit exceeded", "Kill switch active"),
+                ),
+            ),
         )
 
     def test_export_simulated_paper_trading_markdown(self):
@@ -70,6 +84,10 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
 
         # 5. Fill rows are represented
         self.assertIn("| order-1 | 2330 | BUY | 1000 | 100.50 | 2023-01-01 10:10:00 | 143.00 | 0.00 | 50.00 | 100,500.00 | -100,693.00 |", output)
+
+        # 6. Rejection rows are represented
+        self.assertIn("## Rejected Simulated Order Intents", output)
+        self.assertIn("| blocked-1 | 2330 | BUY | 1000 | 2026-01-01 | 2026-01-01 | unit-test-strategy | Risk limit exceeded \\| Kill switch active |", output)
 
         # 7. No forbidden words
         forbidden_words = [
@@ -103,6 +121,7 @@ class TestPaperTradingMarkdownExporter(unittest.TestCase):
 
         self.assertIn("*No orders to display.*", output)
         self.assertIn("*No fills to display.*", output)
+        self.assertIn("*No rejected simulated order intents.*", output)
 
         # Should only contain the summary items, the empty orders/fills headers, but no extra data lines.
         lines = output.strip().split("\n")
@@ -147,6 +166,20 @@ class TestPaperTradingCSVExporter(unittest.TestCase):
             open_position_count=1,
             orders=(self.order,),
             fills=(self.fill,),
+            rejections=(
+                SimulatedOrderRejection(
+                    candidate_order=SimulatedOrder(
+                        order_id="blocked-1",
+                        symbol="2330",
+                        side="BUY",
+                        quantity=1000,
+                        signal_time="2026-01-01",
+                        created_at="2026-01-01",
+                        strategy="unit-test-strategy",
+                    ),
+                    reasons=("Risk limit exceeded", "Kill switch active"),
+                ),
+            ),
         )
 
     def test_export_simulated_paper_trading_csv_bundle(self):
@@ -165,6 +198,7 @@ class TestPaperTradingCSVExporter(unittest.TestCase):
         summary_csv = output["summary"]
         orders_csv = output["orders"]
         fills_csv = output["fills"]
+        rejections_csv = output["rejections"]
 
         # Parse summary
         summary_reader = list(csv.reader(io.StringIO(summary_csv)))
@@ -187,6 +221,12 @@ class TestPaperTradingCSVExporter(unittest.TestCase):
         self.assertEqual(fills_reader[0], ["order_id", "symbol", "side", "quantity", "price", "filled_at", "fee", "tax", "slippage", "gross_amount", "net_cash_effect"])
         self.assertEqual(len(fills_reader), 2)
         self.assertEqual(fills_reader[1], ["order-1", "2330", "BUY", "1000", "100.5", "2023-01-01 10:10:00", "143.0", "0.0", "50.0", "100500.0", "-100693.0"])
+
+        # Parse rejections
+        rejections_reader = list(csv.reader(io.StringIO(rejections_csv)))
+        self.assertEqual(rejections_reader[0], ["order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy", "reasons"])
+        self.assertEqual(len(rejections_reader), 2)
+        self.assertEqual(rejections_reader[1], ["blocked-1", "2330", "BUY", "1000", "2026-01-01", "2026-01-01", "unit-test-strategy", "Risk limit exceeded | Kill switch active"])
 
         forbidden_words = [
             "recommended", "recommendation", "buy recommendation", "sell recommendation",
