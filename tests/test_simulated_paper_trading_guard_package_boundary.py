@@ -6,6 +6,7 @@ import unittest
 import tw_stock_tool.simulated_paper_trading_guard as guard_pkg
 import tw_stock_tool.simulated_paper_trading_guard.models as models_module
 import tw_stock_tool.simulated_paper_trading_guard.evaluator as evaluator_module
+import tw_stock_tool.simulated_paper_trading_guard.adapter as adapter_module
 
 
 class TestSimulatedPaperTradingGuardPackageBoundary(unittest.TestCase):
@@ -17,6 +18,7 @@ class TestSimulatedPaperTradingGuardPackageBoundary(unittest.TestCase):
             "SimulatedPaperTradingGuardAdapter",
             "ReferencePriceProvider",
             "RiskDecisionProvider",
+            "PortfolioExposureProvider",
             "run_simulated_paper_trading_with_guard",
             "run_simulated_paper_trading_result_with_guard",
         ]
@@ -38,6 +40,12 @@ class TestSimulatedPaperTradingGuardPackageBoundary(unittest.TestCase):
         self.assertIs(
             guard_pkg.evaluate_simulated_paper_trading_guard,
             evaluator_module.evaluate_simulated_paper_trading_guard,
+        )
+
+    def test_portfolio_exposure_provider_identity(self):
+        self.assertIs(
+            guard_pkg.PortfolioExposureProvider,
+            adapter_module.PortfolioExposureProvider,
         )
 
 if __name__ == '__main__':
