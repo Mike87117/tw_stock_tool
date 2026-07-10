@@ -2,7 +2,7 @@ from typing import Callable
 from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPortfolio
 from tw_stock_tool.simulated_paper_trading_guard.config import SimulatedPaperTradingGuardConfig, GuardConfigError
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardDecision
-from tw_stock_tool.simulated_paper_trading_guard.adapter import SimulatedPaperTradingGuardAdapter
+from tw_stock_tool.simulated_paper_trading_guard.adapter import SimulatedPaperTradingGuardAdapter, PortfolioExposureProvider
 from tw_stock_tool.risk.builder import build_risk_decision_provider_from_config
 from tw_stock_tool.kill_switch.models import KillSwitchState
 
@@ -12,6 +12,7 @@ def build_guard_decision_provider_from_config(
     config: SimulatedPaperTradingGuardConfig | None,
     *,
     reference_price_provider: Callable[[SimulatedOrder, SimulatedPortfolio], float] | None = None,
+    portfolio_exposure_provider: PortfolioExposureProvider | None = None,
 ) -> GuardDecisionProvider:
     if config is not None and not isinstance(config, SimulatedPaperTradingGuardConfig):
         raise GuardConfigError("config must be a SimulatedPaperTradingGuardConfig or None.")
@@ -20,15 +21,24 @@ def build_guard_decision_provider_from_config(
         raise GuardConfigError("kill_switch_enabled=True is not supported in the config builder yet.")
 
     risk_config = config.risk if config is not None else None
-    
+
+    has_total_exposure_risk = (
+        risk_config is not None
+        and risk_config.max_total_exposure is not None
+    )
+
     has_risk = risk_config is not None and any([
         risk_config.max_order_notional is not None,
         risk_config.max_position_quantity is not None,
         risk_config.max_position_notional is not None,
+        risk_config.max_total_exposure is not None,
     ])
 
     if has_risk and reference_price_provider is None:
         raise GuardConfigError("reference_price_provider is required when risk rules are configured.")
+
+    if has_total_exposure_risk and portfolio_exposure_provider is None:
+        raise GuardConfigError("portfolio_exposure_provider is required when max_total_exposure is configured.")
 
     risk_provider = build_risk_decision_provider_from_config(risk_config)
 
@@ -36,7 +46,7 @@ def build_guard_decision_provider_from_config(
     # (since True raises an error above, and None/False map to inactive).
     kill_switch_state = KillSwitchState(is_active=False)
 
-    # If no risk rules are configured, we can bypass the adapter entirely 
+    # If no risk rules are configured, we can bypass the adapter entirely
     # to avoid evaluating any unused reference price provider and failing on it.
     if not has_risk:
         def allow_all_provider(order: SimulatedOrder, portfolio: SimulatedPortfolio) -> SimulatedPaperTradingGuardDecision:
@@ -47,6 +57,7 @@ def build_guard_decision_provider_from_config(
         kill_switch_state=kill_switch_state,
         reference_price_provider=reference_price_provider, # type: ignore
         risk_decision_provider=risk_provider,
+        portfolio_exposure_provider=portfolio_exposure_provider if has_total_exposure_risk else None,
     )
 
     return adapter

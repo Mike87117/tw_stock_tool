@@ -8,16 +8,19 @@ class TestSimulatedPaperTradingRiskConfig(unittest.TestCase):
         self.assertIsNone(cfg.max_order_notional)
         self.assertIsNone(cfg.max_position_quantity)
         self.assertIsNone(cfg.max_position_notional)
+        self.assertIsNone(cfg.max_total_exposure)
 
     def test_valid_positive_values_accepted(self):
         cfg = SimulatedPaperTradingRiskConfig(
             max_order_notional=100.5,
             max_position_quantity=10,
-            max_position_notional=2000.0
+            max_position_notional=2000.0,
+            max_total_exposure=3000.0
         )
         self.assertEqual(cfg.max_order_notional, 100.5)
         self.assertEqual(cfg.max_position_quantity, 10)
         self.assertEqual(cfg.max_position_notional, 2000.0)
+        self.assertEqual(cfg.max_total_exposure, 3000.0)
 
     def test_config_is_frozen(self):
         cfg = SimulatedPaperTradingRiskConfig()
@@ -97,6 +100,28 @@ class TestSimulatedPaperTradingRiskConfig(unittest.TestCase):
     def test_max_position_quantity_rejects_fractional(self):
         with self.assertRaisesRegex(RiskConfigError, "integer"):
             SimulatedPaperTradingRiskConfig(max_position_quantity=10.5) # type: ignore
+
+    def test_max_total_exposure_rejects_zero_and_negative(self):
+        with self.assertRaisesRegex(RiskConfigError, "strictly positive"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure=0)
+        with self.assertRaisesRegex(RiskConfigError, "strictly positive"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure=-10.5)
+
+    def test_max_total_exposure_rejects_infinity(self):
+        with self.assertRaisesRegex(RiskConfigError, "finite"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure=float("inf"))
+
+    def test_max_total_exposure_rejects_nan(self):
+        with self.assertRaisesRegex(RiskConfigError, "finite"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure=float("nan"))
+
+    def test_max_total_exposure_rejects_bool(self):
+        with self.assertRaisesRegex(RiskConfigError, "cannot be a boolean"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure=True)
+
+    def test_max_total_exposure_rejects_numeric_string(self):
+        with self.assertRaisesRegex(RiskConfigError, "must be numeric"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure="100") # type: ignore
 
     def test_no_builder_exposed(self):
         import tw_stock_tool.risk.config as risk_config

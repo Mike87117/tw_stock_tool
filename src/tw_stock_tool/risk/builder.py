@@ -5,6 +5,7 @@ from tw_stock_tool.risk.rules import (
     check_max_order_notional,
     check_max_position_quantity,
     check_max_position_notional,
+    check_max_total_exposure,
     combine_risk_decisions,
 )
 
@@ -22,12 +23,15 @@ def build_risk_decision_provider_from_config(config: SimulatedPaperTradingRiskCo
 
         if config.max_order_notional is not None:
             decisions.append(check_max_order_notional(snapshot, config.max_order_notional))
-            
+
         if config.max_position_quantity is not None:
             decisions.append(check_max_position_quantity(snapshot, config.max_position_quantity))
-            
+
         if config.max_position_notional is not None:
             decisions.append(check_max_position_notional(snapshot, config.max_position_notional))
+
+        if config.max_total_exposure is not None:
+            decisions.append(check_max_total_exposure(snapshot, config.max_total_exposure))
 
         if not decisions:
             return RiskDecision.allow()
