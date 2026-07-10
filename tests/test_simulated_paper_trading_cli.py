@@ -75,10 +75,10 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
             "order_count": 2,
             "fill_count": 2,
         }
-        
+
         args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000"]
         simulated_paper_trading_cli.main(args)
-        
+
         mock_analyze.assert_called_once()
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args[1]["guard_decision_provider"], None)
@@ -141,14 +141,14 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
         mock_strat_func = MagicMock()
         mock_strat_func.return_value = pd.DataFrame({"Open": [10], "Close": [10], "entry_signal": [True], "exit_signal": [False]})
         mock_strats.__getitem__.return_value = mock_strat_func
-        
+
         mock_analyze.return_value = MagicMock(indicator_df="MAGIC_DF")
-        
+
         args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "1000", "--quantity-per-trade", "10"]
         with patch("tw_stock_tool.cli.simulated_paper_trading_cli.run_simulated_paper_trading_result"):
             with patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary", return_value={"symbol": "x", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}):
                 simulated_paper_trading_cli.main(args)
-                
+
         mock_strat_func.assert_called_once_with("MAGIC_DF")
 
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
@@ -157,12 +157,12 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     def test_missing_open_or_signals_rejected(self, mock_print, mock_strats, mock_analyze):
         mock_analyze.return_value = MagicMock(symbol="S")
         args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "1000", "--quantity-per-trade", "10"]
-        
+
         # Missing Open
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Close": [10], "entry_signal": [True], "exit_signal": [False]}))
         with self.assertRaises(SystemExit):
             simulated_paper_trading_cli.main(args)
-            
+
         # Missing entry_signal
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Open": [10], "Close": [10], "exit_signal": [False]}))
         with self.assertRaises(SystemExit):
@@ -192,7 +192,7 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
             "fill_count": 0,
         }
         args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "0", "--quantity-per-trade", "1000"]
-        
+
         with patch("builtins.print") as mock_print:
             simulated_paper_trading_cli.main(args)
             mock_print.assert_any_call("  Total Return %: N/A")
