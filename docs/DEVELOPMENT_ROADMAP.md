@@ -176,6 +176,12 @@ Broker Interface
 - Phase 34.x：完成 (BacktestResult export CLI UX / roundtrip smoke tests / read-back validation)
 - Phase 35.1：完成 (BacktestResult artifact workflow documentation)
 - Phase 35.3：完成 (`backtest-artifact convert-to-simulated-paper-trading` read-back validation)
+- Phase 36.x–41.x：完成 (research-only Risk Manager rules, decision models, configuration primitives, and Kill Switch model boundaries)
+- Phase 42.x–47.x：完成 (simulated paper trading guard adapter, workflow, configuration builder, and reference-price-provider boundaries)
+- Phase 48.2：完成 (DataFrame signal-time reference price provider)
+- Phase 48.4：完成 (historical simulated paper trading CLI runner)
+- Phase 48.5：完成 (CLI risk limits for max order notional, max position quantity, and max position notional)
+- Phase 48.6：完成 (portfolio-wide simulated exposure valuation provider boundary)
 
 ## 3. 台股資料取得
 
@@ -322,7 +328,7 @@ Risk Manager is the next Roadmap-aligned area after Paper Trading. Initial work 
 
 Future implementation planning must ensure the Risk Manager first exposes pure Python model/result objects. It should be independent from strategies, data loading, CLI execution, and any broker interface. It should evaluate simulated order intent or simulated portfolio state only, and return a structured risk decision (allow/reject) with reasons. It should be designed so Paper Trading can later refuse simulated orders when risk checks fail. This remains strictly offline validation.
 
-**Status Update:** Neutral simulated order rejection capture has been added to the paper trading engine. Rejection data is now being exposed through report, export, and serialization paths. The feature remains strictly research-only and simulated-only. No broker, live trading, or real order behavior has been introduced.
+**Status Update:** Neutral simulated order rejection capture has been added to the paper trading engine. Rejection data is now being exposed through report, export, and serialization paths. The first three initial risk limits are now available in the historical simulated CLI. `check_max_total_exposure(...)` exists as a pure risk rule. It is not yet exposed through config, guard, or CLI. The previous adapter snapshot only represented the candidate symbol's current position. Phase 48.6 adds a portfolio-wide exposure valuation provider. Adapter/config/CLI integration remains deferred. The feature remains strictly research-only and simulated-only. No broker or live trading capability exists, and no real order behavior has been introduced.
 
 Initial candidate checks for future phases:
 
