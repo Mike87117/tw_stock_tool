@@ -402,10 +402,13 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
         self.assertIsNone(args.max_position_notional)
 
     def test_valid_parser_values(self):
-        args = simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "100000", "--max-position-quantity", "2000", "--max-position-notional", "250000"])
-        self.assertEqual(args.max_order_notional, 100000.0)
+        args = simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "50000.5", "--max-position-quantity", "2000", "--max-position-notional", "100000.25"])
+        self.assertEqual(args.max_order_notional, 50000.5)
+        self.assertIsInstance(args.max_order_notional, float)
         self.assertEqual(args.max_position_quantity, 2000)
-        self.assertEqual(args.max_position_notional, 250000.0)
+        self.assertIsInstance(args.max_position_quantity, int)
+        self.assertEqual(args.max_position_notional, 100000.25)
+        self.assertIsInstance(args.max_position_notional, float)
 
     def test_invalid_notional_values(self):
         import io
@@ -436,7 +439,9 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary")
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.DataFrameReferencePriceProvider")
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_guard_decision_provider_from_config")
-    def test_no_risk_lazy_behavior(self, mock_build_guard, mock_provider, mock_summary, mock_run, mock_analyze):
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingGuardConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingRiskConfig")
+    def test_no_risk_lazy_behavior(self, mock_risk_config, mock_guard_config, mock_builder, mock_provider, mock_summary, mock_run, mock_analyze):
         mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
         df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
         with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
@@ -445,10 +450,17 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
             args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1"]
             with patch("builtins.print"):
                 simulated_paper_trading_cli.main(args)
-            mock_summary.return_value = {"symbol": "2330", "initial_cash": 10000, "final_cash": 10000, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 10000, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+            
+            mock_risk_config.assert_not_called()
+            mock_guard_config.assert_not_called()
             mock_provider.assert_not_called()
-            mock_build_guard.assert_not_called()
-            self.assertIsNone(mock_run.call_args[1]["guard_decision_provider"])
+            mock_builder.assert_not_called()
+
+            mock_run.assert_called_once()
+            self.assertIs(mock_run.call_args.kwargs["df"], df_exec_mock)
+            self.assertIsNone(
+                mock_run.call_args.kwargs["guard_decision_provider"]
+            )
 
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.run_simulated_paper_trading_result")
