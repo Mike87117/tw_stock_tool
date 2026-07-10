@@ -160,7 +160,7 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
             received_portfolio = portfolio
             return 2000.0
 
-        run_simulated_paper_trading_with_guard(
+        portfolio = run_simulated_paper_trading_with_guard(
             df=self.df,
             symbol=self.symbol,
             initial_cash=self.initial_cash,
@@ -172,6 +172,9 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
         )
 
         self.assertEqual(portfolio_prov_called, 1)
+        self.assertIs(received_portfolio, portfolio)
+        self.assertEqual(len(portfolio.trade_log.rejections), 1)
+        self.assertIs(received_order, portfolio.trade_log.rejections[0].candidate_order)
         self.assertIsNotNone(received_order)
         self.assertEqual(received_order.symbol, self.symbol)
         self.assertEqual(received_order.side, "BUY")
@@ -203,6 +206,8 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
 
         self.assertEqual(len(portfolio.trade_log.fills), 0)
         self.assertEqual(len(portfolio.trade_log.orders), 0)
+        self.assertEqual(len(portfolio.trade_log.rejections), 1)
+        self.assertTrue(any("max_total_exposure" in reason for reason in portfolio.trade_log.rejections[0].reasons))
 
     def test_portfolio_exposure_provider_runtime_failure(self):
         def price_prov(order, portfolio): return 100.0
@@ -267,6 +272,23 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
                 0.0,
                 lambda o, p: 0.0
             )
+
+
+    def test_portfolio_exposure_provider_explicit_none(self):
+        def price_prov(order, portfolio): return 100.0
+        def risk_prov(snapshot): return RiskDecision.allow()
+
+        portfolio = run_simulated_paper_trading_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.inactive_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov,
+            portfolio_exposure_provider=None
+        )
+        self.assertEqual(len(portfolio.trade_log.fills), 2)
 
     def test_invalid_injected_dependency(self):
         with self.assertRaises(SimulatedPaperTradingGuardError):
@@ -425,13 +447,17 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
         from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
 
         portfolio_prov_called = 0
+        received_order = None
+        received_portfolio = None
 
         def price_prov(order, portfolio): return 100.0
         def risk_prov(snapshot): return RiskDecision.reject(["blocked"])
 
         def portfolio_prov(order, portfolio):
-            nonlocal portfolio_prov_called
+            nonlocal portfolio_prov_called, received_order, received_portfolio
             portfolio_prov_called += 1
+            received_order = order
+            received_portfolio = portfolio
             return 2000.0
 
         result = run_simulated_paper_trading_result_with_guard(
@@ -446,6 +472,10 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
         )
 
         self.assertEqual(portfolio_prov_called, 1)
+        self.assertIsNotNone(received_order)
+        self.assertIsInstance(received_portfolio, SimulatedPortfolio)
+        self.assertEqual(len(result.rejections), 1)
+        self.assertIs(received_order, result.rejections[0].candidate_order)
         self.assertIsInstance(result, SimulatedPaperTradingResult)
         self.assertEqual(result.fill_count, 0)
 
@@ -545,6 +575,25 @@ class TestSimulatedPaperTradingGuardWorkflow(unittest.TestCase):
                 109.0,
                 lambda o, p: 0.0
             )
+
+    def test_result_portfolio_exposure_provider_explicit_none(self):
+        from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
+        def price_prov(order, portfolio): return 100.0
+        def risk_prov(snapshot): return RiskDecision.allow()
+
+        result = run_simulated_paper_trading_result_with_guard(
+            df=self.df,
+            symbol=self.symbol,
+            initial_cash=self.initial_cash,
+            quantity_per_trade=self.qty,
+            kill_switch_state=self.inactive_kill_switch,
+            reference_price_provider=price_prov,
+            risk_decision_provider=risk_prov,
+            portfolio_exposure_provider=None
+        )
+        self.assertEqual(result.fill_count, 2)
+        self.assertEqual(result.order_count, 2)
+
     def test_result_invalid_injected_dependency(self):
         from tw_stock_tool.simulated_paper_trading_guard.workflow import run_simulated_paper_trading_result_with_guard
         with self.assertRaises(SimulatedPaperTradingGuardError):
