@@ -450,7 +450,7 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
             args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1"]
             with patch("builtins.print"):
                 simulated_paper_trading_cli.main(args)
-            
+
             mock_risk_config.assert_not_called()
             mock_guard_config.assert_not_called()
             mock_provider.assert_not_called()
