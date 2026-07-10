@@ -372,6 +372,7 @@ class TwStockCliTest(unittest.TestCase):
             ["stock-list", "update", "--help"],
             ["cache", "--help"],
             ["scan", "--help"],
+            ["simulated-paper-trading", "--help"],
             ["simulated-paper-trading-export", "--help"],
             ["backtest-artifact", "--help"],
             ["backtest-result-export", "--help"],
