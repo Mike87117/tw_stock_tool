@@ -118,6 +118,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         )
     )
 
+    simulated_paper_trading_parser = subparsers.add_parser(
+        "simulated-paper-trading",
+        help="Run historical simulated paper trading",
+        description="Run research-only simulated paper trading over historical data.\n"
+                    "Does not connect to brokers, place real orders, or provide investment advice."
+    )
+    from tw_stock_tool.cli import simulated_paper_trading_cli
+    simulated_paper_trading_parser.set_defaults(
+        handler=lambda args: _dispatch_existing_main(
+            simulated_paper_trading_cli.main,
+            "simulated_paper_trading_cli.py",
+            args.args,
+        )
+    )
+
     simulated_paper_trading_export_parser = subparsers.add_parser(
         "simulated-paper-trading-export", 
         help="Export reports from a simulated paper trading JSON artifact",

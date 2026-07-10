@@ -212,6 +212,30 @@ class TwStockCliTest(unittest.TestCase):
 
         self.assertNotEqual(ctx.exception.code, 0)
 
+    def test_simulated_paper_trading_subcommand_dispatches_to_cli(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_main() -> None:
+            captured.append(sys.argv[:])
+
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.main", side_effect=fake_main) as mocked:
+            twstock_cli.main([
+                "simulated-paper-trading",
+                "--stock", "2330",
+                "--strategy", "ma_cross",
+                "--initial-cash", "100000",
+                "--quantity-per-trade", "1000",
+            ])
+
+        mocked.assert_called_once_with()
+        self.assertEqual(captured[0], [
+            "simulated_paper_trading_cli.py",
+            "--stock", "2330",
+            "--strategy", "ma_cross",
+            "--initial-cash", "100000",
+            "--quantity-per-trade", "1000",
+        ])
+
     def test_simulated_paper_trading_export_subcommand_dispatches_to_cli(self) -> None:
         captured: list[list[str]] = []
 
@@ -320,6 +344,7 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("parameter-sweep", output)
         self.assertIn("backtest-report", output)
         self.assertIn("walk-forward", output)
+        self.assertIn("simulated-paper-trading", output)
         self.assertIn("simulated-paper-trading-export", output)
         self.assertIn("backtest-artifact", output)
         self.assertIn("backtest-result-export", output)
