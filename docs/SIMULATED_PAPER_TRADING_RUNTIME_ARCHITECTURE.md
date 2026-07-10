@@ -267,19 +267,19 @@ Estimated removable surface after explicit deprecation and migration work:
 ## 8. Approved Phase Sequence
 
 ```text
-Phase 48.10 - Runtime state and pending BUY reservation model boundary
-Phase 48.11 - Single-symbol bar stepper refactor
-Phase 48.12 - Chronological multi-symbol coordinator
-Phase 48.13 - Aggregate portfolio result boundary
-Phase 48.14 - Aggregate serialization and export
-Phase 48.15 - Historical multi-symbol CLI planning
-Phase 48.16 - CLI total-exposure integration
+Phase 48.10 — COMPLETE
+Phase 48.11 — COMPLETE
+Phase 48.12 — PLANNED / NOT AUTHORIZED
+Phase 48.13 — PLANNED / NOT AUTHORIZED
+Phase 48.14 — PLANNED / NOT AUTHORIZED
+Phase 48.15 — PLANNED / NOT AUTHORIZED
+Phase 48.16 — PLANNED / NOT AUTHORIZED
 ```
 
-Only **Phase 48.10** is approved for implementation now. Later phases are a
-sequence, not implicit authorization.
+Phases 48.10 and 48.11 are complete.
+Phase 48.12 and all later phases remain planning entries and are not authorized by this document.
 
-### Phase 48.11 scope and acceptance criteria [DONE]
+### Completed Phase 48.11 boundary
 
 Phase 48.11 changed the smallest set needed to step one symbol by one bar
 using an injected `SimulatedPaperTradingRuntimeState`. It preserved the
@@ -338,19 +338,35 @@ coordinator, aggregate result, CLI flag, or public package export.
 
 - Changed files: this document, `docs/DEVELOPMENT_ROADMAP.md`,
   `src/tw_stock_tool/paper_trading/engine.py`, `src/tw_stock_tool/paper_trading/stepper.py`,
-  `tests/test_paper_trading_engine.py`, and `tests/test_paper_trading_stepper.py`
+  `tests/test_paper_trading_engine.py`, `tests/test_paper_trading_stepper.py`,
+  and `tests/test_simulated_paper_trading_cli.py`
 - Extracted simulated bar processing into a new `step_simulated_symbol_bar` function in `stepper.py`
 - Updated the existing engine loop in `engine.py` to maintain backwards compatibility while delegating to the stepper
 - Updated the engine to use `SimulatedPaperTradingRuntimeState`
 - Enforced a fail-closed policy where signals on invalid (NaN, Infinity, zero, negative) Open prices do not record accepted orders or trigger fills
 - Did not add a multi-symbol chronological coordinator, aggregate portfolio result, or CLI flag
 - Did not export new modules from `tw_stock_tool.paper_trading`
-- Phase 48.11 implementation commit 1: `15ec8611510aaf6141f964385dabff9bd449addc`
+
 ## Record
-- Implementation Commit SHA: `15ec8611510aaf6141f964385dabff9bd449addc`
-- New stepper test filename: `tests/test_paper_trading_stepper.py`
-- Existing engine test filename: `tests/test_paper_trading_engine.py`
-- Total suite run count: 1270 tests, 1 failure (test_invalid_signal_row_price)
+- implementation commit: `15ec8611510aaf6141f964385dabff9bd449addc`
+- initial architecture-record commit: `cb6026a06f23dd4542293e0f2b6ea8151822073c`
+- test-coverage correction commit: `c27ae1df2d564728edda93a5fb1ae31d1df96cee`
+- intermediate HOLD record commit: `ceb466c84bebb6dba5ee494aa4d538f3fa1e160d` (captured the one failing legacy CLI regression and was superseded by this final correction)
+- CLI regression correction commit: `910771450acbf95860a3838ecb8be0da96d29ea1`
+
+- Stepper and engine: 62 tests, OK
+- Runtime/model regression: 102 tests, OK
+- Guard regression: 92 tests, OK
+- CLI regression: 42 tests, OK
+- Broader paper-trading regression: 429 tests, OK
+- Full suite: 1270 tests, OK
+
+- all final results PASS
+- invalid signal-row Open now produces no candidate, no guard call, no accepted order, no rejection, and no fill
+- CLI emits a normal zero-order summary
+- no production code change was required
+- no CLI implementation change was required
+- no Phase 48.12 work occurred
 
 
 Known limitations are intentional: no chronological coordinator, aggregate result, aggregate serialization/export,
