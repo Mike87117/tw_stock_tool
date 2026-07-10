@@ -1,4 +1,3 @@
-import math
 import sys
 import unittest
 from unittest.mock import patch, MagicMock
@@ -219,7 +218,7 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             simulated_paper_trading_cli.main(args)
         self.assertEqual(cm.exception.code, 1)
-        
+
         # Missing exit_signal
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Open": [10], "Close": [10], "entry_signal": [True]}))
         with self.assertRaises(SystemExit) as cm:
@@ -267,11 +266,11 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     def test_engine_call_contract(self, mock_build, mock_run, mock_analyze):
         mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
         df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
-        
+
         with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
             mock_strat_func = MagicMock(return_value=df_exec_mock)
             mock_strats.__getitem__.return_value = mock_strat_func
-            
+
             mock_build.return_value = {
                 "symbol": "2330", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0,
                 "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0,
@@ -283,10 +282,10 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
                 "--quantity-per-trade", "1000", "--fee-rate", "0.001", "--tax-rate", "0.003",
                 "--slippage-per-share", "0.5"
             ]
-            
+
             with patch("builtins.print"):
                 simulated_paper_trading_cli.main(args)
-                
+
             mock_run.assert_called_once()
             call_kwargs = mock_run.call_args[1]
             self.assertIs(call_kwargs["df"], df_exec_mock)
@@ -305,11 +304,11 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     def test_stdout_boundary(self, mock_build, mock_run, mock_analyze):
         mock_analyze.return_value = MagicMock(symbol="TSMC")
         df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
-        
+
         with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
             mock_strat_func = MagicMock(return_value=df_exec_mock)
             mock_strats.__getitem__.return_value = mock_strat_func
-            
+
             mock_build.return_value = {
                 "symbol": "2330",
                 "initial_cash": 100000,
@@ -323,18 +322,16 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
                 "order_count": 2,
                 "fill_count": 2,
             }
-            
-            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000"]
-            
-            import io
-            with patch("sys.stdout", new_callable=io.StringIO) if sys.version_info >= (3, 0) else patch("sys.stdout") as mock_stdout:
-                if hasattr(sys, 'io'):
-                    stdout = sys.stdout
-                else:
-                    stdout = mock_stdout if sys.version_info < (3, 0) else mock_stdout # mock_stdout is the StringIO if new_callable
 
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000"]
+
+            from io import StringIO
+            from contextlib import redirect_stdout
+
+            output_buffer = StringIO()
+            with redirect_stdout(output_buffer):
                 simulated_paper_trading_cli.main(args)
-                output = mock_stdout.getvalue()
+            output = output_buffer.getvalue()
 
             self.assertIn("Symbol: 2330", output)
             self.assertIn("Initial Cash: 100000", output)
@@ -360,10 +357,10 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     def test_runtime_error_behavior(self, mock_print, mock_analyze):
         mock_analyze.side_effect = RuntimeError("Mocked analysis error")
         args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000"]
-        
+
         with self.assertRaises(SystemExit) as cm:
             simulated_paper_trading_cli.main(args)
-        
+
         self.assertEqual(cm.exception.code, 1)
         mock_print.assert_any_call("Error: Mocked analysis error")
 
@@ -373,11 +370,11 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     def test_no_file_writing(self, mock_build, mock_run, mock_analyze):
         mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
         df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
-        
+
         with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
             mock_strat_func = MagicMock(return_value=df_exec_mock)
             mock_strats.__getitem__.return_value = mock_strat_func
-            
+
             mock_build.return_value = {
                 "symbol": "2330", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0,
                 "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0,
@@ -385,14 +382,14 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
             }
 
             args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000"]
-            
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 original_cwd = os.getcwd()
                 os.chdir(temp_dir)
                 try:
                     with patch("builtins.print"):
                         simulated_paper_trading_cli.main(args)
-                    
+
                     files = os.listdir(".")
                     self.assertEqual(len(files), 0, "No files should be created in the current directory.")
                 finally:
