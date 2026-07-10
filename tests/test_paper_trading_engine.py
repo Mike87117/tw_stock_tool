@@ -477,3 +477,47 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         portfolio = run_simulated_paper_trading(df, "2330", 100000.0)
         self.assertEqual(len(portfolio.trade_log.orders), 1)
         self.assertEqual(len(portfolio.trade_log.fills), 0)
+
+    @patch("tw_stock_tool.paper_trading.engine.step_simulated_symbol_bar")
+    def test_engine_delegates_to_stepper(self, mock_step):
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0],
+            "entry_signal": [True, False],
+            "exit_signal": [False, False],
+        }, index=["2023-01-01", "2023-01-02"])
+        
+        portfolio = run_simulated_paper_trading(df, "2330", 100000.0, quantity_per_trade=100)
+        
+        self.assertEqual(mock_step.call_count, 2)
+        
+        call_1_kwargs = mock_step.call_args_list[0].kwargs
+        call_2_kwargs = mock_step.call_args_list[1].kwargs
+        
+        self.assertIs(call_1_kwargs["runtime_state"], call_2_kwargs["runtime_state"])
+        self.assertIs(portfolio, call_1_kwargs["runtime_state"].portfolio)
+        
+        self.assertEqual(call_1_kwargs["symbol"], "2330")
+        self.assertEqual(call_1_kwargs["bar_position"], 0)
+        self.assertEqual(call_1_kwargs["index_label"], "2023-01-01")
+        self.assertEqual(call_1_kwargs["open_price"], 100.0)
+        self.assertEqual(call_1_kwargs["entry_signal"], True)
+        self.assertEqual(call_1_kwargs["exit_signal"], False)
+
+        self.assertEqual(call_2_kwargs["symbol"], "2330")
+        self.assertEqual(call_2_kwargs["bar_position"], 1)
+        self.assertEqual(call_2_kwargs["index_label"], "2023-01-02")
+        self.assertEqual(call_2_kwargs["open_price"], 101.0)
+        self.assertEqual(call_2_kwargs["entry_signal"], False)
+        self.assertEqual(call_2_kwargs["exit_signal"], False)
+
+    def test_engine_generates_correct_order_ids(self):
+        df = pd.DataFrame({
+            "Open": [100.0, 101.0, 102.0],
+            "entry_signal": [True, False, False],
+            "exit_signal": [False, True, False],
+        })
+        portfolio = run_simulated_paper_trading(df, "AAPL", 100000.0, quantity_per_trade=100)
+        orders = portfolio.trade_log.orders
+        self.assertEqual(len(orders), 2)
+        self.assertEqual(orders[0].order_id, "AAPL-BUY-0")
+        self.assertEqual(orders[1].order_id, "AAPL-SELL-1")
