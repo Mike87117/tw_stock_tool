@@ -213,11 +213,11 @@ class TestGuardBuilder(unittest.TestCase):
             provider(self.order, self.portfolio)
 
     def test_critical_anti_fallback_integration(self):
-        # Order is BUY 10 @ 100 = 1000 notional.
-        # Single symbol fallback would see 5 * 90 (avg cost)? Actually fallback gets current_position_notional from somewhere else, wait: it uses average_cost maybe? Wait, adapter uses `portfolio.positions.get(symbol).quantity * reference_price` if no portfolio provider.
-        # Legacy fallback is: 5 * 100 = 500. 500 + 1000 = 1500.
-        # Real provider returns 2000. 2000 + 1000 = 3000.
-        # 3000 > 2500 -> must reject. Proves real provider was used.
+        # BUY candidate notional: 10 × 100 = 1000.
+        # Legacy single-symbol fallback: 5 × 100 = 500.
+        # Portfolio provider exposure: 2000.
+        # Correct projected total exposure: 2000 + 1000 = 3000.
+        # Because 3000 exceeds the 2500 limit, the decision must reject.
         risk_config = SimulatedPaperTradingRiskConfig(max_total_exposure=2500.0)
         config = SimulatedPaperTradingGuardConfig(risk=risk_config)
         provider = build_guard_decision_provider_from_config(

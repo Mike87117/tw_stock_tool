@@ -101,6 +101,12 @@ class TestSimulatedPaperTradingRiskConfig(unittest.TestCase):
         with self.assertRaisesRegex(RiskConfigError, "integer"):
             SimulatedPaperTradingRiskConfig(max_position_quantity=10.5) # type: ignore
 
+    def test_max_total_exposure_accepts_positive_integer_and_float(self):
+        cfg_int = SimulatedPaperTradingRiskConfig(max_total_exposure=3000)
+        self.assertEqual(cfg_int.max_total_exposure, 3000)
+        cfg_float = SimulatedPaperTradingRiskConfig(max_total_exposure=3000.5)
+        self.assertEqual(cfg_float.max_total_exposure, 3000.5)
+
     def test_max_total_exposure_rejects_zero_and_negative(self):
         with self.assertRaisesRegex(RiskConfigError, "strictly positive"):
             SimulatedPaperTradingRiskConfig(max_total_exposure=0)
@@ -110,14 +116,18 @@ class TestSimulatedPaperTradingRiskConfig(unittest.TestCase):
     def test_max_total_exposure_rejects_infinity(self):
         with self.assertRaisesRegex(RiskConfigError, "finite"):
             SimulatedPaperTradingRiskConfig(max_total_exposure=float("inf"))
+        with self.assertRaisesRegex(RiskConfigError, "finite"):
+            SimulatedPaperTradingRiskConfig(max_total_exposure=float("-inf"))
 
     def test_max_total_exposure_rejects_nan(self):
         with self.assertRaisesRegex(RiskConfigError, "finite"):
             SimulatedPaperTradingRiskConfig(max_total_exposure=float("nan"))
 
     def test_max_total_exposure_rejects_bool(self):
-        with self.assertRaisesRegex(RiskConfigError, "cannot be a boolean"):
-            SimulatedPaperTradingRiskConfig(max_total_exposure=True)
+        for val in (True, False):
+            with self.subTest(val=val):
+                with self.assertRaisesRegex(RiskConfigError, "cannot be a boolean"):
+                    SimulatedPaperTradingRiskConfig(max_total_exposure=val)
 
     def test_max_total_exposure_rejects_numeric_string(self):
         with self.assertRaisesRegex(RiskConfigError, "must be numeric"):
