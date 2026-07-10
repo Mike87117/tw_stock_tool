@@ -279,14 +279,13 @@ Phase 48.16 - CLI total-exposure integration
 Only **Phase 48.10** is approved for implementation now. Later phases are a
 sequence, not implicit authorization.
 
-### Proposed Phase 48.11 scope and acceptance criteria
+### Phase 48.11 scope and acceptance criteria [DONE]
 
-Phase 48.11 should change the smallest set needed to step one symbol by one bar
-using an injected `SimulatedPaperTradingRuntimeState`. It should preserve the
+Phase 48.11 changed the smallest set needed to step one symbol by one bar
+using an injected `SimulatedPaperTradingRuntimeState`. It preserved the
 current public full-history functions as compatibility wrappers, next-bar-open
-timing, guard behavior, costs, and existing result behavior. It should add no
-coordinator, aggregate result, CLI flag, or public package export. Exact changed
-files require separate approval.
+timing, guard behavior, costs, and existing result behavior. It added no
+coordinator, aggregate result, CLI flag, or public package export.
 
 ## 9. Decision Log
 
@@ -347,6 +346,12 @@ files require separate approval.
 - Did not add a multi-symbol chronological coordinator, aggregate portfolio result, or CLI flag
 - Did not export new modules from `tw_stock_tool.paper_trading`
 - Phase 48.11 implementation commit 1: `15ec8611510aaf6141f964385dabff9bd449addc`
+## Record
+- Implementation Commit SHA: `15ec8611510aaf6141f964385dabff9bd449addc`
+- New stepper test filename: `tests/test_paper_trading_stepper.py`
+- Existing engine test filename: `tests/test_paper_trading_engine.py`
+- Total suite run count: 1270 tests, 1 failure (test_invalid_signal_row_price)
+
 
 Known limitations are intentional: no chronological coordinator, aggregate result, aggregate serialization/export,
 multi-symbol CLI, `--max-total-exposure`, portfolio-wide user-facing
