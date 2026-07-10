@@ -311,7 +311,7 @@ files require separate approval.
 - Contract: persistent repository architecture map, invalid options, reservation
   rule, refactor matrix, approved sequence, and decision log
 - Baseline tests: 1207 tests, OK
-- Commit SHA: `bb48c94`
+- Commit SHA: `bb48c9476fc9ae8f84f287fe99296ac18e76fbf0`
 
 ### Phase 48.10 implementation
 
@@ -332,8 +332,8 @@ files require separate approval.
   - runtime-related engine/guard regression: 121 tests, OK
   - full suite: 1237 tests, OK
 - Baseline-to-final delta: 30 tests
-- Architecture audit commit: `bb48c94`
-- Implementation commit: to be recorded after the second append-only commit
+- Architecture audit commit: `bb48c9476fc9ae8f84f287fe99296ac18e76fbf0`
+- Phase 48.10 implementation commit: `4f557573e93f1458fabe734bde38c2af0696e46f`
 
 Known limitations are intentional: no engine integration, bar stepper,
 chronological coordinator, aggregate result, aggregate serialization/export,
