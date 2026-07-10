@@ -311,19 +311,31 @@ files require separate approval.
 - Contract: persistent repository architecture map, invalid options, reservation
   rule, refactor matrix, approved sequence, and decision log
 - Baseline tests: 1207 tests, OK
-- Commit SHA: to be recorded after the audit-only commit
+- Commit SHA: `bb48c94`
 
 ### Phase 48.10 implementation
 
-This subsection must be updated after implementation with:
+- Changed files: this document, `docs/DEVELOPMENT_ROADMAP.md`,
+  `src/tw_stock_tool/paper_trading/runtime.py`, and
+  `tests/test_paper_trading_runtime.py`
+- Implemented `SimulatedPendingOrderState` with strict order and finite positive
+  numeric reference-price validation, float normalization, BUY reservation, and
+  zero SELL reservation
+- Implemented `SimulatedPaperTradingRuntimeState` with exact portfolio identity,
+  per-symbol dictionary validation, key/order-symbol equality, independent
+  default mappings, and total BUY reservation
+- Added no optional state methods, package exports, engine integration, or
+  runtime behavior changes
+- Tests:
+  - targeted runtime: 30 tests, OK
+  - paper model regression: 40 tests, OK
+  - runtime-related engine/guard regression: 121 tests, OK
+  - full suite: 1237 tests, OK
+- Baseline-to-final delta: 30 tests
+- Architecture audit commit: `bb48c94`
+- Implementation commit: to be recorded after the second append-only commit
 
-- exact changed files
-- implemented model contracts and validation
-- targeted, model-regression, runtime-regression, and full-suite counts
-- known limitations and deferred issues
-- append-only commit SHAs
-
-Current known limitations are intentional: no engine integration, bar stepper,
+Known limitations are intentional: no engine integration, bar stepper,
 chronological coordinator, aggregate result, aggregate serialization/export,
 multi-symbol CLI, `--max-total-exposure`, portfolio-wide user-facing
 enforcement, broker interface, live data, or live order capability exists.
