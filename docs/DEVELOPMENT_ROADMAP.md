@@ -180,7 +180,7 @@ Broker Interface
 - Phase 42.x–47.x：完成 (simulated paper trading guard adapter, workflow, configuration builder, and reference-price-provider boundaries)
 - Phase 48.2：完成 (DataFrame signal-time reference price provider)
 - Phase 48.4：完成 (historical simulated paper trading CLI runner)
-- Phase 48.5：完成 (simulated paper trading CLI risk flags)
+- Phase 48.5：完成 (CLI risk limits for max order notional, max position quantity, and max position notional)
 - Phase 48.6：完成 (portfolio-wide simulated exposure valuation provider boundary)
 - Phase 48.7：完成 (optional portfolio-wide exposure provider injection into the simulated paper trading guard adapter, with legacy single-symbol fallback preserved)
 

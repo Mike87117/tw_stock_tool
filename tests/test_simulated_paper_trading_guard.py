@@ -89,7 +89,7 @@ class TestSimulatedPaperTradingGuard(unittest.TestCase):
         risk = RiskDecision.reject(["Risk rejected."])
         kill_switch = KillSwitchDecision(is_allowed=False, reason="Kill switch active.")
         decision = evaluate_simulated_paper_trading_guard(risk, kill_switch)
-        
+
         expected_meta = {
             "risk_allowed": False,
             "kill_switch_allowed": False,
@@ -111,6 +111,7 @@ class TestSimulatedPaperTradingGuard(unittest.TestCase):
             "SimulatedPaperTradingGuardAdapter",
             "ReferencePriceProvider",
             "RiskDecisionProvider",
+            "PortfolioExposureProvider",
             "run_simulated_paper_trading_with_guard",
             "run_simulated_paper_trading_result_with_guard",
         ]
