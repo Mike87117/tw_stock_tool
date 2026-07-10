@@ -395,5 +395,282 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
                 finally:
                     os.chdir(original_cwd)
 
+    def test_parser_defaults(self):
+        args = simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1"])
+        self.assertIsNone(args.max_order_notional)
+        self.assertIsNone(args.max_position_quantity)
+        self.assertIsNone(args.max_position_notional)
+
+    def test_valid_parser_values(self):
+        args = simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "100000", "--max-position-quantity", "2000", "--max-position-notional", "250000"])
+        self.assertEqual(args.max_order_notional, 100000.0)
+        self.assertEqual(args.max_position_quantity, 2000)
+        self.assertEqual(args.max_position_notional, 250000.0)
+
+    def test_invalid_notional_values(self):
+        import io
+        from unittest.mock import patch
+        invalid_vals = ["0", "-1", "nan", "inf", "-inf", "abc"]
+        for val in invalid_vals:
+            with self.assertRaises(SystemExit) as cm:
+                with patch("sys.stderr", new_callable=io.StringIO):
+                    simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", val])
+            self.assertEqual(cm.exception.code, 2)
+            with self.assertRaises(SystemExit) as cm:
+                with patch("sys.stderr", new_callable=io.StringIO):
+                    simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-position-notional", val])
+            self.assertEqual(cm.exception.code, 2)
+
+    def test_invalid_quantity_values(self):
+        import io
+        from unittest.mock import patch
+        invalid_vals = ["0", "-1", "1.5", "10.0", "True", "abc"]
+        for val in invalid_vals:
+            with self.assertRaises(SystemExit) as cm:
+                with patch("sys.stderr", new_callable=io.StringIO):
+                    simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-position-quantity", val])
+            self.assertEqual(cm.exception.code, 2)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.run_simulated_paper_trading_result")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingRiskConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingGuardConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.DataFrameReferencePriceProvider")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_guard_decision_provider_from_config")
+    def test_no_risk_lazy_behavior(self, mock_build_guard, mock_provider, mock_guard_conf, mock_risk_conf, mock_summary, mock_run, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            mock_summary.return_value = {"symbol": "2330", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1"]
+            
+            with patch("builtins.print"):
+                simulated_paper_trading_cli.main(args)
+            
+            mock_risk_conf.assert_not_called()
+            mock_guard_conf.assert_not_called()
+            mock_provider.assert_not_called()
+            mock_build_guard.assert_not_called()
+            
+            self.assertIsNone(mock_run.call_args[1]["guard_decision_provider"])
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.run_simulated_paper_trading_result")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingRiskConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingGuardConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.DataFrameReferencePriceProvider")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_guard_decision_provider_from_config")
+    def test_individual_rule_mapping(self, mock_build_guard, mock_provider, mock_guard_conf, mock_risk_conf, mock_summary, mock_run, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            mock_summary.return_value = {"symbol": "2330", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+            
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "50000"]
+            with patch("builtins.print"):
+                simulated_paper_trading_cli.main(args)
+            mock_risk_conf.assert_called_with(max_order_notional=50000.0, max_position_quantity=None, max_position_notional=None)
+
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-position-quantity", "10"]
+            with patch("builtins.print"):
+                simulated_paper_trading_cli.main(args)
+            mock_risk_conf.assert_called_with(max_order_notional=None, max_position_quantity=10, max_position_notional=None)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.run_simulated_paper_trading_result")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingRiskConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.SimulatedPaperTradingGuardConfig")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.DataFrameReferencePriceProvider")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_guard_decision_provider_from_config")
+    def test_multiple_rule_composition(self, mock_build_guard, mock_provider, mock_guard_conf, mock_risk_conf, mock_summary, mock_run, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            mock_summary.return_value = {"symbol": "2330", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+            
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "50000", "--max-position-quantity", "10", "--max-position-notional", "100000"]
+            with patch("builtins.print"):
+                simulated_paper_trading_cli.main(args)
+            
+            mock_risk_conf.assert_called_once_with(max_order_notional=50000.0, max_position_quantity=10, max_position_notional=100000.0)
+            mock_guard_conf.assert_called_once_with(risk=mock_risk_conf.return_value)
+            mock_provider.assert_called_once_with(df_exec_mock)
+            mock_build_guard.assert_called_once_with(mock_guard_conf.return_value, reference_price_provider=mock_provider.return_value)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.run_simulated_paper_trading_result")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.DataFrameReferencePriceProvider")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_guard_decision_provider_from_config")
+    def test_exact_dataframe_identity_and_builder_contract(self, mock_build_guard, mock_provider, mock_summary, mock_run, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            mock_summary.return_value = {"symbol": "2330", "initial_cash": 0, "final_cash": 0, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 0, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+            
+            mock_build_guard.return_value = "dummy_provider"
+            
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "50000"]
+            with patch("builtins.print"):
+                simulated_paper_trading_cli.main(args)
+            
+            self.assertIs(mock_provider.call_args[0][0], df_exec_mock)
+            self.assertIs(mock_run.call_args[1]["df"], df_exec_mock)
+            self.assertEqual(mock_run.call_args[1]["guard_decision_provider"], "dummy_provider")
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_duplicate_index_boundary(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100, 105], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]}, index=[1, 1])
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "50000"]
+            
+            with patch("builtins.print") as mock_print:
+                with self.assertRaises(SystemExit) as cm:
+                    simulated_paper_trading_cli.main(args)
+                self.assertEqual(cm.exception.code, 1)
+                printed_errors = [call.args[0] for call in mock_print.call_args_list if "Error:" in call.args[0]]
+                self.assertTrue(any("unique" in str(e).lower() for e in printed_errors))
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_invalid_signal_row_price(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100, float("nan")], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "1", "--max-order-notional", "50000"]
+            
+            with patch("builtins.print") as mock_print:
+                with self.assertRaises(SystemExit) as cm:
+                    simulated_paper_trading_cli.main(args)
+                self.assertEqual(cm.exception.code, 1)
+                printed_errors = [call.args[0] for call in mock_print.call_args_list if "Error:" in call.args[0]]
+                self.assertTrue(len(printed_errors) > 0)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_real_risk_rejection_integration(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100.0, 105.0], "Close": [100.0, 105.0], "High": [100.0, 105.0], "Low": [100.0, 105.0], "Volume": [1000, 1000], "entry_signal": [True, False], "exit_signal": [False, False]}, index=pd.to_datetime(["2020-01-01", "2020-01-02"]))
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            
+            with patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary") as mock_summary:
+                mock_summary.return_value = {"symbol": "2330", "initial_cash": 10000, "final_cash": 10000, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 10000, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+                args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "10", "--max-order-notional", "500"]
+                with patch("builtins.print"):
+                    simulated_paper_trading_cli.main(args)
+                result = mock_summary.call_args[0][0]
+                self.assertEqual(len(result.rejections), 1)
+                self.assertEqual(result.order_count, 0)
+                self.assertEqual(result.fill_count, 0)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_real_allowed_order_integration(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100.0, 105.0], "Close": [100.0, 105.0], "High": [100.0, 105.0], "Low": [100.0, 105.0], "Volume": [1000, 1000], "entry_signal": [True, False], "exit_signal": [False, False]}, index=pd.to_datetime(["2020-01-01", "2020-01-02"]))
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            
+            with patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary") as mock_summary:
+                mock_summary.return_value = {"symbol": "2330", "initial_cash": 10000, "final_cash": 10000, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 10000, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+                args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "10", "--max-order-notional", "1000"]
+                with patch("builtins.print"):
+                    simulated_paper_trading_cli.main(args)
+                result = mock_summary.call_args[0][0]
+                self.assertEqual(len(result.rejections), 0)
+                self.assertEqual(result.order_count, 1)
+                self.assertEqual(result.fill_count, 1)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_rule_composition_integration(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100.0, 105.0], "Close": [100.0, 105.0], "High": [100.0, 105.0], "Low": [100.0, 105.0], "Volume": [1000, 1000], "entry_signal": [True, False], "exit_signal": [False, False]}, index=pd.to_datetime(["2020-01-01", "2020-01-02"]))
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            
+            with patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary") as mock_summary:
+                mock_summary.return_value = {"symbol": "2330", "initial_cash": 10000, "final_cash": 10000, "final_position_quantity": 0, "realized_pnl": 0, "unrealized_pnl": 0, "total_equity": 10000, "total_return": 0, "total_return_pct": 0, "order_count": 0, "fill_count": 0}
+                args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "10", "--max-order-notional", "1000", "--max-position-quantity", "5"]
+                with patch("builtins.print"):
+                    simulated_paper_trading_cli.main(args)
+                result = mock_summary.call_args[0][0]
+                self.assertEqual(len(result.rejections), 1)
+                self.assertEqual(result.order_count, 0)
+                self.assertEqual(result.fill_count, 0)
+
+    def test_kill_switch_absence(self):
+        import io
+        from unittest.mock import patch
+        with self.assertRaises(SystemExit) as cm:
+            with patch("sys.stderr", new_callable=io.StringIO):
+                simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--kill-switch"])
+        self.assertEqual(cm.exception.code, 2)
+        with self.assertRaises(SystemExit) as cm:
+            with patch("sys.stderr", new_callable=io.StringIO):
+                simulated_paper_trading_cli._parse_args(["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--kill-switch-enabled"])
+        self.assertEqual(cm.exception.code, 2)
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_output_regression(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100.0, 105.0], "Close": [100.0, 105.0], "High": [100.0, 105.0], "Low": [100.0, 105.0], "Volume": [1000, 1000], "entry_signal": [True, False], "exit_signal": [False, False]}, index=pd.to_datetime(["2020-01-01", "2020-01-02"]))
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "10", "--max-order-notional", "1000"]
+            
+            import io
+            from contextlib import redirect_stdout
+            output_buffer = io.StringIO()
+            with redirect_stdout(output_buffer):
+                simulated_paper_trading_cli.main(args)
+            output = output_buffer.getvalue()
+            
+            self.assertIn("Symbol: TSMC", output)
+            self.assertIn("Total Return", output)
+            self.assertNotIn("Rejection Count", output)
+            self.assertNotIn("Win Rate", output)
+            self.assertNotIn("Trade Count", output)
+            self.assertNotIn("investment recommendation", output.lower())
+
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
+    def test_no_file_writing_with_risk_flags(self, mock_analyze):
+        mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
+        df_exec_mock = pd.DataFrame({"Open": [100.0, 105.0], "Close": [100.0, 105.0], "High": [100.0, 105.0], "Low": [100.0, 105.0], "Volume": [1000, 1000], "entry_signal": [True, False], "exit_signal": [False, False]}, index=pd.to_datetime(["2020-01-01", "2020-01-02"]))
+        
+        with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
+            mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
+            args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "10", "--max-order-notional", "1000"]
+            
+            import tempfile
+            import os
+            with tempfile.TemporaryDirectory() as temp_dir:
+                original_cwd = os.getcwd()
+                os.chdir(temp_dir)
+                try:
+                    with patch("builtins.print"):
+                        simulated_paper_trading_cli.main(args)
+                    files = os.listdir(".")
+                    self.assertEqual(len(files), 0)
+                finally:
+                    os.chdir(original_cwd)
+
 if __name__ == '__main__':
     unittest.main()

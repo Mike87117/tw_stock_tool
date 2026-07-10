@@ -225,6 +225,9 @@ class TwStockCliTest(unittest.TestCase):
                 "--strategy", "ma_cross",
                 "--initial-cash", "100000",
                 "--quantity-per-trade", "1000",
+                "--max-order-notional", "50000",
+                "--max-position-quantity", "1000",
+                "--max-position-notional", "100000",
             ])
 
         mocked.assert_called_once_with()
@@ -234,6 +237,9 @@ class TwStockCliTest(unittest.TestCase):
             "--strategy", "ma_cross",
             "--initial-cash", "100000",
             "--quantity-per-trade", "1000",
+            "--max-order-notional", "50000",
+            "--max-position-quantity", "1000",
+            "--max-position-notional", "100000",
         ])
 
     def test_simulated_paper_trading_export_subcommand_dispatches_to_cli(self) -> None:
