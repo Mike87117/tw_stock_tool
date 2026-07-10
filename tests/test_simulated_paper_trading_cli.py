@@ -581,20 +581,53 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
                 self.assertTrue(any("unique" in str(e).lower() for e in printed_errors))
 
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
-    def test_invalid_signal_row_price(self, mock_analyze):
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_guard_decision_provider_from_config")
+    @patch("tw_stock_tool.cli.simulated_paper_trading_cli.build_simulated_paper_trading_summary")
+    def test_invalid_signal_row_price_fails_closed_without_cli_abort(
+        self, mock_build_summary, mock_build_guard, mock_analyze
+    ):
         mock_analyze.return_value = MagicMock(symbol="TSMC", indicator_df=pd.DataFrame({"Close": [100.0, 105.0]}))
-        df_exec_mock = pd.DataFrame({"Open": [100, float("nan")], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+        df_exec_mock = pd.DataFrame({"Open": [100.0, float("nan")], "Close": [100.0, 105.0], "entry_signal": [False, True], "exit_signal": [False, False]})
+
+        guard_provider = MagicMock()
+        mock_build_guard.return_value = guard_provider
+
+        mock_build_summary.return_value = {
+            "symbol": "TSMC",
+            "initial_cash": 10000.0,
+            "final_cash": 10000.0,
+            "final_position_quantity": 0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "total_equity": 10000.0,
+            "total_return": 0.0,
+            "total_return_pct": 0.0,
+            "order_count": 0,
+            "fill_count": 0,
+        }
 
         with patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES") as mock_strats:
             mock_strats.__getitem__.return_value = MagicMock(return_value=df_exec_mock)
             args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "10000", "--quantity-per-trade", "1", "--max-order-notional", "50000"]
 
             with patch("builtins.print") as mock_print:
-                with self.assertRaises(SystemExit) as cm:
-                    simulated_paper_trading_cli.main(args)
-                self.assertEqual(cm.exception.code, 1)
-                printed_errors = [call.args[0] for call in mock_print.call_args_list if "Error:" in call.args[0]]
-                self.assertTrue(len(printed_errors) > 0)
+                # Should NOT raise SystemExit
+                simulated_paper_trading_cli.main(args)
+
+                guard_provider.assert_not_called()
+
+                # Get the result passed to build_simulated_paper_trading_summary
+                mock_build_summary.assert_called_once()
+                result = mock_build_summary.call_args[0][0]
+
+                self.assertEqual(result.order_count, 0)
+                self.assertEqual(result.fill_count, 0)
+                self.assertEqual(len(result.orders), 0)
+                self.assertEqual(len(result.fills), 0)
+                self.assertEqual(len(result.rejections), 0)
+
+                printed_errors = [call.args[0] for call in mock_print.call_args_list if "Error:" in str(call.args[0])]
+                self.assertEqual(len(printed_errors), 0)
 
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
     def test_real_risk_rejection_integration(self, mock_analyze):
