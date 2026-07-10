@@ -115,12 +115,12 @@ The current execution path is:
 
 ```text
 historical DataFrame
--> single-symbol engine
--> function-local portfolio
--> function-local pending order
+-> full-history compatibility engine
+-> shared runtime state
+-> single-symbol bar stepper
+-> per-symbol pending state
 -> next-bar-open fill
--> optional guard provider
--> single-symbol result
+-> existing single-symbol result
 ```
 
 `run_simulated_paper_trading(...)` validates the complete DataFrame and standard
@@ -335,7 +335,19 @@ files require separate approval.
 - Architecture audit commit: `bb48c9476fc9ae8f84f287fe99296ac18e76fbf0`
 - Phase 48.10 implementation commit: `4f557573e93f1458fabe734bde38c2af0696e46f`
 
-Known limitations are intentional: no engine integration, bar stepper,
-chronological coordinator, aggregate result, aggregate serialization/export,
+### Phase 48.11 implementation
+
+- Changed files: this document, `docs/DEVELOPMENT_ROADMAP.md`,
+  `src/tw_stock_tool/paper_trading/engine.py`, `src/tw_stock_tool/paper_trading/stepper.py`,
+  `tests/test_paper_trading_engine.py`, and `tests/test_paper_trading_stepper.py`
+- Extracted simulated bar processing into a new `step_simulated_symbol_bar` function in `stepper.py`
+- Updated the existing engine loop in `engine.py` to maintain backwards compatibility while delegating to the stepper
+- Updated the engine to use `SimulatedPaperTradingRuntimeState`
+- Enforced a fail-closed policy where signals on invalid (NaN, Infinity, zero, negative) Open prices do not record accepted orders or trigger fills
+- Did not add a multi-symbol chronological coordinator, aggregate portfolio result, or CLI flag
+- Did not export new modules from `tw_stock_tool.paper_trading`
+- Phase 48.11 implementation commit 1: `TBD_IN_COMMIT_2`
+
+Known limitations are intentional: no chronological coordinator, aggregate result, aggregate serialization/export,
 multi-symbol CLI, `--max-total-exposure`, portfolio-wide user-facing
 enforcement, broker interface, live data, or live order capability exists.

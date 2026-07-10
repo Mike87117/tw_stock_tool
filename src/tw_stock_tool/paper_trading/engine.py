@@ -4,32 +4,16 @@ from typing import Callable
 from tw_stock_tool.backtesting.signals import validate_standard_signals
 from tw_stock_tool.paper_trading.models import (
     PaperTradingModelError,
-    SimulatedFill,
     SimulatedOrder,
     SimulatedPortfolio,
-    SimulatedOrderRejection,
 )
+from tw_stock_tool.paper_trading.runtime import SimulatedPaperTradingRuntimeState
 from tw_stock_tool.paper_trading.results import (
     SimulatedPaperTradingResult,
     build_simulated_paper_trading_result,
 )
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardDecision
-
-def _evaluate_order_intent(
-    candidate: SimulatedOrder,
-    portfolio: SimulatedPortfolio,
-    static_guard: SimulatedPaperTradingGuardDecision | None,
-    dynamic_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None,
-) -> SimulatedPaperTradingGuardDecision | None:
-    if dynamic_provider is not None:
-        decision = dynamic_provider(candidate, portfolio)
-        if not isinstance(decision, SimulatedPaperTradingGuardDecision):
-            raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
-        return decision
-    if static_guard is not None:
-        return static_guard
-    return None
-
+from tw_stock_tool.paper_trading.stepper import step_simulated_symbol_bar
 
 
 def run_simulated_paper_trading(
@@ -70,75 +54,32 @@ def run_simulated_paper_trading(
 
     validate_standard_signals(df)
 
-    portfolio = SimulatedPortfolio(cash=float(initial_cash))
-
-    pending_order: SimulatedOrder | None = None
+    runtime_state = SimulatedPaperTradingRuntimeState(
+        portfolio=SimulatedPortfolio(cash=float(initial_cash))
+    )
 
     for pos, (index_label, row) in enumerate(df.iterrows()):
         open_price = float(row["Open"]) if "Open" in row else float('nan')
         entry_sig = bool(row.get("entry_signal", False))
         exit_sig = bool(row.get("exit_signal", False))
 
-        # Execute pending intent from previous bar (next_bar_open semantics)
-        if pending_order is not None:
-            if pd.isna(open_price) or open_price <= 0:
-                pass # skip fill safely
-            else:
-                try:
-                    fill = SimulatedFill(
-                        order_id=pending_order.order_id,
-                        symbol=pending_order.symbol,
-                        side=pending_order.side,
-                        quantity=pending_order.quantity,
-                        price=open_price,
-                        filled_at=index_label,
-                        fee=pending_order.quantity * open_price * fee_rate,
-                        tax=pending_order.quantity * open_price * tax_rate if pending_order.side == "SELL" else 0.0,
-                        slippage=pending_order.quantity * slippage_per_share,
-                    )
-                    portfolio.apply_fill(fill)
-                except PaperTradingModelError:
-                    # e.g., insufficient cash or shares, skip fill
-                    pass
-            pending_order = None
+        step_simulated_symbol_bar(
+            runtime_state=runtime_state,
+            symbol=symbol,
+            bar_position=pos,
+            index_label=index_label,
+            open_price=open_price,
+            entry_signal=entry_sig,
+            exit_signal=exit_sig,
+            quantity_per_trade=quantity_per_trade,
+            fee_rate=fee_rate,
+            tax_rate=tax_rate,
+            slippage_per_share=slippage_per_share,
+            guard_decision=guard_decision,
+            guard_decision_provider=guard_decision_provider,
+        )
 
-        pos_model = portfolio.position_for(symbol)
-        shares = pos_model.quantity
-
-        if shares > 0 and exit_sig:
-            order_id = f"{symbol}-SELL-{pos}"
-            candidate_order = SimulatedOrder(
-                order_id=order_id,
-                symbol=symbol,
-                side="SELL",
-                quantity=shares,
-                signal_time=index_label,
-                created_at=index_label,
-            )
-            decision = _evaluate_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider)
-            if decision is None or not decision.is_blocked:
-                pending_order = candidate_order
-                portfolio.trade_log.record_order(pending_order)
-            else:
-                portfolio.trade_log.record_rejection(SimulatedOrderRejection(candidate_order=candidate_order, reasons=decision.reasons))
-        elif shares == 0 and entry_sig:
-            order_id = f"{symbol}-BUY-{pos}"
-            candidate_order = SimulatedOrder(
-                order_id=order_id,
-                symbol=symbol,
-                side="BUY",
-                quantity=quantity_per_trade,
-                signal_time=index_label,
-                created_at=index_label,
-            )
-            decision = _evaluate_order_intent(candidate_order, portfolio, guard_decision, guard_decision_provider)
-            if decision is None or not decision.is_blocked:
-                pending_order = candidate_order
-                portfolio.trade_log.record_order(pending_order)
-            else:
-                portfolio.trade_log.record_rejection(SimulatedOrderRejection(candidate_order=candidate_order, reasons=decision.reasons))
-
-    return portfolio
+    return runtime_state.portfolio
 
 
 def run_simulated_paper_trading_result(

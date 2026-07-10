@@ -443,3 +443,37 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         self.assertEqual(result.fill_count, 0)
         self.assertEqual(result.order_count, 0)
 
+    def test_invalid_signal_open_does_not_create_order(self):
+        """A signal on an invalid Open does not create an accepted order or fill."""
+        for invalid_open in [float('nan'), float('inf'), float('-inf'), 0.0, -10.0]:
+            with self.subTest(invalid_open=invalid_open):
+                df = pd.DataFrame({
+                    "Open": [invalid_open, 100.0],
+                    "entry_signal": [True, False],
+                    "exit_signal": [False, False],
+                })
+                portfolio = run_simulated_paper_trading(df, "2330", 100000.0)
+                self.assertEqual(len(portfolio.trade_log.orders), 0)
+                self.assertEqual(len(portfolio.trade_log.fills), 0)
+
+    def test_last_bar_valid_signal_records_order(self):
+        """Last-bar valid signal still records an accepted order but does not fill it."""
+        df = pd.DataFrame({
+            "Open": [100.0],
+            "entry_signal": [True],
+            "exit_signal": [False],
+        })
+        portfolio = run_simulated_paper_trading(df, "2330", 100000.0)
+        self.assertEqual(len(portfolio.trade_log.orders), 1)
+        self.assertEqual(len(portfolio.trade_log.fills), 0)
+
+    def test_invalid_next_bar_fill_remains_safe(self):
+        """Existing invalid next-bar fill behavior remains safe."""
+        df = pd.DataFrame({
+            "Open": [100.0, float('nan'), 105.0],
+            "entry_signal": [True, False, False],
+            "exit_signal": [False, False, False],
+        })
+        portfolio = run_simulated_paper_trading(df, "2330", 100000.0)
+        self.assertEqual(len(portfolio.trade_log.orders), 1)
+        self.assertEqual(len(portfolio.trade_log.fills), 0)
