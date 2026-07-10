@@ -353,6 +353,14 @@ coordinator, aggregate result, CLI flag, or public package export.
 - test-coverage correction commit: `c27ae1df2d564728edda93a5fb1ae31d1df96cee`
 - intermediate HOLD record commit: `ceb466c84bebb6dba5ee494aa4d538f3fa1e160d` (captured the one failing legacy CLI regression and was superseded by this final correction)
 - CLI regression correction commit: `910771450acbf95860a3838ecb8be0da96d29ea1`
+- whitespace cleanup commit: `1704a3bd0bc2057e7b7cc8cbbb96ed69594775f9`
+- trailing-whitespace occurrences removed: 28
+- AST equivalence check: PASS
+- `git diff main...HEAD --check`: PASS
+- Git trailing-whitespace scan: PASS
+- independent pathlib trailing-whitespace scan: PASS
+- whitespace cleanup changed no Python semantics
+- final targeted and full-suite tests remained PASS
 
 - Stepper and engine: 62 tests, OK
 - Runtime/model regression: 102 tests, OK
