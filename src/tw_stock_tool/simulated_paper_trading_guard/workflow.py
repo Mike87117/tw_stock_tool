@@ -2,7 +2,7 @@ import pandas as pd
 from tw_stock_tool.paper_trading.models import SimulatedPortfolio
 from tw_stock_tool.kill_switch.models import KillSwitchState
 from typing import TYPE_CHECKING
-from .adapter import SimulatedPaperTradingGuardAdapter, ReferencePriceProvider, RiskDecisionProvider
+from .adapter import SimulatedPaperTradingGuardAdapter, ReferencePriceProvider, RiskDecisionProvider, PortfolioExposureProvider
 
 if TYPE_CHECKING:
     from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
@@ -19,11 +19,13 @@ def run_simulated_paper_trading_with_guard(
     fee_rate: float = 0.0,
     tax_rate: float = 0.0,
     slippage_per_share: float = 0.0,
+    *,
+    portfolio_exposure_provider: PortfolioExposureProvider | None = None,
 ) -> SimulatedPortfolio:
     """
     Run simulated paper trading with guard behavior using explicitly injected providers.
-    
-    This acts as a workflow wrapper to instantiate the adapter and pass it into the 
+
+    This acts as a workflow wrapper to instantiate the adapter and pass it into the
     engine without coupling the engine directly to the guard system.
     """
     from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading
@@ -32,8 +34,9 @@ def run_simulated_paper_trading_with_guard(
         kill_switch_state=kill_switch_state,
         reference_price_provider=reference_price_provider,
         risk_decision_provider=risk_decision_provider,
+        portfolio_exposure_provider=portfolio_exposure_provider,
     )
-    
+
     return run_simulated_paper_trading(
         df=df,
         symbol=symbol,
@@ -58,11 +61,13 @@ def run_simulated_paper_trading_result_with_guard(
     tax_rate: float = 0.0,
     slippage_per_share: float = 0.0,
     last_price: float | None = None,
+    *,
+    portfolio_exposure_provider: PortfolioExposureProvider | None = None,
 ) -> 'SimulatedPaperTradingResult':
     """
     Run simulated paper trading with guard behavior and build a stable summary result object.
-    
-    This acts as a workflow wrapper to instantiate the adapter and pass it into the 
+
+    This acts as a workflow wrapper to instantiate the adapter and pass it into the
     engine result wrapper without coupling the engine directly to the guard system.
     """
     from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading_result
@@ -71,8 +76,9 @@ def run_simulated_paper_trading_result_with_guard(
         kill_switch_state=kill_switch_state,
         reference_price_provider=reference_price_provider,
         risk_decision_provider=risk_decision_provider,
+        portfolio_exposure_provider=portfolio_exposure_provider,
     )
-    
+
     return run_simulated_paper_trading_result(
         df=df,
         symbol=symbol,
