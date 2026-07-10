@@ -298,20 +298,20 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         """Blocked guard decision prevents SELL order intent and fill."""
         # First check is for BUY (allow), second check is for SELL (block)
         mock_is_blocked.side_effect = [False, True]
-        
+
         self.df.loc[self.dates[0], "entry_signal"] = True
         self.df.loc[self.dates[2], "exit_signal"] = True
-        
+
         guard = SimulatedPaperTradingGuardDecision.allow()
         portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision=guard)
-        
+
         # BUY should happen at pos 0
         self.assertEqual(len(portfolio.trade_log.orders), 1)
         self.assertEqual(portfolio.trade_log.orders[0].side, "BUY")
-        
+
         # SELL should be blocked at pos 2
         self.assertTrue(all(o.side == "BUY" for o in portfolio.trade_log.orders))
-        
+
         # Fills: only BUY fill
         self.assertEqual(len(portfolio.trade_log.fills), 1)
         self.assertEqual(portfolio.trade_log.fills[0].side, "BUY")
@@ -352,14 +352,14 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
     def test_provider_allowed_decision_records_intent(self):
         """Provider allowed decision records simulated BUY order intent and fill normally."""
         self.df.loc[self.dates[0], "entry_signal"] = True
-        
+
         provider_calls = []
         def provider(order, portfolio):
             provider_calls.append((order, portfolio))
             return SimulatedPaperTradingGuardDecision.allow()
-            
+
         portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider)
-        
+
         self.assertEqual(len(portfolio.trade_log.orders), 1)
         self.assertEqual(len(portfolio.trade_log.fills), 1)
         self.assertEqual(len(provider_calls), 1)
@@ -370,14 +370,14 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
     def test_provider_blocked_decision_prevents_buy_intent(self):
         """Provider blocked decision prevents simulated BUY order intent from being recorded."""
         self.df.loc[self.dates[0], "entry_signal"] = True
-        
+
         provider_calls = []
         def provider(order, portfolio):
             provider_calls.append(order)
             return SimulatedPaperTradingGuardDecision.block(["Blocked buy"])
-            
+
         portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider)
-        
+
         self.assertEqual(len(portfolio.trade_log.orders), 0)
         self.assertEqual(len(portfolio.trade_log.fills), 0)
         self.assertEqual(len(provider_calls), 1)
@@ -389,16 +389,16 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
         """Provider blocked decision prevents simulated SELL order intent and fill."""
         self.df.loc[self.dates[0], "entry_signal"] = True
         self.df.loc[self.dates[2], "exit_signal"] = True
-        
+
         provider_calls = []
         def provider(order, portfolio):
             provider_calls.append(order)
             if order.side == "BUY":
                 return SimulatedPaperTradingGuardDecision.allow()
             return SimulatedPaperTradingGuardDecision.block(["Blocked sell"])
-            
+
         portfolio = run_simulated_paper_trading(self.df, "2330", 200000.0, 1000, guard_decision_provider=provider)
-        
+
         self.assertEqual(len(portfolio.trade_log.orders), 1)
         self.assertEqual(portfolio.trade_log.orders[0].side, "BUY")
         self.assertEqual(len(portfolio.trade_log.fills), 1)
@@ -485,17 +485,17 @@ class TestSimulatedPaperTradingEngine(unittest.TestCase):
             "entry_signal": [True, False],
             "exit_signal": [False, False],
         }, index=["2023-01-01", "2023-01-02"])
-        
+
         portfolio = run_simulated_paper_trading(df, "2330", 100000.0, quantity_per_trade=100)
-        
+
         self.assertEqual(mock_step.call_count, 2)
-        
+
         call_1_kwargs = mock_step.call_args_list[0].kwargs
         call_2_kwargs = mock_step.call_args_list[1].kwargs
-        
+
         self.assertIs(call_1_kwargs["runtime_state"], call_2_kwargs["runtime_state"])
         self.assertIs(portfolio, call_1_kwargs["runtime_state"].portfolio)
-        
+
         self.assertEqual(call_1_kwargs["symbol"], "2330")
         self.assertEqual(call_1_kwargs["bar_position"], 0)
         self.assertEqual(call_1_kwargs["index_label"], "2023-01-01")

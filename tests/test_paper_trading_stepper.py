@@ -195,7 +195,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
         self.assertEqual(fill.price, 105.0)
         self.assertEqual(fill.fee, 50 * 105.0 * 0.01)
         self.assertEqual(fill.slippage, 50 * 0.5)
-        
+
         pos = self.portfolio.position_for("AAPL")
         self.assertEqual(pos.quantity, 50)
         self.assertEqual(self.portfolio.cash, 100000.0 - (50 * 105.0 + fill.fee + fill.slippage))
@@ -240,7 +240,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
         self.assertNotIn("AAPL", self.runtime_state.pending_orders)
         pos = self.portfolio.position_for("AAPL")
         self.assertEqual(pos.quantity, 0)
-        
+
         fill = self.portfolio.trade_log.fills[1] # first was force BUY
         self.assertEqual(fill.side, "SELL")
         self.assertEqual(fill.tax, 50 * 120.0 * 0.01)
@@ -384,7 +384,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
             quantity_per_trade=2000, # 2000 * 100 = 200,000 > 100,000
         )
         self.assertIn("AAPL", self.runtime_state.pending_orders)
-        
+
         step_simulated_symbol_bar(
             runtime_state=self.runtime_state,
             symbol="AAPL",
@@ -486,7 +486,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
                 def my_provider(order, portfolio):
                     call_count[0] += 1
                     return SimulatedPaperTradingGuardDecision.allow()
-                    
+
                 step_simulated_symbol_bar(
                     runtime_state=self.runtime_state,
                     symbol="AAPL",
@@ -579,15 +579,15 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
         self.portfolio.apply_fill(
             SimulatedFill(order_id="TEST_BUY", symbol="AAPL", side="BUY", quantity=10, price=100.0, filled_at="2023-01-01")
         )
-        
+
         # Pending SELL exceeds holdings
         sell_order = SimulatedOrder(
             order_id="TEST_SELL", symbol="AAPL", side="SELL", quantity=20, signal_time="2023-01-02", created_at="2023-01-02"
         )
         self.runtime_state.pending_orders["AAPL"] = SimulatedPendingOrderState(order=sell_order, reference_price=100.0)
-        
+
         initial_cash = self.portfolio.cash
-        
+
         # Process next valid bar
         step_simulated_symbol_bar(
             runtime_state=self.runtime_state,
@@ -599,7 +599,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
             exit_signal=False,
             quantity_per_trade=10,
         )
-        
+
         # PaperTradingModelError is swallowed
         self.assertNotIn("AAPL", self.runtime_state.pending_orders)
         self.assertEqual(len(self.portfolio.trade_log.fills), 1) # Only the initial BUY fill exists
@@ -625,11 +625,11 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
             exit_signal=True,
             quantity_per_trade=10,
         )
-        
+
         # Verify BUY fills first, position becomes open, same bar creates pending SELL
         self.assertEqual(len(self.portfolio.trade_log.fills), 1)
         self.assertEqual(self.portfolio.trade_log.fills[0].side, "BUY")
-        
+
         self.assertIn("AAPL", self.runtime_state.pending_orders)
         pending = self.runtime_state.pending_orders["AAPL"]
         self.assertEqual(pending.order.side, "SELL")
@@ -658,11 +658,11 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
             exit_signal=False,
             quantity_per_trade=15,
         )
-        
+
         # Verify SELL fills first, position becomes flat, same bar creates pending BUY
         self.assertEqual(len(self.portfolio.trade_log.fills), 2)
         self.assertEqual(self.portfolio.trade_log.fills[1].side, "SELL")
-        
+
         self.assertIn("AAPL", self.runtime_state.pending_orders)
         pending = self.runtime_state.pending_orders["AAPL"]
         self.assertEqual(pending.order.side, "BUY")
@@ -671,7 +671,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
 
     def test_complete_cost_and_pnl_reconciliation(self):
         initial_cash = self.portfolio.cash
-        
+
         # 1. Create pending BUY
         step_simulated_symbol_bar(
             runtime_state=self.runtime_state,
@@ -684,7 +684,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
             quantity_per_trade=10,
         )
         self.assertIn("AAPL", self.runtime_state.pending_orders)
-        
+
         # 2. Fill BUY with fee 0.01, slippage 0.5
         step_simulated_symbol_bar(
             runtime_state=self.runtime_state,
@@ -704,12 +704,12 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
         self.assertEqual(buy_fill.fee, 10 * 100.0 * 0.01) # 10.0
         self.assertEqual(buy_fill.slippage, 10 * 0.5) # 5.0
         self.assertEqual(buy_fill.tax, 0.0)
-        
+
         buy_cost = (10 * 100.0) + 10.0 + 5.0 # 1000 + 15 = 1015
         self.assertEqual(self.portfolio.cash, initial_cash - buy_cost)
         self.assertEqual(self.portfolio.position_for("AAPL").quantity, 10)
         self.assertEqual(self.portfolio.position_for("AAPL").average_cost, 1015 / 10) # 101.5
-        
+
         # 3. Create pending SELL
         step_simulated_symbol_bar(
             runtime_state=self.runtime_state,
@@ -722,7 +722,7 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
             quantity_per_trade=10,
         )
         self.assertIn("AAPL", self.runtime_state.pending_orders)
-        
+
         # 4. Fill SELL with fee 0.01, tax 0.003, slippage 0.5
         step_simulated_symbol_bar(
             runtime_state=self.runtime_state,
@@ -740,20 +740,20 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
         self.assertNotIn("AAPL", self.runtime_state.pending_orders)
         self.assertEqual(len(self.portfolio.trade_log.fills), 2)
         sell_fill = self.portfolio.trade_log.fills[1]
-        
+
         sell_value = 10 * 120.0 # 1200
         sell_fee = 1200 * 0.01 # 12.0
         sell_tax = 1200 * 0.003 # 3.6
         sell_slippage = 10 * 0.5 # 5.0
-        
+
         self.assertEqual(sell_fill.fee, sell_fee)
         self.assertEqual(sell_fill.tax, sell_tax)
         self.assertEqual(sell_fill.slippage, sell_slippage)
-        
+
         sell_proceeds = sell_value - sell_fee - sell_tax - sell_slippage # 1200 - 12 - 3.6 - 5 = 1179.4
         self.assertEqual(self.portfolio.cash, initial_cash - buy_cost + sell_proceeds)
         self.assertEqual(self.portfolio.position_for("AAPL").quantity, 0)
         self.assertEqual(self.portfolio.position_for("AAPL").average_cost, 0.0)
-        
+
         expected_realized_pnl = sell_proceeds - buy_cost # 1179.4 - 1015 = 164.4
         self.assertAlmostEqual(self.portfolio.position_for("AAPL").realized_pnl, expected_realized_pnl)

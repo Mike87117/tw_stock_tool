@@ -46,7 +46,7 @@ def step_simulated_symbol_bar(
         raise PaperTradingModelError("quantity_per_trade must be a positive integer.")
     if fee_rate < 0 or tax_rate < 0 or slippage_per_share < 0:
         raise PaperTradingModelError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
-    
+
     if guard_decision is not None and guard_decision_provider is not None:
         raise PaperTradingModelError("Cannot provide both guard_decision and guard_decision_provider.")
     if guard_decision is not None and not isinstance(guard_decision, SimulatedPaperTradingGuardDecision):
@@ -90,7 +90,7 @@ def step_simulated_symbol_bar(
 
     pos_model = runtime_state.portfolio.position_for(symbol)
     shares = pos_model.quantity
-    
+
     candidate_order = None
     if shares > 0 and exit_signal:
         order_id = f"{symbol}-SELL-{bar_position}"
