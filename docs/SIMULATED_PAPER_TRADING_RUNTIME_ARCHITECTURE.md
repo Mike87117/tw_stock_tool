@@ -346,7 +346,7 @@ files require separate approval.
 - Enforced a fail-closed policy where signals on invalid (NaN, Infinity, zero, negative) Open prices do not record accepted orders or trigger fills
 - Did not add a multi-symbol chronological coordinator, aggregate portfolio result, or CLI flag
 - Did not export new modules from `tw_stock_tool.paper_trading`
-- Phase 48.11 implementation commit 1: `TBD_IN_COMMIT_2`
+- Phase 48.11 implementation commit 1: `15ec8611510aaf6141f964385dabff9bd449addc`
 
 Known limitations are intentional: no chronological coordinator, aggregate result, aggregate serialization/export,
 multi-symbol CLI, `--max-total-exposure`, portfolio-wide user-facing
