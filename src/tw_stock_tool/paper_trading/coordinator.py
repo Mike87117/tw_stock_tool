@@ -37,9 +37,9 @@ def run_chronological_multi_symbol_simulated_paper_trading(
             raise ValueError(f"DataFrame for {symbol} must not be empty.")
         if "Open" not in df.columns:
             raise ValueError(f"DataFrame for {symbol} must contain 'Open'.")
-        
+
         validate_standard_signals(df)
-        
+
         if not df.index.is_unique:
             raise ValueError(f"DataFrame index for {symbol} must be unique.")
         if not df.index.is_monotonic_increasing:
@@ -84,15 +84,15 @@ def run_chronological_multi_symbol_simulated_paper_trading(
             timeline_set.update(df.index.tolist())
         except TypeError as e:
             raise TypeError("Index labels are not comparable across symbols") from e
-    
+
     try:
         timeline = sorted(list(timeline_set))
     except TypeError as e:
         raise TypeError("Mixed index types cannot be compared globally.") from e
-        
+
     cursors = {sym: 0 for sym in dataframes}
     deterministic_symbols = sorted(dataframes.keys())
-    
+
     for t in timeline:
         for symbol in deterministic_symbols:
             df = dataframes[symbol]
@@ -100,11 +100,11 @@ def run_chronological_multi_symbol_simulated_paper_trading(
             if pos < len(df) and df.index[pos] == t:
                 cursors[symbol] += 1
                 row = df.iloc[pos]
-                
-                open_price = float(row["Open"]) if "Open" in row else float('nan')
+
+                open_price = row["Open"] if "Open" in row else float('nan')
                 entry_sig = bool(row.get("entry_signal", False))
                 exit_sig = bool(row.get("exit_signal", False))
-                
+
                 step_simulated_symbol_bar(
                     runtime_state=runtime_state,
                     symbol=symbol,

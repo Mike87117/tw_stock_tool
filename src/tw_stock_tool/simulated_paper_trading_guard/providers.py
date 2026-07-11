@@ -136,8 +136,8 @@ class DataFramePortfolioExposureProvider:
 class ChronologicalRuntimePortfolioExposureProvider:
     def __init__(
         self,
-        dataframes,
-        runtime_state,
+        dataframes: Mapping[str, pd.DataFrame],
+        runtime_state: SimulatedPaperTradingRuntimeState,
         *,
         price_column: str = "Open",
     ) -> None:

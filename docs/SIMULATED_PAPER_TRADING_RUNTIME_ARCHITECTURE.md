@@ -374,9 +374,20 @@ coordinator, aggregate result, CLI flag, or public package export.
 - CLI emits a normal zero-order summary
 - no production code change was required
 - no CLI implementation change was required
-- no Phase 48.12 work occurred
 
 
-Known limitations are intentional: no chronological coordinator, aggregate result, aggregate serialization/export,
+Known limitations are intentional: aggregate result, aggregate serialization/export,
 multi-symbol CLI, `--max-total-exposure`, portfolio-wide user-facing
 enforcement, broker interface, live data, or live order capability exists.
+
+### Phase 48.12 implementation
+
+- Changed files: `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`, `docs/DEVELOPMENT_ROADMAP.md`, `src/tw_stock_tool/paper_trading/coordinator.py`, `src/tw_stock_tool/simulated_paper_trading_guard/providers.py`, `tests/test_paper_trading_coordinator.py`, `tests/test_simulated_paper_trading_guard_providers.py`
+- Implemented `run_chronological_multi_symbol_simulated_paper_trading` in `coordinator.py` to perform deterministic same-time ordering (ascending symbol order) and chronological union interleaving.
+- All bars at a timestamp are available for as-of valuation. Missing bars cause no signal but prices are retrieved via nearest-earlier logic.
+- Delegated raw-Open invalid-price fail-closed behavior to the existing stepper.
+- Added `ChronologicalRuntimePortfolioExposureProvider` that evaluates as-of valuation using only rows `<= signal_time`.
+- `ChronologicalRuntimePortfolioExposureProvider` fails closed on invalid selected as-of prices (does not fall back to older valid rows).
+- Includes pending BUY reservations; pending SELL reservations contribute zero.
+- The engine and CLI remain single-symbol.
+- Known limitations: aggregate result, aggregate serialization/export, multi-symbol CLI, and CLI `--max-total-exposure` still do not exist.
