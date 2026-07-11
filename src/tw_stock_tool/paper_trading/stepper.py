@@ -1,5 +1,5 @@
 import math
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from tw_stock_tool.paper_trading.models import (
     PaperTradingModelError,
@@ -7,6 +7,8 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedOrderRejection,
     SimulatedPortfolio,
+    SimulatedTradeEventType,
+    SimulatedTradeStatus,
 )
 from tw_stock_tool.paper_trading.runtime import (
     SimulatedPaperTradingRuntimeState,
@@ -15,6 +17,7 @@ from tw_stock_tool.paper_trading.runtime import (
 from tw_stock_tool.simulated_paper_trading_guard.models import (
     SimulatedPaperTradingGuardDecision,
 )
+
 
 def process_simulated_pending_fill(
     runtime_state: SimulatedPaperTradingRuntimeState,
@@ -26,34 +29,71 @@ def process_simulated_pending_fill(
     tax_rate: float = 0.0,
     slippage_per_share: float = 0.0,
 ) -> None:
-    is_valid_open = True
     try:
         op = float(open_price)
-        if not math.isfinite(op) or op <= 0.0:
-            is_valid_open = False
+        is_valid_open = math.isfinite(op) and op > 0.0
     except (ValueError, TypeError):
+        op = 0.0
         is_valid_open = False
 
     pending_state = runtime_state.pending_orders.pop(symbol, None)
-    if pending_state is not None:
-        if is_valid_open:
-            pending_order = pending_state.order
-            op_price = float(open_price)
-            try:
-                fill = SimulatedFill(
-                    order_id=pending_order.order_id,
-                    symbol=pending_order.symbol,
-                    side=pending_order.side,
-                    quantity=pending_order.quantity,
-                    price=op_price,
-                    filled_at=index_label,
-                    fee=pending_order.quantity * op_price * fee_rate,
-                    tax=pending_order.quantity * op_price * tax_rate if pending_order.side == "SELL" else 0.0,
-                    slippage=pending_order.quantity * slippage_per_share,
-                )
-                runtime_state.portfolio.apply_fill(fill)
-            except PaperTradingModelError:
-                pass
+    if pending_state is None:
+        return
+
+    order = pending_state.order
+    log = runtime_state.portfolio.trade_log
+    if not is_valid_open:
+        log.record_event(
+            order,
+            SimulatedTradeEventType.FILL_SKIPPED,
+            SimulatedTradeStatus.SKIPPED_INVALID_OPEN,
+            fill_time=index_label,
+            error_code="invalid_next_bar_open",
+            error_message="No finite positive next-bar-open price was available.",
+        )
+        return
+
+    fee = order.quantity * op * fee_rate
+    tax = order.quantity * op * tax_rate if order.side == "SELL" else 0.0
+    slippage = order.quantity * slippage_per_share
+    try:
+        fill = SimulatedFill(
+            order_id=order.order_id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            price=op,
+            filled_at=index_label,
+            fee=fee,
+            tax=tax,
+            slippage=slippage,
+        )
+        runtime_state.portfolio.apply_fill(fill)
+    except PaperTradingModelError as exc:
+        log.record_event(
+            order,
+            SimulatedTradeEventType.FILL_FAILED,
+            SimulatedTradeStatus.FAILED_PORTFOLIO_VALIDATION,
+            fill_time=index_label,
+            fill_price=op,
+            fee=fee,
+            tax=tax,
+            slippage=slippage,
+            error_code="portfolio_fill_validation_failed",
+            error_message=str(exc),
+        )
+        return
+
+    log.record_event(
+        order,
+        SimulatedTradeEventType.FILLED,
+        SimulatedTradeStatus.FILLED,
+        fill_time=index_label,
+        fill_price=fill.price,
+        fee=fill.fee,
+        tax=fill.tax,
+        slippage=fill.slippage,
+    )
 
 
 def build_simulated_symbol_candidate_order(
@@ -66,42 +106,35 @@ def build_simulated_symbol_candidate_order(
     entry_signal: bool,
     exit_signal: bool,
     quantity_per_trade: int,
+    strategy: str | None = None,
+    strategy_metadata: Mapping[str, Any] | None = None,
 ) -> SimulatedOrder | None:
-    is_valid_open = True
     try:
         op = float(open_price)
-        if not math.isfinite(op) or op <= 0.0:
-            is_valid_open = False
+        is_valid_open = math.isfinite(op) and op > 0.0
     except (ValueError, TypeError):
         is_valid_open = False
-
     if not is_valid_open:
         return None
 
-    pos_model = runtime_state.portfolio.position_for(symbol)
-    shares = pos_model.quantity
-
+    shares = runtime_state.portfolio.position_for(symbol).quantity
     if shares > 0 and exit_signal:
-        order_id = f"{symbol}-SELL-{bar_position}"
-        return SimulatedOrder(
-            order_id=order_id,
-            symbol=symbol,
-            side="SELL",
-            quantity=shares,
-            signal_time=index_label,
-            created_at=index_label,
-        )
+        side, quantity = "SELL", shares
     elif shares == 0 and entry_signal:
-        order_id = f"{symbol}-BUY-{bar_position}"
-        return SimulatedOrder(
-            order_id=order_id,
-            symbol=symbol,
-            side="BUY",
-            quantity=quantity_per_trade,
-            signal_time=index_label,
-            created_at=index_label,
-        )
-    return None
+        side, quantity = "BUY", quantity_per_trade
+    else:
+        return None
+
+    return SimulatedOrder(
+        order_id=f"{symbol}-{side}-{bar_position}",
+        symbol=symbol,
+        side=side,
+        quantity=quantity,
+        signal_time=index_label,
+        created_at=index_label,
+        strategy=strategy,
+        metadata=dict(strategy_metadata or {}),
+    )
 
 
 def evaluate_and_record_simulated_candidate(
@@ -110,30 +143,70 @@ def evaluate_and_record_simulated_candidate(
     open_price: float,
     guard_decision: SimulatedPaperTradingGuardDecision | None = None,
     guard_decision_provider: Callable[
-        [SimulatedOrder, SimulatedPortfolio],
-        SimulatedPaperTradingGuardDecision,
+        [SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision
     ] | None = None,
 ) -> None:
-    decision = None
-    if guard_decision_provider is not None:
-        decision = guard_decision_provider(candidate_order, runtime_state.portfolio)
-        if not isinstance(decision, SimulatedPaperTradingGuardDecision):
-            raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
-    elif guard_decision is not None:
-        decision = guard_decision
+    log = runtime_state.portfolio.trade_log
+    log.record_event(
+        candidate_order,
+        SimulatedTradeEventType.CANDIDATE_CREATED,
+        SimulatedTradeStatus.CANDIDATE,
+    )
 
-    if decision is None or not decision.is_blocked:
-        # Create pending order
-        pending = SimulatedPendingOrderState(
+    decision = guard_decision
+    if guard_decision_provider is not None:
+        try:
+            decision = guard_decision_provider(candidate_order, runtime_state.portfolio)
+            if not isinstance(decision, SimulatedPaperTradingGuardDecision):
+                raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
+        except Exception as error:
+            log.record_event(
+                candidate_order,
+                SimulatedTradeEventType.EXECUTION_ERROR,
+                SimulatedTradeStatus.EXECUTION_ERROR,
+                risk_allowed=None,
+                error_code="guard_evaluation_failed",
+                error_message=str(error),
+            )
+            raise
+
+    blocked = decision.is_blocked if decision is not None else False
+    if decision is not None:
+        log.record_event(
+            candidate_order,
+            SimulatedTradeEventType.RISK_EVALUATED,
+            SimulatedTradeStatus.RISK_REJECTED if blocked else SimulatedTradeStatus.RISK_ALLOWED,
+            risk_allowed=not blocked,
+            risk_rejection_reasons=decision.reasons,
+            guard_metadata=decision.metadata,
+        )
+
+    if not blocked:
+        runtime_state.pending_orders[candidate_order.symbol] = SimulatedPendingOrderState(
             order=candidate_order,
             reference_price=float(open_price),
         )
-        runtime_state.pending_orders[candidate_order.symbol] = pending
-        runtime_state.portfolio.trade_log.record_order(candidate_order)
-    else:
-        runtime_state.portfolio.trade_log.record_rejection(
-            SimulatedOrderRejection(candidate_order=candidate_order, reasons=decision.reasons)
+        log.record_order(candidate_order)
+        log.record_event(
+            candidate_order,
+            SimulatedTradeEventType.ACCEPTED_PENDING,
+            SimulatedTradeStatus.PENDING_NEXT_BAR_OPEN,
+            risk_allowed=None if decision is None else True,
+            guard_metadata={} if decision is None else decision.metadata,
         )
+        return
+
+    log.record_rejection(
+        SimulatedOrderRejection(candidate_order=candidate_order, reasons=decision.reasons)
+    )
+    log.record_event(
+        candidate_order,
+        SimulatedTradeEventType.REJECTED,
+        SimulatedTradeStatus.REJECTED,
+        risk_allowed=False,
+        risk_rejection_reasons=decision.reasons,
+        guard_metadata=decision.metadata,
+    )
 
 
 def step_simulated_symbol_bar(
@@ -151,11 +224,11 @@ def step_simulated_symbol_bar(
     slippage_per_share: float = 0.0,
     guard_decision: SimulatedPaperTradingGuardDecision | None = None,
     guard_decision_provider: Callable[
-        [SimulatedOrder, SimulatedPortfolio],
-        SimulatedPaperTradingGuardDecision,
+        [SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision
     ] | None = None,
+    strategy: str | None = None,
+    strategy_metadata: Mapping[str, Any] | None = None,
 ) -> None:
-    # 8.2 Validation
     if not isinstance(runtime_state, SimulatedPaperTradingRuntimeState):
         raise PaperTradingModelError("runtime_state must be a SimulatedPaperTradingRuntimeState.")
     if not isinstance(symbol, str) or not symbol.strip():
@@ -166,7 +239,6 @@ def step_simulated_symbol_bar(
         raise PaperTradingModelError("quantity_per_trade must be a positive integer.")
     if fee_rate < 0 or tax_rate < 0 or slippage_per_share < 0:
         raise PaperTradingModelError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
-
     if guard_decision is not None and guard_decision_provider is not None:
         raise PaperTradingModelError("Cannot provide both guard_decision and guard_decision_provider.")
     if guard_decision is not None and not isinstance(guard_decision, SimulatedPaperTradingGuardDecision):
@@ -183,7 +255,6 @@ def step_simulated_symbol_bar(
         tax_rate=tax_rate,
         slippage_per_share=slippage_per_share,
     )
-
     candidate = build_simulated_symbol_candidate_order(
         runtime_state=runtime_state,
         symbol=symbol,
@@ -193,8 +264,9 @@ def step_simulated_symbol_bar(
         entry_signal=entry_signal,
         exit_signal=exit_signal,
         quantity_per_trade=quantity_per_trade,
+        strategy=strategy,
+        strategy_metadata=strategy_metadata,
     )
-
     if candidate is not None:
         evaluate_and_record_simulated_candidate(
             runtime_state=runtime_state,

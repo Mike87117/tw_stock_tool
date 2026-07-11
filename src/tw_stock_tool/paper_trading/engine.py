@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 from tw_stock_tool.backtesting.signals import validate_standard_signals
 from tw_stock_tool.paper_trading.models import (
@@ -26,6 +26,8 @@ def run_simulated_paper_trading(
     slippage_per_share: float = 0.0,
     guard_decision: SimulatedPaperTradingGuardDecision | None = None,
     guard_decision_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None = None,
+    strategy: str | None = None,
+    strategy_metadata: Mapping[str, Any] | None = None,
 ) -> SimulatedPortfolio:
     """
     Run a minimal, research-only simulated paper trading engine on historical data.
@@ -77,6 +79,8 @@ def run_simulated_paper_trading(
             slippage_per_share=slippage_per_share,
             guard_decision=guard_decision,
             guard_decision_provider=guard_decision_provider,
+            strategy=strategy,
+            strategy_metadata=strategy_metadata,
         )
 
     return runtime_state.portfolio
@@ -93,6 +97,8 @@ def run_simulated_paper_trading_result(
     last_price: float | None = None,
     guard_decision: SimulatedPaperTradingGuardDecision | None = None,
     guard_decision_provider: Callable[[SimulatedOrder, SimulatedPortfolio], SimulatedPaperTradingGuardDecision] | None = None,
+    strategy: str | None = None,
+    strategy_metadata: Mapping[str, Any] | None = None,
 ) -> SimulatedPaperTradingResult:
     """
     Run simulated paper trading and build a stable summary result object.
@@ -107,6 +113,8 @@ def run_simulated_paper_trading_result(
         slippage_per_share=slippage_per_share,
         guard_decision=guard_decision,
         guard_decision_provider=guard_decision_provider,
+        strategy=strategy,
+        strategy_metadata=strategy_metadata,
     )
     return build_simulated_paper_trading_result(
         portfolio=portfolio,

@@ -3,6 +3,11 @@ Simulated paper trading models.
 Research-only simulated models.
 """
 
+from .models import (
+    SimulatedTradeEventType,
+    SimulatedTradeStatus,
+    SimulatedTradeLogRecord,
+)
 from .engine import run_simulated_paper_trading, run_simulated_paper_trading_result
 from .results import (
     SimulatedPaperTradingResult,
@@ -10,6 +15,7 @@ from .results import (
     build_simulated_paper_trading_summary,
     build_simulated_order_rows,
     build_simulated_fill_rows,
+    build_simulated_trade_log_rows,
     build_simulated_paper_trading_report_data,
 )
 from .exporters import (
@@ -35,6 +41,9 @@ from .backtest_converter import (
 )
 
 __all__ = [
+    "SimulatedTradeEventType",
+    "SimulatedTradeStatus",
+    "SimulatedTradeLogRecord",
     "run_simulated_paper_trading",
     "run_simulated_paper_trading_result",
     "SimulatedPaperTradingResult",
@@ -42,6 +51,7 @@ __all__ = [
     "build_simulated_paper_trading_summary",
     "build_simulated_order_rows",
     "build_simulated_fill_rows",
+    "build_simulated_trade_log_rows",
     "build_simulated_paper_trading_report_data",
     "export_simulated_paper_trading_markdown",
     "export_simulated_paper_trading_csv_bundle",

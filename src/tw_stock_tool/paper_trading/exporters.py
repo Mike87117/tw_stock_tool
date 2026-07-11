@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from typing import Any
 from .results import (
     SimulatedPaperTradingResult,
@@ -24,6 +25,7 @@ def export_simulated_paper_trading_markdown(
     order_rows = report_data["order_rows"]
     fill_rows = report_data["fill_rows"]
     rejection_rows = report_data.get("rejection_rows", [])
+    trade_log_rows = report_data.get("trade_log_rows", [])
 
     lines = [
         "# Simulated Paper Trading Report",
@@ -123,6 +125,23 @@ def export_simulated_paper_trading_markdown(
             reasons = _format_value(row.get("reasons"))
             lines.append(f"| {order_id} | {symbol} | {side} | {quantity} | {signal_time} | {created_at} | {strategy} | {reasons} |")
 
+
+    lines.append("")
+    lines.append("## Trade Log")
+    lines.append("")
+    if not trade_log_rows:
+        lines.append("*No audit events to display.*")
+    else:
+        lines.append("| Sequence | Event | Status | Order ID | Symbol | Side | Quantity | Signal Time | Fill Time | Fill Price | Risk Allowed | Reasons | Error Code | Error Message |")
+        lines.append("|---:|---|---|---|---|---|---:|---|---|---:|---|---|---|---|")
+        for row in trade_log_rows:
+            values = [
+                row.get("sequence"), row.get("event_type"), row.get("status"), row.get("order_id"),
+                row.get("symbol"), row.get("side"), row.get("quantity"), row.get("signal_time"),
+                row.get("fill_time"), row.get("fill_price"), row.get("risk_allowed"),
+                row.get("risk_rejection_reasons"), row.get("error_code"), row.get("error_message"),
+            ]
+            lines.append("| " + " | ".join(_format_value(value) for value in values) + " |")
     # Append trailing newline
     lines.append("")
     return "\n".join(lines)
@@ -137,6 +156,7 @@ def export_simulated_paper_trading_csv_bundle(
     order_rows = report_data["order_rows"]
     fill_rows = report_data["fill_rows"]
     rejection_rows = report_data.get("rejection_rows", [])
+    trade_log_rows = report_data.get("trade_log_rows", [])
 
     # 1. Summary CSV
     summary_keys = [
@@ -238,9 +258,29 @@ def export_simulated_paper_trading_csv_bundle(
             row_vals.append("" if v is None else str(v))
         rejections_writer.writerow(row_vals)
 
+
+    # 5. Canonical trade log CSV
+    trade_log_keys = [
+        "sequence", "record_id", "event_type", "status", "order_id", "symbol", "side",
+        "quantity", "signal_time", "order_created_at", "expected_execution_model", "fill_time",
+        "fill_price", "fee", "tax", "slippage", "strategy_name", "strategy_metadata",
+        "risk_allowed", "risk_rejection_reasons", "guard_metadata", "error_code", "error_message",
+    ]
+    trade_log_io = io.StringIO()
+    trade_log_writer = csv.writer(trade_log_io, lineterminator="\n")
+    trade_log_writer.writerow(trade_log_keys)
+    for row in trade_log_rows:
+        values = []
+        for key in trade_log_keys:
+            value = row.get(key)
+            if isinstance(value, dict):
+                value = json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
+            values.append("" if value is None else str(value))
+        trade_log_writer.writerow(values)
     return {
         "summary": summary_io.getvalue(),
         "orders": orders_io.getvalue(),
         "fills": fills_io.getvalue(),
         "rejections": rejections_io.getvalue(),
+        "trade_log": trade_log_io.getvalue(),
     }

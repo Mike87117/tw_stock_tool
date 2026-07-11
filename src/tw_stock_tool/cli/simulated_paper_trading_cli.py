@@ -184,6 +184,8 @@ def main(argv: list[str] | None = None) -> None:
             slippage_per_share=args.slippage_per_share,
             last_price=last_price,
             guard_decision_provider=guard_decision_provider,
+            strategy=args.strategy,
+            strategy_metadata={"period": args.period},
         )
 
         summary = build_simulated_paper_trading_summary(result)

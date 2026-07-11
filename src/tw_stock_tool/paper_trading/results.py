@@ -5,6 +5,7 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedFill,
     SimulatedOrderRejection,
+    SimulatedTradeLogRecord,
     PaperTradingModelError,
 )
 
@@ -25,6 +26,7 @@ class SimulatedPaperTradingResult:
     orders: tuple[SimulatedOrder, ...]
     fills: tuple[SimulatedFill, ...]
     rejections: tuple[SimulatedOrderRejection, ...] = ()
+    audit_log: tuple[SimulatedTradeLogRecord, ...] = ()
 
 def build_simulated_paper_trading_result(
     portfolio: SimulatedPortfolio,
@@ -74,6 +76,7 @@ def build_simulated_paper_trading_result(
         orders=tuple(portfolio.trade_log.orders),
         fills=tuple(portfolio.trade_log.fills),
         rejections=tuple(portfolio.trade_log.rejections),
+        audit_log=tuple(portfolio.trade_log.records),
     )
 
 def build_simulated_paper_trading_summary(
@@ -159,6 +162,39 @@ def build_simulated_rejection_rows(
         })
     return rows
 
+
+def build_simulated_trade_log_rows(
+    result: SimulatedPaperTradingResult,
+) -> list[dict[str, object]]:
+    """Flatten canonical audit records for report and CSV rendering."""
+    return [
+        {
+            "sequence": record.sequence,
+            "record_id": record.record_id,
+            "event_type": record.event_type.value,
+            "status": record.status.value,
+            "order_id": record.order_id,
+            "symbol": record.symbol,
+            "side": record.side,
+            "quantity": record.quantity,
+            "signal_time": record.signal_time,
+            "order_created_at": record.order_created_at,
+            "expected_execution_model": record.expected_execution_model,
+            "fill_time": record.fill_time,
+            "fill_price": record.fill_price,
+            "fee": record.fee,
+            "tax": record.tax,
+            "slippage": record.slippage,
+            "strategy_name": record.strategy_name,
+            "strategy_metadata": dict(record.strategy_metadata),
+            "risk_allowed": record.risk_allowed,
+            "risk_rejection_reasons": " | ".join(record.risk_rejection_reasons),
+            "guard_metadata": dict(record.guard_metadata),
+            "error_code": record.error_code,
+            "error_message": record.error_message,
+        }
+        for record in result.audit_log
+    ]
 def build_simulated_paper_trading_report_data(
     result: SimulatedPaperTradingResult,
 ) -> dict[str, object]:
@@ -168,4 +204,5 @@ def build_simulated_paper_trading_report_data(
         "order_rows": build_simulated_order_rows(result),
         "fill_rows": build_simulated_fill_rows(result),
         "rejection_rows": build_simulated_rejection_rows(result),
+        "trade_log_rows": build_simulated_trade_log_rows(result),
     }

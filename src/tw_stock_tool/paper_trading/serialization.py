@@ -6,6 +6,9 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedFill,
     SimulatedOrderRejection,
+    SimulatedTradeEventType,
+    SimulatedTradeLogRecord,
+    SimulatedTradeStatus,
     PaperTradingModelError,
 )
 from tw_stock_tool.paper_trading.results import SimulatedPaperTradingResult
@@ -17,6 +20,81 @@ def _serialize_datetime_like(value: Any) -> str | None:
     if hasattr(value, "isoformat") and callable(value.isoformat):
         return value.isoformat()
     return str(value)
+
+
+def _serialize_trade_log_record(record: SimulatedTradeLogRecord, index: int) -> dict[str, Any]:
+    return {
+        "sequence": _enforce_numeric(record.sequence, int, f"audit_log[{index}].sequence"),
+        "record_id": record.record_id,
+        "event_type": record.event_type.value,
+        "status": record.status.value,
+        "order_id": record.order_id,
+        "symbol": record.symbol,
+        "side": record.side,
+        "quantity": _enforce_numeric(record.quantity, int, f"audit_log[{index}].quantity"),
+        "signal_time": _serialize_datetime_like(record.signal_time),
+        "order_created_at": _serialize_datetime_like(record.order_created_at),
+        "expected_execution_model": record.expected_execution_model,
+        "fill_time": _serialize_datetime_like(record.fill_time),
+        "fill_price": None if record.fill_price is None else _enforce_numeric(record.fill_price, float, f"audit_log[{index}].fill_price"),
+        "fee": _enforce_numeric(record.fee, float, f"audit_log[{index}].fee"),
+        "tax": _enforce_numeric(record.tax, float, f"audit_log[{index}].tax"),
+        "slippage": _enforce_numeric(record.slippage, float, f"audit_log[{index}].slippage"),
+        "strategy_name": record.strategy_name,
+        "strategy_metadata": dict(record.strategy_metadata),
+        "risk_allowed": record.risk_allowed,
+        "risk_rejection_reasons": list(record.risk_rejection_reasons),
+        "guard_metadata": dict(record.guard_metadata),
+        "error_code": record.error_code,
+        "error_message": record.error_message,
+    }
+
+
+def _deserialize_trade_log_record(data: Any, index: int) -> SimulatedTradeLogRecord:
+    if not isinstance(data, dict):
+        raise PaperTradingModelError(f"Audit record at index {index} must be a dict.")
+    fields = {
+        "sequence", "record_id", "event_type", "status", "order_id", "symbol", "side",
+        "quantity", "signal_time", "order_created_at", "expected_execution_model", "fill_time",
+        "fill_price", "fee", "tax", "slippage", "strategy_name", "strategy_metadata",
+        "risk_allowed", "risk_rejection_reasons", "guard_metadata", "error_code", "error_message",
+    }
+    missing = fields - set(data)
+    extra = set(data) - fields
+    if missing:
+        raise PaperTradingModelError(f"Audit record {index} missing fields: {missing}")
+    if extra:
+        raise PaperTradingModelError(f"Audit record {index} extra fields: {extra}")
+    if not isinstance(data["risk_rejection_reasons"], list):
+        raise PaperTradingModelError(f"Audit record {index} risk_rejection_reasons must be a list.")
+    try:
+        return SimulatedTradeLogRecord(
+            sequence=_enforce_numeric(data["sequence"], int, f"audit_log[{index}].sequence"),
+            record_id=str(data["record_id"]),
+            event_type=SimulatedTradeEventType(data["event_type"]),
+            status=SimulatedTradeStatus(data["status"]),
+            order_id=str(data["order_id"]),
+            symbol=str(data["symbol"]),
+            side=str(data["side"]),
+            quantity=_enforce_numeric(data["quantity"], int, f"audit_log[{index}].quantity"),
+            signal_time=data["signal_time"],
+            order_created_at=data["order_created_at"],
+            expected_execution_model=data["expected_execution_model"],
+            fill_time=data["fill_time"],
+            fill_price=None if data["fill_price"] is None else _enforce_numeric(data["fill_price"], float, f"audit_log[{index}].fill_price"),
+            fee=_enforce_numeric(data["fee"], float, f"audit_log[{index}].fee"),
+            tax=_enforce_numeric(data["tax"], float, f"audit_log[{index}].tax"),
+            slippage=_enforce_numeric(data["slippage"], float, f"audit_log[{index}].slippage"),
+            strategy_name=None if data["strategy_name"] is None else str(data["strategy_name"]),
+            strategy_metadata=data["strategy_metadata"],
+            risk_allowed=data["risk_allowed"],
+            risk_rejection_reasons=tuple(data["risk_rejection_reasons"]),
+            guard_metadata=data["guard_metadata"],
+            error_code=None if data["error_code"] is None else str(data["error_code"]),
+            error_message=None if data["error_message"] is None else str(data["error_message"]),
+        )
+    except (ValueError, TypeError) as exc:
+        raise PaperTradingModelError(f"Audit record {index} invalid: {exc}") from exc
 
 
 def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult) -> dict[str, Any]:
@@ -71,8 +149,10 @@ def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult
             "reasons": list(r.reasons),
         })
 
+    audit_log = [_serialize_trade_log_record(record, i) for i, record in enumerate(result.audit_log)]
+
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "result_type": "simulated_paper_trading_result",
         "symbol": str(result.symbol),
         "initial_cash": _enforce_numeric(result.initial_cash, float, "initial_cash"),
@@ -88,6 +168,7 @@ def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult
         "orders": orders,
         "fills": fills,
         "rejections": rejections,
+        "audit_log": audit_log,
     }
 
 
@@ -118,7 +199,7 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
         raise PaperTradingModelError("Top-level data must be a dict.")
 
     schema_version = data.get("schema_version")
-    if schema_version not in (1, 2):
+    if schema_version not in (1, 2, 3):
         raise PaperTradingModelError(f"Unsupported schema_version: {schema_version}")
 
     allowed_keys = {
@@ -129,6 +210,8 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
     }
     if schema_version >= 2:
         allowed_keys.add("rejections")
+    if schema_version >= 3:
+        allowed_keys.add("audit_log")
 
     missing = allowed_keys - set(data.keys())
     if missing:
@@ -265,6 +348,12 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
                 raise PaperTradingModelError(f"Rejection {i} invalid: {e}")
             parsed_rejections.append(rejection_obj)
 
+    parsed_audit_log = []
+    if schema_version >= 3:
+        if not isinstance(data["audit_log"], list):
+            raise PaperTradingModelError("Field 'audit_log' must be a list.")
+        parsed_audit_log = [_deserialize_trade_log_record(record, i) for i, record in enumerate(data["audit_log"])]
+
     try:
         return SimulatedPaperTradingResult(
             symbol=str(data["symbol"]),
@@ -281,6 +370,7 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
             orders=tuple(parsed_orders),
             fills=tuple(parsed_fills),
             rejections=tuple(parsed_rejections),
+            audit_log=tuple(parsed_audit_log),
         )
     except PaperTradingModelError:
         raise

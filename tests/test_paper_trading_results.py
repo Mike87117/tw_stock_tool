@@ -515,7 +515,7 @@ class TestSimulatedPaperTradingResults(unittest.TestCase):
         report_data = build_simulated_paper_trading_report_data(result)
 
         self.assertIsInstance(report_data, dict)
-        self.assertEqual(set(report_data.keys()), {"summary", "order_rows", "fill_rows", "rejection_rows"})
+        self.assertEqual(set(report_data.keys()), {"summary", "order_rows", "fill_rows", "rejection_rows", "trade_log_rows"})
 
         self.assertEqual(report_data["summary"], build_simulated_paper_trading_summary(result))
         self.assertEqual(report_data["order_rows"], build_simulated_order_rows(result))
