@@ -73,3 +73,5 @@ A2 does not delete, move, modify, adapt, or warn on either engine; change import
 ## J. Final recommendation
 
 Selected label: **INSUFFICIENT_EVIDENCE_RETAIN_TEMPORARILY**. Recommended next production phase: **Backtest Compatibility Contract and Consumer Evidence**. Its only allowed scope is consumer mapping and approved adapter/deprecation-boundary design; it must not consolidate implementations, change semantics, or remove modules.
+
+Characterization refinement: when a pending entry reaches a NaN next-bar open, the canonical path skips the execution and creates no trade; the alternate path applies the NaN fill and returns NaN final equity. This strengthens the invalid-open compatibility risk without changing the decision.
