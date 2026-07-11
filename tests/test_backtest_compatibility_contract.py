@@ -88,26 +88,33 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
         self.assertEqual([order.order_id for order in converted.orders], ["backtest-000000-buy", "backtest-000000-sell"])
         self.assertEqual([fill.order_id for fill in converted.fills], ["backtest-000000-buy", "backtest-000000-sell"])
         self.assertEqual((converted.open_position_count, converted.final_position_quantity), (0, 0))
+        documented_consumers = {
+            "src/tw_stock_tool/cli/backtest_result_export_cli.py", "src/tw_stock_tool/cli/backtest_artifact_cli.py", "src/tw_stock_tool/cli/backtest_report.py", "src/tw_stock_tool/backtesting/serialization.py", "src/tw_stock_tool/backtesting/serialization_files.py", "src/tw_stock_tool/backtesting/parameter_sweep.py", "src/tw_stock_tool/backtesting/strategy_compare.py", "src/tw_stock_tool/backtesting/walk_forward.py", "src/tw_stock_tool/gui/app_services.py", "src/tw_stock_tool/cli/main.py", "src/tw_stock_tool/paper_trading/backtest_converter.py",
+        }
         expected_imports = {
-            "src/tw_stock_tool/cli/backtest_result_export_cli.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies", "tw_stock_tool.backtesting.serialization_files"},
+            "src/tw_stock_tool/cli/backtest_result_export_cli.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.serialization", "tw_stock_tool.backtesting.serialization_files", "tw_stock_tool.backtesting.strategies"},
             "src/tw_stock_tool/cli/backtest_artifact_cli.py": {"tw_stock_tool.backtesting.serialization", "tw_stock_tool.backtesting.serialization_files", "tw_stock_tool.paper_trading"},
+            "src/tw_stock_tool/cli/backtest_report.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
             "src/tw_stock_tool/backtesting/serialization.py": {"tw_stock_tool.backtesting.results"},
             "src/tw_stock_tool/backtesting/serialization_files.py": {"tw_stock_tool.backtesting.results", "tw_stock_tool.backtesting.serialization"},
-            "src/tw_stock_tool/cli/backtest_report.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
             "src/tw_stock_tool/backtesting/parameter_sweep.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
             "src/tw_stock_tool/backtesting/strategy_compare.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
             "src/tw_stock_tool/backtesting/walk_forward.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.parameter_sweep", "tw_stock_tool.backtesting.strategies"},
-            "src/tw_stock_tool/paper_trading/backtest_converter.py": {"tw_stock_tool.backtesting.results"},
+            "src/tw_stock_tool/gui/app_services.py": {"tw_stock_tool.backtesting.backtest"}, "src/tw_stock_tool/cli/main.py": {"tw_stock_tool.backtesting.backtest"}, "src/tw_stock_tool/paper_trading/backtest_converter.py": {"tw_stock_tool.backtesting.results"},
         }
-        files = list(expected_imports)
-        self.assertEqual(set(expected_imports), set(files))
-        for name in files:
-            tree = ast.parse(Path(name).read_text(encoding="utf-8"))
-            imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
-            self.assertNotIn("tw_stock_tool.backtest.engine", imports)
-            self.assertNotIn("tw_stock_tool.strategies.base", imports)
-            if name in expected_imports: self.assertTrue(expected_imports[name] & set(imports), name)
-
+        self.assertEqual(set(expected_imports), documented_consumers); self.assertEqual(len(expected_imports), 11)
+        def imported_modules(path):
+            modules = set()
+            for node in ast.walk(ast.parse(Path(path).read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Import): modules.update(a.name for a in node.names)
+                elif isinstance(node, ast.ImportFrom):
+                    base = node.module or ""; modules.add(base) if base else None
+                    modules.update(f"{base}.{a.name}" for a in node.names if base and a.name != "*")
+            return modules
+        for name in documented_consumers:
+            imports = imported_modules(name)
+            self.assertTrue(expected_imports[name].issubset(imports), f"{name}: expected {expected_imports[name]}, found {imports}")
+            self.assertNotIn("tw_stock_tool.backtest.engine", imports); self.assertNotIn("tw_stock_tool.strategies.base", imports)
 
 if __name__ == "__main__":
     unittest.main()
