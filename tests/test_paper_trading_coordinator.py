@@ -605,7 +605,7 @@ class TestChronologicalMultiSymbolCoordinator(unittest.TestCase):
     def test_scenario_6_single_symbol_compatibility(self):
         from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading_result
         from tw_stock_tool.paper_trading.stepper import step_simulated_symbol_bar
-        df_a = pd.DataFrame({"Open": [100.0, 105.0, 110.0], "entry_signal": [True, False, False], "exit_signal": [False, True, False]}, index=pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"]))
+        df_a = pd.DataFrame({"Open": [100.0, 105.0], "entry_signal": [True, False], "exit_signal": [False, True]}, index=pd.to_datetime(["2023-01-01", "2023-01-02"]))
 
         p1 = SimulatedPortfolio(cash=10000.0)
         rt1 = SimulatedPaperTradingRuntimeState(p1)
@@ -636,14 +636,26 @@ class TestChronologicalMultiSymbolCoordinator(unittest.TestCase):
                 "accepted_orders": [(o.order_id, o.symbol, o.side, o.quantity, o.signal_time) for o in port.trade_log.orders],
                 "fills": [(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at) for f in port.trade_log.fills],
                 "rejections": [(r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.reasons) for r in port.trade_log.rejections],
-                "pending_order_contents": [(s, p.order.side, p.order.quantity) for s, p in rt.pending_orders.items()],
+                "pending_order_contents": [(s, p.order.side, p.order.quantity, p.order.order_id, p.order.signal_time) for s, p in rt.pending_orders.items()],
                 "pending_reference_price": {s: p.reference_price for s, p in rt.pending_orders.items()},
                 "total_reserved_buy_notional": rt.total_reserved_buy_notional
             }
 
         self.assertEqual(extract_state(rt1), extract_state(rt2))
 
-        res = run_simulated_paper_trading_result(df=df_a, symbol="A", quantity_per_trade=10, initial_cash=10000.0, last_price=110.0)
+        # Explicit pending SELL assertions for rt1
+        self.assertIn("A", rt1.pending_orders)
+        self.assertEqual(rt1.pending_orders["A"].order.side, "SELL")
+        self.assertEqual(rt1.pending_orders["A"].order.quantity, rt1.portfolio.positions["A"].quantity)
+        self.assertEqual(rt1.total_reserved_buy_notional, 0.0)
+
+        # Explicit pending SELL assertions for rt2
+        self.assertIn("A", rt2.pending_orders)
+        self.assertEqual(rt2.pending_orders["A"].order.side, "SELL")
+        self.assertEqual(rt2.pending_orders["A"].order.quantity, rt2.portfolio.positions["A"].quantity)
+        self.assertEqual(rt2.total_reserved_buy_notional, 0.0)
+
+        res = run_simulated_paper_trading_result(df=df_a, symbol="A", quantity_per_trade=10, initial_cash=10000.0, last_price=105.0)
         self.assertEqual(rt1.portfolio.cash, res.final_cash)
         self.assertEqual(len(rt1.portfolio.trade_log.fills), len(res.fills))
         self.assertEqual(len(rt1.portfolio.trade_log.orders), len(res.orders))
