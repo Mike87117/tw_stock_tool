@@ -2,6 +2,7 @@ import pandas as pd
 import math
 from typing import Mapping
 from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPortfolio
+from tw_stock_tool.paper_trading.runtime import SimulatedPaperTradingRuntimeState
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardError
 
 class DataFrameReferencePriceProvider:
@@ -130,3 +131,101 @@ class DataFramePortfolioExposureProvider:
                 total_exposure += float(pos.quantity) * price_float
 
         return total_exposure
+
+
+class ChronologicalRuntimePortfolioExposureProvider:
+    def __init__(
+        self,
+        dataframes,
+        runtime_state,
+        *,
+        price_column: str = "Open",
+    ) -> None:
+        if not isinstance(dataframes, Mapping):
+            raise SimulatedPaperTradingGuardError("dataframes must be a Mapping.")
+        if not dataframes:
+            raise SimulatedPaperTradingGuardError("dataframes must not be empty.")
+
+        for k, v in dataframes.items():
+            if not isinstance(k, str) or not k.strip():
+                raise SimulatedPaperTradingGuardError("symbol keys must be non-blank strings.")
+            if not isinstance(v, pd.DataFrame):
+                raise SimulatedPaperTradingGuardError("values must be pandas DataFrames.")
+            if v.empty:
+                raise SimulatedPaperTradingGuardError("DataFrame must not be empty.")
+            if not price_column or not isinstance(price_column, str) or not price_column.strip():
+                raise SimulatedPaperTradingGuardError("price_column must be a non-blank string.")
+            if price_column not in v.columns:
+                raise SimulatedPaperTradingGuardError(f"DataFrame must contain '{price_column}' column.")
+            if not v.index.is_unique:
+                raise SimulatedPaperTradingGuardError("DataFrame index must be unique.")
+            if not v.index.is_monotonic_increasing:
+                raise SimulatedPaperTradingGuardError("DataFrame index must be monotonic increasing.")
+
+        if not price_column or not isinstance(price_column, str) or not price_column.strip():
+            raise SimulatedPaperTradingGuardError("price_column must be a non-blank string.")
+
+        if not isinstance(runtime_state, SimulatedPaperTradingRuntimeState):
+            raise SimulatedPaperTradingGuardError("runtime_state must be a SimulatedPaperTradingRuntimeState.")
+
+        self._dataframes = dataframes
+        self._price_column = price_column
+        self._runtime_state = runtime_state
+
+    def __call__(
+        self,
+        order: SimulatedOrder,
+        portfolio: SimulatedPortfolio,
+    ) -> float:
+        if not isinstance(order, SimulatedOrder):
+            raise SimulatedPaperTradingGuardError("order must be a SimulatedOrder.")
+        if not isinstance(portfolio, SimulatedPortfolio):
+            raise SimulatedPaperTradingGuardError("portfolio must be a SimulatedPortfolio.")
+
+        if portfolio is not self._runtime_state.portfolio:
+            raise SimulatedPaperTradingGuardError("Portfolio identity does not match runtime_state.portfolio.")
+
+        total_exposure = 0.0
+        signal_time = order.signal_time
+
+        for pos in portfolio.positions.values():
+            if pos.quantity > 0:
+                symbol = pos.symbol
+                if symbol not in self._dataframes:
+                    raise SimulatedPaperTradingGuardError(f"No DataFrame found for open position symbol: {symbol}")
+
+                df = self._dataframes[symbol]
+
+                try:
+                    past_rows = df[df.index <= signal_time]
+                except TypeError:
+                    raise SimulatedPaperTradingGuardError(f"Index cannot be compared with signal_time for {symbol}.")
+
+                if past_rows.empty:
+                    raise SimulatedPaperTradingGuardError(f"No row exists at or before signal time {signal_time} for {symbol}.")
+
+                price = past_rows.iloc[-1][self._price_column]
+
+                if isinstance(price, pd.Series):
+                    price = price.iloc[0]
+
+                if pd.isna(price):
+                    raise SimulatedPaperTradingGuardError(f"Price must not be NaN for {symbol}.")
+
+                if type(price) is bool or type(price).__name__ in ("bool", "bool_"):
+                    raise SimulatedPaperTradingGuardError(f"Price must be numeric, not boolean for {symbol}.")
+
+                try:
+                    price_float = float(price)
+                except (ValueError, TypeError):
+                    raise SimulatedPaperTradingGuardError(f"Price must be numeric for {symbol}.")
+
+                if not math.isfinite(price_float):
+                    raise SimulatedPaperTradingGuardError(f"Price must be finite for {symbol}.")
+
+                if price_float <= 0.0:
+                    raise SimulatedPaperTradingGuardError(f"Price must be strictly positive for {symbol}.")
+
+                total_exposure += float(pos.quantity) * price_float
+
+        return float(total_exposure + self._runtime_state.total_reserved_buy_notional)
