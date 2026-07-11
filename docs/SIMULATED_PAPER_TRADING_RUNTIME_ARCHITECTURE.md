@@ -436,10 +436,10 @@ implementation commit:
 
 - production implementation commit: `46ce2470923cee2adfe55982b01ed15973c079db`
 - test-correction commit: `55e6fdfb3726950724be9bdfdd42713b3e32ee51`
-- documentation closeout commit: TBD
+- documentation closeout commit: 1ff325243e7e80f373a07a14c9194f72a6c41499
+- test-correction commit (pending SELL): 5d45ba41ab89420e29fe758c325b7b251c4583b5
 
 Exact changed files:
-- `docs/DEVELOPMENT_ROADMAP.md`
 - `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`
 - `src/tw_stock_tool/paper_trading/coordinator.py`
 - `src/tw_stock_tool/paper_trading/stepper.py`
