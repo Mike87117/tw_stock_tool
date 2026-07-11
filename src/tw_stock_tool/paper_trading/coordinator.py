@@ -6,7 +6,12 @@ from tw_stock_tool.backtesting.signals import validate_standard_signals
 from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPortfolio
 from tw_stock_tool.paper_trading.runtime import SimulatedPaperTradingRuntimeState
 from tw_stock_tool.simulated_paper_trading_guard.adapter import SimulatedPaperTradingGuardDecision
-from tw_stock_tool.paper_trading.stepper import step_simulated_symbol_bar
+from tw_stock_tool.paper_trading.stepper import (
+    step_simulated_symbol_bar,
+    process_simulated_pending_fill,
+    build_simulated_symbol_candidate_order,
+    evaluate_and_record_simulated_candidate,
+)
 
 
 def run_chronological_multi_symbol_simulated_paper_trading(
@@ -94,31 +99,60 @@ def run_chronological_multi_symbol_simulated_paper_trading(
     deterministic_symbols = sorted(dataframes.keys())
 
     for t in timeline:
+        symbols_at_t = []
         for symbol in deterministic_symbols:
-            df = dataframes[symbol]
             pos = cursors[symbol]
+            df = dataframes[symbol]
             if pos < len(df) and df.index[pos] == t:
-                cursors[symbol] += 1
-                row = df.iloc[pos]
+                symbols_at_t.append(symbol)
 
-                open_price = row["Open"] if "Open" in row else float('nan')
-                entry_sig = bool(row.get("entry_signal", False))
-                exit_sig = bool(row.get("exit_signal", False))
+        # Pass 1: Pending Fills
+        for symbol in symbols_at_t:
+            pos = cursors[symbol]
+            df = dataframes[symbol]
+            row = df.iloc[pos]
+            open_price = row["Open"] if "Open" in row else float('nan')
 
-                step_simulated_symbol_bar(
+            process_simulated_pending_fill(
+                runtime_state=runtime_state,
+                symbol=symbol,
+                open_price=open_price,
+                index_label=t,
+                fee_rate=float(fee_rate),
+                tax_rate=float(tax_rate),
+                slippage_per_share=float(slippage_per_share),
+            )
+
+        # Pass 2 & 3: Build Candidates and Evaluate
+        for symbol in symbols_at_t:
+            pos = cursors[symbol]
+            df = dataframes[symbol]
+            row = df.iloc[pos]
+            open_price = row["Open"] if "Open" in row else float('nan')
+            entry_sig = bool(row.get("entry_signal", False))
+            exit_sig = bool(row.get("exit_signal", False))
+
+            candidate = build_simulated_symbol_candidate_order(
+                runtime_state=runtime_state,
+                symbol=symbol,
+                bar_position=pos,
+                index_label=t,
+                open_price=open_price,
+                entry_signal=entry_sig,
+                exit_signal=exit_sig,
+                quantity_per_trade=quantity_per_trade,
+            )
+
+            if candidate is not None:
+                evaluate_and_record_simulated_candidate(
                     runtime_state=runtime_state,
-                    symbol=symbol,
-                    bar_position=pos,
-                    index_label=t,
+                    candidate_order=candidate,
                     open_price=open_price,
-                    entry_signal=entry_sig,
-                    exit_signal=exit_sig,
-                    quantity_per_trade=quantity_per_trade,
-                    fee_rate=float(fee_rate),
-                    tax_rate=float(tax_rate),
-                    slippage_per_share=float(slippage_per_share),
                     guard_decision=guard_decision,
                     guard_decision_provider=guard_decision_provider,
                 )
+
+            # Advance cursor
+            cursors[symbol] += 1
 
     return runtime_state

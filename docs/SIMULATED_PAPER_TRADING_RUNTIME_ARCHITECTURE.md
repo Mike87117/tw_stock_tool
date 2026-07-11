@@ -419,3 +419,57 @@ No aggregate serialization/export exists.
 No multi-symbol CLI exists.
 CLI `--max-total-exposure` does not exist.
 No broker, live-trading, semi-auto, or auto-trading capability exists.
+
+### Phase 48.12.1 implementation
+
+- same-timestamp fill-before-signal correction
+- all fills complete before any new candidate evaluation
+- deterministic candidate ordering remains symbol ascending
+- single-symbol stepper remains a compatibility wrapper
+- aggregate result remains deferred
+
+implementation commit:
+46ce2470923cee2adfe55982b01ed15973c079db
+
+
+### Phase 48.12.1 verification closeout
+
+- production implementation commit: `46ce2470923cee2adfe55982b01ed15973c079db`
+- test-correction commit: `55e6fdfb3726950724be9bdfdd42713b3e32ee51`
+- documentation closeout commit: 1ff325243e7e80f373a07a14c9194f72a6c41499
+- test-correction commit (pending SELL): 5d45ba41ab89420e29fe758c325b7b251c4583b5
+
+Exact changed files:
+- `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`
+- `src/tw_stock_tool/paper_trading/coordinator.py`
+- `src/tw_stock_tool/paper_trading/stepper.py`
+- `tests/test_paper_trading_coordinator.py`
+- `tests/test_paper_trading_stepper.py`
+
+Exact focused test commands and counts:
+```powershell
+py -m unittest tests.test_paper_trading_stepper (31 tests PASS)
+py -m unittest tests.test_paper_trading_coordinator (36 tests PASS)
+py -m unittest tests.test_paper_trading_engine (34 tests PASS)
+py -m unittest tests.test_simulated_paper_trading_guard_providers (76 tests PASS)
+```
+
+Exact broader regression commands and counts:
+```powershell
+py -m unittest discover -s tests -p "test_paper_trading_*.py" (227 tests PASS)
+py -m unittest discover -s tests -p "test_simulated_paper_trading_guard*.py" (189 tests PASS)
+py -m unittest discover -s tests -p "test_risk_*.py" (177 tests PASS)
+```
+
+Exact full-suite count:
+```powershell
+py -m unittest discover -s tests (1335 tests PASS)
+```
+
+Whitespace checks and actual results:
+- `git diff origin/main...HEAD --check`: PASS
+- `independent py/pathlib trailing-whitespace scan`: PASS
+
+Known limitations:
+- The engine and CLI remain single-symbol.
+- Aggregate portfolio result logic, aggregate JSON serialization, Markdown export, and CLI multi-symbol wrappers (such as `--max-total-exposure`) remain deferred.
