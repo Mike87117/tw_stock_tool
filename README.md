@@ -816,6 +816,7 @@ python daily_watchlist.py --auto-stock-list --auto-stock-list-output stocks.txt
 
 功能：
 - 將已存在的 simulated paper trading result JSON 檔案轉換為 Markdown 或 CSV 報表。
+- 目前輸出 schema v3；讀取仍支援 v1/v2。Markdown 包含 `Trade Log`，CSV 另含 `<basename>_trade_log.csv`，既有 Orders、Fills、Rejections 輸出保留。
 - 至少需要指定 `--output-markdown` 或 `--output-csv-dir` 其中一個輸出選項。
 - 兩個輸出選項可以同時使用。
 - `--basename` 參數僅會影響匯出的 CSV 檔案名稱字首（預設為 `simulated_paper_trading`）。
@@ -1331,6 +1332,8 @@ csv_bundle = export_simulated_paper_trading_csv_bundle(result)
 summary_csv = csv_bundle["summary"]
 orders_csv = csv_bundle["orders"]
 fills_csv = csv_bundle["fills"]
+rejections_csv = csv_bundle["rejections"]
+trade_log_csv = csv_bundle["trade_log"]
 ```
 
 ### 3. Markdown file export
@@ -1368,6 +1371,8 @@ This writes:
 - `simulated_paper_trading_summary.csv`
 - `simulated_paper_trading_orders.csv`
 - `simulated_paper_trading_fills.csv`
+- `simulated_paper_trading_rejections.csv`
+- `simulated_paper_trading_trade_log.csv`
 
 And returns:
 
@@ -1376,6 +1381,8 @@ And returns:
     "summary": Path(...),
     "orders": Path(...),
     "fills": Path(...),
+    "rejections": Path(...),
+    "trade_log": Path(...),
 }
 ```
 

@@ -188,6 +188,7 @@ Broker Interface
 - Phase 48.10：完成 (simulated paper trading runtime-state and pending BUY exposure reservation model boundary)
 - Phase 48.11：完成 (single-symbol simulated paper trading bar stepper and runtime-state engine integration)
 - Phase 48.12：完成 (chronological multi-symbol coordinator and runtime-aware as-of portfolio exposure boundary)
+- Phase 49：完成 (canonical simulated Trade Log lifecycle, schema v3 artifacts, Markdown/CSV audit export, and repository architecture review)
 
 ## 3. 台股資料取得
 
@@ -390,6 +391,8 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 - 錯誤訊息。
 
 沒有完整 Trade Log，就無法追蹤研究結果與執行結果是否一致。
+
+**Phase 49 status:** The offline simulated-paper-trading Trade Log is complete for the current runtime boundary. `SimulatedTradeLog.records` is the canonical append-only audit trail and the existing `orders`, `fills`, and `rejections` collections remain available for compatibility. Typed events record candidate creation, actual guard evaluation, pending `next_bar_open` acceptance, rejection, fill, invalid-open skip, and portfolio-validation failure. A missing guard is represented as `risk_allowed=None`; no risk decision is fabricated. Error messages and normalized error codes are retained. Simulated-paper-trading JSON schema v3 adds `audit_log`, while v1 and v2 remain readable. Markdown includes a Trade Log section and CSV export includes a dedicated `_trade_log.csv` artifact. This remains historical, deterministic, research-only simulated functionality; no broker or live-trading capability was added.
 
 ## 14. Broker Interface
 
