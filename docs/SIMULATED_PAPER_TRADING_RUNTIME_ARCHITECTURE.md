@@ -111,28 +111,30 @@ wrappers, ordering, error rows, and CI imports.
 
 ## 3. Current Simulated Paper Trading Runtime
 
-The current execution path is:
+The execution paths explicitly distinguish single-symbol compatibility from multi-symbol coordination.
 
 ```text
+Legacy single-symbol compatibility path:
 historical DataFrame
 -> full-history compatibility engine
 -> shared runtime state
 -> single-symbol bar stepper
 -> per-symbol pending state
--> next-bar-open fill
--> existing single-symbol result
+-> next-actual-bar-open fill
+-> single-symbol result
 ```
 
-`run_simulated_paper_trading(...)` validates the complete DataFrame and standard
-signals, creates `SimulatedPortfolio(cash=float(initial_cash))`, and sets
-`pending_order` to `None`. On each row it first attempts the previous bar's
-pending fill at the current open, clears that pending state, then creates at
-most one new BUY or SELL intent for the configured symbol. Invalid open prices
-and portfolio fill errors currently cause the fill to be skipped. The
-result-building wrapper summarizes only the requested symbol.
+```text
+Direct chronological multi-symbol path:
+symbol-to-DataFrame mapping
+-> chronological union coordinator
+-> shared runtime state
+-> deterministic same-timestamp symbol ordering
+-> single-symbol bar stepper
+-> shared portfolio and per-symbol pending state
+```
 
-The next-bar-open rule prevents same-bar signal/price look-ahead in this path.
-It does not by itself coordinate bars across symbols.
+`run_simulated_paper_trading(...)` remains the legacy single-symbol full-history compatibility entry point. It creates a `SimulatedPortfolio` and wraps it in `SimulatedPaperTradingRuntimeState`. Each actual DataFrame row is delegated to `step_simulated_symbol_bar(...)`. Pending order state is stored per symbol in `runtime_state.pending_orders`. Pending orders are attempted only on that same symbol's next actual bar. The compatibility result remains single-symbol. Invalid signal-row reference prices fail closed according to the existing stepper behavior.
 
 ## 4. Confirmed Architectural Facts
 
@@ -158,8 +160,10 @@ It does not by itself coordinate bars across symbols.
 Running all history for symbol A and then all history for symbol B against one
 shared portfolio is invalid. Symbol A's future fills and position state could
 affect earlier calendar dates processed later for symbol B. This introduces
-cross-symbol look-ahead. A future coordinator must merge or step symbol bars in
-deterministic chronological order.
+cross-symbol look-ahead. A valid coordinator must merge or step symbol bars in
+deterministic chronological order. The Phase 48.12 coordinator satisfies this
+requirement through chronological union interleaving and ascending same-timestamp
+symbol order.
 
 ### Initial portfolio injection by itself
 
