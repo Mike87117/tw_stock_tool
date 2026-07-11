@@ -4,11 +4,113 @@ Research-only simulated models.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from enum import StrEnum
+import json
+import math
+from numbers import Real
+from types import MappingProxyType
+from typing import Any, Literal, Mapping
 
 
 class PaperTradingModelError(Exception):
     pass
+
+
+class SimulatedTradeEventType(StrEnum):
+    """Canonical simulated-order lifecycle event vocabulary."""
+
+    CANDIDATE_CREATED = "candidate_created"
+    RISK_EVALUATED = "risk_evaluated"
+    ACCEPTED_PENDING = "accepted_pending"
+    REJECTED = "rejected"
+    FILLED = "filled"
+    FILL_SKIPPED = "fill_skipped"
+    FILL_FAILED = "fill_failed"
+    EXECUTION_ERROR = "execution_error"
+
+
+class SimulatedTradeStatus(StrEnum):
+    """State reached by a canonical simulated trade-log event."""
+
+    CANDIDATE = "candidate"
+    RISK_ALLOWED = "risk_allowed"
+    RISK_REJECTED = "risk_rejected"
+    PENDING_NEXT_BAR_OPEN = "pending_next_bar_open"
+    REJECTED = "rejected"
+    FILLED = "filled"
+    SKIPPED_INVALID_OPEN = "skipped_invalid_open"
+    FAILED_PORTFOLIO_VALIDATION = "failed_portfolio_validation"
+    EXECUTION_ERROR = "execution_error"
+
+
+@dataclass(frozen=True, slots=True)
+class SimulatedTradeLogRecord:
+    """Immutable audit event for an offline simulated order lifecycle."""
+
+    sequence: int
+    record_id: str
+    event_type: SimulatedTradeEventType
+    status: SimulatedTradeStatus
+    order_id: str
+    symbol: str
+    side: Literal["BUY", "SELL"]
+    quantity: int
+    signal_time: Any
+    order_created_at: Any | None
+    expected_execution_model: Literal["next_bar_open"] = "next_bar_open"
+    fill_time: Any | None = None
+    fill_price: float | None = None
+    fee: float = 0.0
+    tax: float = 0.0
+    slippage: float = 0.0
+    strategy_name: str | None = None
+    strategy_metadata: Mapping[str, Any] = field(default_factory=dict)
+    risk_allowed: bool | None = None
+    risk_rejection_reasons: tuple[str, ...] = ()
+    guard_metadata: Mapping[str, Any] = field(default_factory=dict)
+    error_code: str | None = None
+    error_message: str | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence <= 0:
+            raise PaperTradingModelError("Trade-log sequence must be a positive integer.")
+        if not isinstance(self.record_id, str) or not self.record_id.strip():
+            raise PaperTradingModelError("Trade-log record_id must not be blank.")
+        if not isinstance(self.event_type, SimulatedTradeEventType):
+            raise PaperTradingModelError("Invalid trade-log event type.")
+        if not isinstance(self.status, SimulatedTradeStatus):
+            raise PaperTradingModelError("Invalid trade-log status.")
+        if not isinstance(self.symbol, str) or not self.symbol.strip():
+            raise PaperTradingModelError("Symbol must not be blank.")
+        if self.side not in ("BUY", "SELL"):
+            raise PaperTradingModelError(f"Invalid side: {self.side}")
+        if isinstance(self.quantity, bool) or not isinstance(self.quantity, int) or self.quantity <= 0:
+            raise PaperTradingModelError("Quantity must be a positive integer.")
+        if self.expected_execution_model != "next_bar_open":
+            raise PaperTradingModelError("Expected execution model must be next_bar_open.")
+        for name in ("fill_price", "fee", "tax", "slippage"):
+            value = getattr(self, name)
+            if value is None and name == "fill_price":
+                continue
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
+                raise PaperTradingModelError(f"{name} must be finite numeric data.")
+            if (name == "fill_price" and float(value) <= 0) or (name != "fill_price" and float(value) < 0):
+                raise PaperTradingModelError(f"{name} has an invalid value.")
+        if self.risk_allowed is not None and type(self.risk_allowed) is not bool:
+            raise PaperTradingModelError("risk_allowed must be a bool or None.")
+        if not isinstance(self.risk_rejection_reasons, tuple) or not all(
+            isinstance(reason, str) and reason.strip() for reason in self.risk_rejection_reasons
+        ):
+            raise PaperTradingModelError("risk_rejection_reasons must contain non-blank strings.")
+        for name in ("strategy_metadata", "guard_metadata"):
+            value = getattr(self, name)
+            if not isinstance(value, Mapping):
+                raise PaperTradingModelError(f"{name} must be a mapping.")
+            try:
+                copied = json.loads(json.dumps(dict(value), allow_nan=False))
+            except (TypeError, ValueError):
+                raise PaperTradingModelError(f"{name} must be JSON serializable.") from None
+            object.__setattr__(self, name, MappingProxyType(copied))
 
 
 @dataclass(slots=True)
@@ -122,6 +224,7 @@ class SimulatedTradeLog:
     orders: list[SimulatedOrder] = field(default_factory=list)
     fills: list[SimulatedFill] = field(default_factory=list)
     rejections: list[SimulatedOrderRejection] = field(default_factory=list)
+    records: list[SimulatedTradeLogRecord] = field(default_factory=list)
 
     def record_order(self, order: SimulatedOrder) -> None:
         self.orders.append(order)
@@ -131,6 +234,33 @@ class SimulatedTradeLog:
 
     def record_rejection(self, rejection: SimulatedOrderRejection) -> None:
         self.rejections.append(rejection)
+
+    def record_event(
+        self,
+        order: SimulatedOrder,
+        event_type: SimulatedTradeEventType,
+        status: SimulatedTradeStatus,
+        **details: Any,
+    ) -> SimulatedTradeLogRecord:
+        """Append one deterministically sequenced lifecycle event."""
+        sequence = len(self.records) + 1
+        record = SimulatedTradeLogRecord(
+            sequence=sequence,
+            record_id=f"audit-{sequence:06d}",
+            event_type=event_type,
+            status=status,
+            order_id=order.order_id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            signal_time=order.signal_time,
+            order_created_at=order.created_at,
+            strategy_name=order.strategy,
+            strategy_metadata=order.metadata,
+            **details,
+        )
+        self.records.append(record)
+        return record
 
 
 @dataclass(slots=True)

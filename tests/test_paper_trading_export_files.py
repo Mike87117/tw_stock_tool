@@ -94,7 +94,7 @@ class TestPaperTradingExportFiles(unittest.TestCase):
                 self.result, temp_dir_path, basename="test_run"
             )
 
-            self.assertEqual(set(result_paths.keys()), {"summary", "orders", "fills", "rejections"})
+            self.assertEqual(set(result_paths.keys()), {"summary", "orders", "fills", "rejections", "trade_log"})
 
             for p in result_paths.values():
                 self.assertIsInstance(p, Path)
@@ -104,6 +104,7 @@ class TestPaperTradingExportFiles(unittest.TestCase):
             self.assertEqual(result_paths["orders"].name, "test_run_orders.csv")
             self.assertEqual(result_paths["fills"].name, "test_run_fills.csv")
             self.assertEqual(result_paths["rejections"].name, "test_run_rejections.csv")
+            self.assertEqual(result_paths["trade_log"].name, "test_run_trade_log.csv")
 
             with open(result_paths["summary"], "r", encoding="utf-8") as f:
                 self.assertTrue(f.read().startswith("metric,value\n"))

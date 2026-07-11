@@ -1,6 +1,6 @@
 import math
 import pandas as pd
-from typing import Mapping, Callable
+from typing import Any, Mapping, Callable
 
 from tw_stock_tool.backtesting.signals import validate_standard_signals
 from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPortfolio
@@ -27,6 +27,8 @@ def run_chronological_multi_symbol_simulated_paper_trading(
         [SimulatedOrder, SimulatedPortfolio],
         SimulatedPaperTradingGuardDecision,
     ] | None = None,
+    strategy: str | None = None,
+    strategy_metadata: Mapping[str, Any] | None = None,
 ) -> SimulatedPaperTradingRuntimeState:
     if not isinstance(dataframes, Mapping):
         raise TypeError("dataframes must be a Mapping.")
@@ -141,6 +143,8 @@ def run_chronological_multi_symbol_simulated_paper_trading(
                 entry_signal=entry_sig,
                 exit_signal=exit_sig,
                 quantity_per_trade=quantity_per_trade,
+                strategy=strategy,
+                strategy_metadata=strategy_metadata,
             )
 
             if candidate is not None:

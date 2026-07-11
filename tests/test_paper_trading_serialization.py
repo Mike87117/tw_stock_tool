@@ -76,7 +76,7 @@ class TestPaperTradingSerialization(unittest.TestCase):
 
     def test_serialize_to_dict(self):
         data = serialize_simulated_paper_trading_result(self.result)
-        self.assertEqual(data["schema_version"], 2)
+        self.assertEqual(data["schema_version"], 3)
         self.assertEqual(data["result_type"], "simulated_paper_trading_result")
         
         o = data["orders"][0]
@@ -120,7 +120,7 @@ class TestPaperTradingSerialization(unittest.TestCase):
     def test_json_string_export_import(self):
         json_str = export_simulated_paper_trading_result_json(self.result)
         self.assertIsInstance(json_str, str)
-        self.assertIn('"schema_version": 2', json_str)
+        self.assertIn('"schema_version": 3', json_str)
         
         restored = load_simulated_paper_trading_result_json(json_str)
         self.assertEqual(restored.symbol, "2330")
@@ -150,8 +150,8 @@ class TestPaperTradingSerialization(unittest.TestCase):
 
     def test_reject_wrong_schema_version(self):
         data = serialize_simulated_paper_trading_result(self.result)
-        data["schema_version"] = 3
-        with self.assertRaisesRegex(PaperTradingModelError, "Unsupported schema_version: 3"):
+        data["schema_version"] = 4
+        with self.assertRaisesRegex(PaperTradingModelError, "Unsupported schema_version: 4"):
             deserialize_simulated_paper_trading_result(data)
 
     def test_reject_wrong_result_type(self):
@@ -160,21 +160,22 @@ class TestPaperTradingSerialization(unittest.TestCase):
         with self.assertRaisesRegex(PaperTradingModelError, "Unsupported result_type: invalid"):
             deserialize_simulated_paper_trading_result(data)
 
-    def test_strict_v2_top_level_schema_keys(self):
+    def test_strict_v3_top_level_schema_keys(self):
         data = serialize_simulated_paper_trading_result(self.result)
         expected_keys = [
             "schema_version", "result_type", "symbol", "initial_cash",
             "final_cash", "final_position_quantity", "average_cost",
             "realized_pnl", "unrealized_pnl", "total_equity",
             "order_count", "fill_count", "open_position_count",
-            "orders", "fills", "rejections"
+            "orders", "fills", "rejections", "audit_log"
         ]
         self.assertCountEqual(list(data.keys()), expected_keys)
-        self.assertEqual(data["schema_version"], 2)
+        self.assertEqual(data["schema_version"], 3)
         self.assertEqual(data["result_type"], "simulated_paper_trading_result")
         self.assertIsInstance(data["orders"], list)
         self.assertIsInstance(data["fills"], list)
         self.assertIsInstance(data["rejections"], list)
+        self.assertIsInstance(data["audit_log"], list)
 
     def test_strict_rejection_payload_shape(self):
         data = serialize_simulated_paper_trading_result(self.result)
@@ -194,7 +195,7 @@ class TestPaperTradingSerialization(unittest.TestCase):
         self.assertIsInstance(cand["signal_time"], str)
         self.assertIsInstance(cand["created_at"], str)
 
-    def test_v2_round_trip_stability(self):
+    def test_v3_round_trip_stability(self):
         data1 = serialize_simulated_paper_trading_result(self.result)
         restored = deserialize_simulated_paper_trading_result(data1)
         data2 = serialize_simulated_paper_trading_result(restored)
