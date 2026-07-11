@@ -583,22 +583,70 @@ class TestChronologicalMultiSymbolCoordinator(unittest.TestCase):
         r1 = get_res({"A": df_a, "B": df_b})
         r2 = get_res({"B": df_b, "A": df_a})
 
-        self.assertEqual(list(r1.pending_orders.keys()), list(r2.pending_orders.keys()))
-        self.assertEqual(r1.portfolio.trade_log.orders[0].symbol, r2.portfolio.trade_log.orders[0].symbol)
+        def extract_state(rt):
+            port = rt.portfolio
+            return {
+                "final_cash": port.cash,
+                "positions_by_symbol": list(port.positions.keys()),
+                "position_quantity": {s: p.quantity for s, p in port.positions.items()},
+                "average_cost": {s: p.average_cost for s, p in port.positions.items()},
+                "realized_pnl": {s: p.realized_pnl for s, p in port.positions.items()},
+                "accepted_orders": [(o.order_id, o.symbol, o.side, o.quantity, o.signal_time) for o in port.trade_log.orders],
+                "fills": [(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at) for f in port.trade_log.fills],
+                "rejections": [(r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.reasons) for r in port.trade_log.rejections],
+                "pending_order_symbols": list(rt.pending_orders.keys()),
+                "pending_order_contents": [(s, p.order.side, p.order.quantity) for s, p in rt.pending_orders.items()],
+                "pending_reference_prices": {s: p.reference_price for s, p in rt.pending_orders.items()},
+                "total_reserved_buy_notional": rt.total_reserved_buy_notional
+            }
+
+        self.assertEqual(extract_state(r1), extract_state(r2))
 
     def test_scenario_6_single_symbol_compatibility(self):
         from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading_result
-        df_a = pd.DataFrame({"Open": [100.0, 105.0], "entry_signal": [True, False], "exit_signal": [False, True]}, index=pd.to_datetime(["2023-01-01", "2023-01-02"]))
+        from tw_stock_tool.paper_trading.stepper import step_simulated_symbol_bar
+        df_a = pd.DataFrame({"Open": [100.0, 105.0, 110.0], "entry_signal": [True, False, False], "exit_signal": [False, True, False]}, index=pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"]))
 
         p1 = SimulatedPortfolio(cash=10000.0)
         rt1 = SimulatedPaperTradingRuntimeState(p1)
         run_chronological_multi_symbol_simulated_paper_trading({"A": df_a}, rt1, quantity_per_trade=10)
 
-        res = run_simulated_paper_trading_result(df=df_a, symbol="A", quantity_per_trade=10, initial_cash=10000.0, last_price=105.0)
-        pass
+        p2 = SimulatedPortfolio(cash=10000.0)
+        rt2 = SimulatedPaperTradingRuntimeState(p2)
+        for i, dt in enumerate(df_a.index):
+            step_simulated_symbol_bar(
+                runtime_state=rt2,
+                symbol="A",
+                bar_position=i,
+                index_label=dt,
+                open_price=df_a.iloc[i]["Open"],
+                entry_signal=df_a.iloc[i]["entry_signal"],
+                exit_signal=df_a.iloc[i]["exit_signal"],
+                quantity_per_trade=10
+            )
 
+        def extract_state(rt):
+            port = rt.portfolio
+            return {
+                "cash": port.cash,
+                "position_symbols": list(port.positions.keys()),
+                "position_quantity": {s: p.quantity for s, p in port.positions.items()},
+                "average_cost": {s: p.average_cost for s, p in port.positions.items()},
+                "realized_pnl": {s: p.realized_pnl for s, p in port.positions.items()},
+                "accepted_orders": [(o.order_id, o.symbol, o.side, o.quantity, o.signal_time) for o in port.trade_log.orders],
+                "fills": [(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at) for f in port.trade_log.fills],
+                "rejections": [(r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.reasons) for r in port.trade_log.rejections],
+                "pending_order_contents": [(s, p.order.side, p.order.quantity) for s, p in rt.pending_orders.items()],
+                "pending_reference_price": {s: p.reference_price for s, p in rt.pending_orders.items()},
+                "total_reserved_buy_notional": rt.total_reserved_buy_notional
+            }
+
+        self.assertEqual(extract_state(rt1), extract_state(rt2))
+
+        res = run_simulated_paper_trading_result(df=df_a, symbol="A", quantity_per_trade=10, initial_cash=10000.0, last_price=110.0)
         self.assertEqual(rt1.portfolio.cash, res.final_cash)
         self.assertEqual(len(rt1.portfolio.trade_log.fills), len(res.fills))
+        self.assertEqual(len(rt1.portfolio.trade_log.orders), len(res.orders))
 
     def test_scenario_7_no_guard_call_during_fill_phase(self):
         from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPosition
