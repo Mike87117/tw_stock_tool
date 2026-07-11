@@ -427,3 +427,6 @@ No broker, live-trading, semi-auto, or auto-trading capability exists.
 - deterministic candidate ordering remains symbol ascending
 - single-symbol stepper remains a compatibility wrapper
 - aggregate result remains deferred
+
+implementation commit:
+46ce2470923cee2adfe55982b01ed15973c079db
