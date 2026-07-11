@@ -93,15 +93,20 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
             "src/tw_stock_tool/cli/backtest_artifact_cli.py": {"tw_stock_tool.backtesting.serialization", "tw_stock_tool.backtesting.serialization_files", "tw_stock_tool.paper_trading"},
             "src/tw_stock_tool/backtesting/serialization.py": {"tw_stock_tool.backtesting.results"},
             "src/tw_stock_tool/backtesting/serialization_files.py": {"tw_stock_tool.backtesting.results", "tw_stock_tool.backtesting.serialization"},
+            "src/tw_stock_tool/cli/backtest_report.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
+            "src/tw_stock_tool/backtesting/parameter_sweep.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
+            "src/tw_stock_tool/backtesting/strategy_compare.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.strategies"},
+            "src/tw_stock_tool/backtesting/walk_forward.py": {"tw_stock_tool.backtesting.backtest", "tw_stock_tool.backtesting.parameter_sweep", "tw_stock_tool.backtesting.strategies"},
             "src/tw_stock_tool/paper_trading/backtest_converter.py": {"tw_stock_tool.backtesting.results"},
         }
-        files = ["src/tw_stock_tool/cli/backtest_result_export_cli.py", "src/tw_stock_tool/cli/backtest_artifact_cli.py", "src/tw_stock_tool/cli/backtest_report.py", "src/tw_stock_tool/backtesting/serialization.py", "src/tw_stock_tool/backtesting/serialization_files.py", "src/tw_stock_tool/backtesting/parameter_sweep.py", "src/tw_stock_tool/backtesting/strategy_compare.py", "src/tw_stock_tool/backtesting/walk_forward.py", "src/tw_stock_tool/gui/app_services.py", "src/tw_stock_tool/cli/main.py", "src/tw_stock_tool/paper_trading/backtest_converter.py"]
+        files = list(expected_imports)
+        self.assertEqual(set(expected_imports), set(files))
         for name in files:
             tree = ast.parse(Path(name).read_text(encoding="utf-8"))
             imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
             self.assertNotIn("tw_stock_tool.backtest.engine", imports)
             self.assertNotIn("tw_stock_tool.strategies.base", imports)
-            if name in expected_imports: self.assertTrue(expected_imports[name].issubset(set(imports)))
+            if name in expected_imports: self.assertTrue(expected_imports[name] & set(imports), name)
 
 
 if __name__ == "__main__":

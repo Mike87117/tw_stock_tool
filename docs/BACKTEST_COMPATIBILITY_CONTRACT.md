@@ -1,85 +1,86 @@
-# Backtest Compatibility Contract
+﻿# Backtest Compatibility Contract
 
 ## A. Contract status
 
-Phase A2 decision: **INSUFFICIENT_EVIDENCE_RETAIN_TEMPORARILY**. A3 formalizes boundaries only; it authorizes neither migration nor deprecation.
+Phase A2 decision: **INSUFFICIENT_EVIDENCE_RETAIN_TEMPORARILY**. A3 defines boundaries only; it authorizes no migration or deprecation.
 
 ## B. Contract classification vocabulary
 
-- `SUPPORTED_CANONICAL`: supported application-facing canonical path.
-- `INTERNAL_CONSUMER_CONTRACT`: current internal consumer boundary.
-- `TEMPORARY_COMPATIBILITY_RETAINED`: import retained because external use is unknown.
-- `CHARACTERIZED_NOT_GUARANTEED`: observed behavior, not a public promise.
-- `NOT_SUPPORTED`: no supported interoperability promise.
+| Classification | Concrete examples | Contract strength | Permitted action in A3 |
+|---|---|---|---|
+| SUPPORTED_CANONICAL | canonical backtesting imports and result identity | public/application boundary | protect only |
+| INTERNAL_CONSUMER_CONTRACT | concrete CLI, serialization, converter consumers | internal, not automatically public | protect only |
+| TEMPORARY_COMPATIBILITY_RETAINED | alternate engine and BaseStrategy imports | unknown external usage | retain import |
+| CHARACTERIZED_NOT_GUARANTEED | alternate NaN-open propagation | observed risk, not promise | document only |
+| NOT_SUPPORTED | alternate result serialization/conversion | explicitly rejected | do not add support |
 
 ## C. Canonical backtest contract
 
-`tw_stock_tool.backtesting.backtest.run_backtest`, `run_backtest_result`, and `BacktestError`; `tw_stock_tool.backtesting.results.BacktestResult`; canonical strategies, serialization, and serialization_files are `SUPPORTED_CANONICAL`. The canonical result identity, structured fields, legacy dictionary adapter, artifact ownership, report/CLI/converter ownership, and root wrapper targets are contract-protected.
+Canonical `run_backtest`, `run_backtest_result`, `BacktestError`, `BacktestResult`, strategies, serialization, and serialization_files own artifacts, reports, CLI, and conversion boundaries.
 
 ## D. Alternate temporary retention contract
 
-`tw_stock_tool.backtest.engine.BacktestEngine`, its distinct `BacktestResult`, and `tw_stock_tool.strategies.base.BaseStrategy` are `TEMPORARY_COMPATIBILITY_RETAINED`. No production caller or root wrapper target was identified. Canonical serialization and paper-trading conversion reject alternate results. Continued importability does not declare a canonical API; external usage is unknown.
+Alternate `BacktestEngine`, alternate `BacktestResult`, and `BaseStrategy` remain importable only as temporary compatibility retention. They are not canonical and their results are rejected by canonical serialization and conversion.
 
 ## E. Root-wrapper contract
 
-`backtest.py` redirects to `tw_stock_tool.backtesting.backtest`; `strategies.py` redirects to `tw_stock_tool.backtesting.strategies`. Redirecting either to alternate modules is breaking.
+`backtest.py` redirects to `tw_stock_tool.backtesting.backtest`; `strategies.py` redirects to `tw_stock_tool.backtesting.strategies`. Changing either is breaking.
 
 ## F. Consumer evidence matrix
 
-| Consumer | Type | Canonical source | Purpose | Classification | Risk |
-|---|---|---|---|---|---|
-| backtest_result_export_cli | CLI | run_backtest_result and STRATEGIES | export artifact | INTERNAL_CONSUMER_CONTRACT | High |
-| backtest_artifact_cli | CLI/artifact | canonical file loader and converter | inspect/convert artifact | INTERNAL_CONSUMER_CONTRACT | High |
-| backtesting serialization modules | Artifact | canonical BacktestResult | JSON read/write | INTERNAL_CONSUMER_CONTRACT | High |
-| paper_trading backtest_converter | Conversion | canonical BacktestResult | simulated conversion | INTERNAL_CONSUMER_CONTRACT | High |
-| src/tw_stock_tool/backtesting/parameter_sweep.py; src/tw_stock_tool/backtesting/strategy_compare.py; src/tw_stock_tool/backtesting/walk_forward.py | Runtime/report | canonical backtesting modules | research reports | INTERNAL_CONSUMER_CONTRACT | High |
+| Consumer file/module | Consumer type | Imported symbol | Canonical source | Runtime purpose | Artifact/report impact | Existing test evidence | Contract classification | Breaking-change risk |
+|---|---|---|---|---|---|---|---|---|
+| src/tw_stock_tool/cli/backtest_result_export_cli.py | CLI | run_backtest_result | backtesting.backtest | JSON export | artifact writer | export CLI tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/cli/backtest_artifact_cli.py | Artifact CLI | loader, converter | serialization_files, paper_trading | inspect/convert | artifact conversion | artifact CLI tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/cli/backtest_report.py | Report CLI | run_backtest | backtesting.backtest | report execution | report output | report tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/backtesting/serialization.py | Serialization | BacktestResult | backtesting.results | JSON schema | writer/reader | serialization tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/backtesting/serialization_files.py | Artifact | BacktestResult | results/serialization | file boundary | loader identity | file tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/backtesting/parameter_sweep.py | Runtime | run_backtest | backtesting.backtest | sweep | report inputs | sweep tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/backtesting/strategy_compare.py | Report | run_backtest | backtesting.backtest | compare | report inputs | compare tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/backtesting/walk_forward.py | Walk-forward | run_backtest | backtesting.backtest | walk-forward | report inputs | walk-forward tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/gui/app_services.py | Runtime | run_backtest | backtesting.backtest | GUI service | display | app services tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/cli/main.py | Runtime CLI | run_backtest | backtesting.backtest | analysis | report inputs | main tests | INTERNAL_CONSUMER_CONTRACT | High |
+| src/tw_stock_tool/paper_trading/backtest_converter.py | Conversion | BacktestResult | backtesting.results | simulation conversion | typed conversion | converter tests | INTERNAL_CONSUMER_CONTRACT | High |
 
 ## G. Result identity and artifact contract
 
-Canonical and alternate `BacktestResult` classes are distinct. Artifact writer/reader, serializer, and converter accept only canonical results. Metadata (`stock`, `strategy`, `parameters`, dates), integer share quantities, and canonical trade columns are consumer boundaries. Automatic duck typing is prohibited.
+Canonical and alternate result classes are distinct. Canonical artifact readers return canonical results; serialization and conversion reject alternate results. Metadata, integer quantities, canonical trade fields, and equity values are contract-protected.
 
 ## H. Stable and unstable behavior
 
-| Stable contract | Characterized but not guaranteed |
-|---|---|
-| canonical imports, root targets, result identity, artifact return type, converter input type, established consumers | alternate NaN-open propagation, undocumented alternate edges, private helpers, internal layout, absence of unknown external users |
-
-The alternate NaN-open behavior is `CHARACTERIZED_NOT_GUARANTEED`: it is a risk, not an endorsed promise.
+Canonical imports, root targets, artifact identity, and converter input are stable. Alternate NaN-open propagation is characterized but not guaranteed.
 
 ## I. Breaking-change catalogue
 
-Changing root targets, canonical result identity, artifact result type, serializer/converter input types, canonical fields, converter columns, integer-share assumptions, or consumer imports is breaking. Removing alternate imports also requires a compatibility window. Each requires consumer identity tests, artifact tests, documentation, and a dedicated production phase; package exports that create ambiguous `BacktestResult` imports are prohibited.
+| Change | Why breaking | Required contract tests | Required migration documentation | Compatibility window required | Dedicated production phase required | Rollback consideration |
+|---|---|---|---|---|---|---|
+| Change root backtest.py target | import break | wrapper identity | import migration | Yes | Yes | restore target |
+| Change root strategies.py target | import break | wrapper identity | import migration | Yes | Yes | restore target |
+| Change canonical BacktestResult identity | consumer break | identity | release notes | Yes | Yes | retain class |
+| Allow alternate serialization | type boundary | rejection | contract update | Yes | Yes | reject alternate |
+| Change loader return type | artifact break | round-trip | artifact migration | Yes | Yes | retain reader |
+| Change converter input type | conversion break | converter | conversion migration | Yes | Yes | retain type check |
+| Remove BacktestEngine path | external risk | import retention | deprecation | Yes | Yes | shim |
+| Remove BaseStrategy path | external risk | import retention | deprecation | Yes | Yes | shim |
+| Rename canonical fields | result break | result tests | field migration | Yes | Yes | aliases |
+| Change converter trade columns | conversion break | converter | schema migration | Yes | Yes | old columns |
+| Change integer shares | semantic break | converter | semantic migration | Yes | Yes | adapter |
+| Change metadata semantics | artifact break | round-trip | metadata migration | Yes | Yes | preserve fields |
+| Move consumers to alternate engine | semantic break | AST tests | migration plan | Yes | Yes | restore import |
+| Add ambiguous result exports | identity ambiguity | import identity | API docs | Yes | Yes | remove export |
 
 ## J. Allowed additive changes
 
-Separately reviewed additive metadata, report fields, tests, documentation, named adapters, and bug fixes with characterization migration may be safe. A3 implements none.
+New tests, documentation, additive metadata, and named adapters may be reviewed separately. None are implemented here.
 
 ## K. Future production entry criteria
 
-A production phase needs an approved target behavior, explicit classification, migration and artifact tests, consumer identity tests, external-risk statement, rollback path, release notes, no silent semantic change, and no unrelated cleanup.
+Approved behavior, classification, migration and artifact tests, consumer identity tests, external-risk statement, rollback, release notes, and no silent semantic change are required.
 
 ## L. Recommended next phase
 
-**Backtest Deprecation Evidence Collection**: collect external-import and consumer evidence before any production modification. This is safer than inventing a migration while semantic and external-usage uncertainty remain.
+**Backtest Deprecation Evidence Collection**; evidence remains insufficient for production modification.
 
 ## M. Explicit non-goals
 
-A3 does not modify engines, fix NaN opens, add adapters/warnings/exports, change wrappers/results/artifacts/reports/CLI/strategies, migrate consumers, remove files, or add broker, live-trading, execution, or investment-recommendation functionality.
-
-## F. Consumer evidence matrix
-
-The authoritative consumer list is: `src/tw_stock_tool/cli/backtest_result_export_cli.py` (CLI, run_backtest_result and JSON export); `src/tw_stock_tool/cli/backtest_artifact_cli.py` (artifact CLI, canonical loader and converter); `src/tw_stock_tool/cli/backtest_report.py` (report CLI, run_backtest); `src/tw_stock_tool/backtesting/serialization.py` and `serialization_files.py` (serialization/artifact); `src/tw_stock_tool/backtesting/parameter_sweep.py`, `strategy_compare.py`, and `walk_forward.py` (runtime/report); `src/tw_stock_tool/gui/app_services.py` and `src/tw_stock_tool/cli/main.py` (runtime); and `src/tw_stock_tool/paper_trading/backtest_converter.py` (conversion). Existing backtest, artifact, report, GUI, converter, and serialization tests protect these boundaries. All are `INTERNAL_CONSUMER_CONTRACT`, high risk; no alternate import is permitted in their canonical workflow.
-
-## I. Breaking-change catalogue
-
-| Change | Why breaking | Tests/docs | Window/phase | Rollback |
-|---|---|---|---|---|
-| Change root backtest.py or strategies.py target | breaks imports | wrapper identity tests, migration docs | yes/yes | restore target |
-| Change canonical result identity or fields | breaks consumers/artifacts | identity/artifact tests, release notes | yes/yes | retain class/fields |
-| Accept alternate result in serializer/converter | weakens type boundary | rejection tests, contract docs | yes/yes | reject alternate |
-| Change loader return type or converter input/trade columns/integer shares/metadata | breaks artifacts/conversion | round-trip/converter tests, migration docs | yes/yes | retain old reader/adapter |
-| Remove alternate engine/BaseStrategy imports | unknown external break | import tests, deprecation docs | yes/yes | retain import shim |
-| Move canonical consumer to alternate engine | changes semantics | consumer AST/characterization tests | yes/yes | restore canonical import |
-| Add ambiguous package BacktestResult export | ambiguous identity | import identity tests, API docs | yes/yes | remove ambiguous alias |
-
-Concrete examples: `SUPPORTED_CANONICAL` is canonical result/import identity; `INTERNAL_CONSUMER_CONTRACT` is the listed consumer files; `TEMPORARY_COMPATIBILITY_RETAINED` is alternate engine/BaseStrategy importability; `CHARACTERIZED_NOT_GUARANTEED` is alternate NaN-open propagation; `NOT_SUPPORTED` is alternate result serialization or conversion.
+No engine, NaN, adapter, warning, export, wrapper, result, artifact, report, CLI, strategy, consumer, or file-removal change is authorized.
