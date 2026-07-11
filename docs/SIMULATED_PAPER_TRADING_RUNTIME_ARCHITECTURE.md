@@ -269,15 +269,15 @@ Estimated removable surface after explicit deprecation and migration work:
 ```text
 Phase 48.10 — COMPLETE
 Phase 48.11 — COMPLETE
-Phase 48.12 — PLANNED / NOT AUTHORIZED
+Phase 48.12 — COMPLETE
 Phase 48.13 — PLANNED / NOT AUTHORIZED
 Phase 48.14 — PLANNED / NOT AUTHORIZED
 Phase 48.15 — PLANNED / NOT AUTHORIZED
 Phase 48.16 — PLANNED / NOT AUTHORIZED
 ```
 
-Phases 48.10 and 48.11 are complete.
-Phase 48.12 and all later phases remain planning entries and are not authorized by this document.
+Phases 48.10, 48.11, and 48.12 are complete.
+Phase 48.13 and all later phases remain planning entries and are not authorized.
 
 ### Completed Phase 48.11 boundary
 
@@ -391,3 +391,31 @@ enforcement, broker interface, live data, or live order capability exists.
 - Includes pending BUY reservations; pending SELL reservations contribute zero.
 - The engine and CLI remain single-symbol.
 - Known limitations: aggregate result, aggregate serialization/export, multi-symbol CLI, and CLI `--max-total-exposure` still do not exist.
+
+
+- implementation commit: `07973c595d98d4754443f719cb5133076720653d`
+- test and documentation correction commit: `0167e0a21f7d3de0156a2eaa71c0ccab9a783071`
+- closeout correction commit: [PENDING_SHA]
+
+Exact final test commands and counts:
+```powershell
+py -m unittest tests.test_paper_trading_coordinator (28 tests PASS)
+py -m unittest tests.test_simulated_paper_trading_guard_providers (76 tests PASS)
+py -m unittest discover -s tests -p "test_paper_trading_*.py" (216 tests PASS)
+py -m unittest discover -s tests -p "test_simulated_paper_trading_guard*.py" (189 tests PASS)
+py -m unittest discover -s tests -p "test_risk_*.py" (177 tests PASS)
+py -m unittest discover -s tests (1324 tests PASS)
+```
+
+Whitespace checks and actual results:
+- `git diff origin/main...HEAD --check`: PASS
+- `git grep -nI -E '[[:blank:]]+$'`: PASS
+- `independent py/pathlib trailing-whitespace scan`: PASS
+
+Existing engine remains single-symbol.
+Historical CLI remains single-symbol.
+No aggregate portfolio result exists.
+No aggregate serialization/export exists.
+No multi-symbol CLI exists.
+CLI `--max-total-exposure` does not exist.
+No broker, live-trading, semi-auto, or auto-trading capability exists.

@@ -554,10 +554,27 @@ class TestChronologicalRuntimePortfolioExposureProvider(unittest.TestCase):
         order = SimulatedOrder(order_id="1", symbol="9999", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
         order_dict = repr(order)
 
-        self.provider(order, self.runtime_state.portfolio)
+        portfolio_id = id(self.runtime_state.portfolio)
+        runtime_id = id(self.runtime_state)
+        portfolio_cash = self.runtime_state.portfolio.cash
+        positions_snapshot = {k: (v.symbol, v.quantity, v.average_cost, v.realized_pnl) for k, v in self.runtime_state.portfolio.positions.items()}
+        trade_log_counts = (len(self.runtime_state.portfolio.trade_log.orders), len(self.runtime_state.portfolio.trade_log.fills), len(self.runtime_state.portfolio.trade_log.rejections))
+        pending_id = id(self.runtime_state.pending_orders)
+        pending_snapshot = {k: (v.order.order_id, v.reference_price, v.reserved_buy_notional) for k, v in self.runtime_state.pending_orders.items()}
+
+        exposure = self.provider(order, self.runtime_state.portfolio)
+
+        self.assertEqual(exposure, 200.0)
 
         pd.testing.assert_frame_equal(self.df, df_copy)
         self.assertEqual(repr(order), order_dict)
+        self.assertEqual(id(self.runtime_state.portfolio), portfolio_id)
+        self.assertEqual(id(self.runtime_state), runtime_id)
+        self.assertEqual(self.runtime_state.portfolio.cash, portfolio_cash)
+        self.assertEqual({k: (v.symbol, v.quantity, v.average_cost, v.realized_pnl) for k, v in self.runtime_state.portfolio.positions.items()}, positions_snapshot)
+        self.assertEqual((len(self.runtime_state.portfolio.trade_log.orders), len(self.runtime_state.portfolio.trade_log.fills), len(self.runtime_state.portfolio.trade_log.rejections)), trade_log_counts)
+        self.assertEqual(id(self.runtime_state.pending_orders), pending_id)
+        self.assertEqual({k: (v.order.order_id, v.reference_price, v.reserved_buy_notional) for k, v in self.runtime_state.pending_orders.items()}, pending_snapshot)
 
 if __name__ == "__main__":
     unittest.main()

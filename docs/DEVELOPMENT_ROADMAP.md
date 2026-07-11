@@ -187,6 +187,7 @@ Broker Interface
 - Phase 48.9：完成 (workflow-level optional portfolio exposure provider passthrough boundary)
 - Phase 48.10：完成 (simulated paper trading runtime-state and pending BUY exposure reservation model boundary)
 - Phase 48.11：完成 (single-symbol simulated paper trading bar stepper and runtime-state engine integration)
+- Phase 48.12：完成 (chronological multi-symbol coordinator and runtime-aware as-of portfolio exposure boundary)
 
 ## 3. 台股資料取得
 
