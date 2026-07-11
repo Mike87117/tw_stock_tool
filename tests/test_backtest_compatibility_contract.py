@@ -64,6 +64,11 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
             loaded = serialization_files.load_backtest_result_json_file(path)
         self.assertIsInstance(loaded, BacktestResult); self.assertNotIsInstance(loaded, AlternateBacktestResult)
         self.assertEqual((loaded.stock, loaded.strategy, loaded.parameters), ("2330", "fixed", {"x": 1}))
+        self.assertEqual((loaded.initial_capital, loaded.final_capital, loaded.trade_count), (canonical.initial_capital, canonical.final_capital, canonical.trade_count))
+        self.assertEqual((loaded.start_date, loaded.end_date), (canonical.start_date.isoformat(), canonical.end_date.isoformat()))
+        self.assertFalse(loaded.trades.empty)
+        self.assertEqual(list(loaded.trades[["Entry Date", "Exit Date", "Entry Price", "Exit Price", "Shares", "PnL"]].iloc[0]), [canonical.trades.iloc[0]["Entry Date"].isoformat(), canonical.trades.iloc[0]["Exit Date"].isoformat(), canonical.trades.iloc[0]["Entry Price"], canonical.trades.iloc[0]["Exit Price"], canonical.trades.iloc[0]["Shares"], canonical.trades.iloc[0]["PnL"]])
+        self.assertEqual(len(loaded.equity_curve), len(canonical.equity_curve))
         with self.assertRaisesRegex(serialization.BacktestResultSerializationError, "BacktestResult"):
             serialization.serialize_backtest_result(alternate)
         with self.assertRaisesRegex(PaperTradingModelError, "BacktestResult"):
@@ -72,8 +77,13 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
     def test_converter_accepts_canonical_and_production_consumers_avoid_alternate_imports(self):
         _, result = self.canonical()
         converted = convert_backtest_result_to_simulated_paper_trading_result(result)
-        self.assertEqual((converted.symbol, converted.initial_cash, converted.final_cash), ("2330", 100, result.final_capital))
-        files = ["src/tw_stock_tool/cli/backtest_result_export_cli.py", "src/tw_stock_tool/cli/backtest_artifact_cli.py", "src/tw_stock_tool/backtesting/serialization.py", "src/tw_stock_tool/paper_trading/backtest_converter.py"]
+        self.assertEqual((converted.symbol, converted.initial_cash, converted.final_cash, converted.total_equity), ("2330", 100, result.final_capital, result.final_capital))
+        self.assertEqual((len(converted.orders), len(converted.fills)), (2, 2))
+        self.assertEqual([order.side for order in converted.orders], ["BUY", "SELL"])
+        self.assertEqual([order.quantity for order in converted.orders], [result.trades.iloc[0]["Shares"]] * 2)
+        self.assertEqual([fill.quantity for fill in converted.fills], [result.trades.iloc[0]["Shares"]] * 2)
+        self.assertEqual([fill.price for fill in converted.fills], [result.trades.iloc[0]["Entry Price"], result.trades.iloc[0]["Exit Price"]])
+        files = ["src/tw_stock_tool/cli/backtest_result_export_cli.py", "src/tw_stock_tool/cli/backtest_artifact_cli.py", "src/tw_stock_tool/cli/backtest_report.py", "src/tw_stock_tool/backtesting/serialization.py", "src/tw_stock_tool/backtesting/serialization_files.py", "src/tw_stock_tool/backtesting/parameter_sweep.py", "src/tw_stock_tool/backtesting/strategy_compare.py", "src/tw_stock_tool/backtesting/walk_forward.py", "src/tw_stock_tool/gui/app_services.py", "src/tw_stock_tool/cli/main.py", "src/tw_stock_tool/paper_trading/backtest_converter.py"]
         for name in files:
             tree = ast.parse(Path(name).read_text(encoding="utf-8"))
             imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]

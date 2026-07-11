@@ -65,3 +65,21 @@ A production phase needs an approved target behavior, explicit classification, m
 ## M. Explicit non-goals
 
 A3 does not modify engines, fix NaN opens, add adapters/warnings/exports, change wrappers/results/artifacts/reports/CLI/strategies, migrate consumers, remove files, or add broker, live-trading, execution, or investment-recommendation functionality.
+
+## F.1 Concrete consumer correction
+
+The authoritative consumer list is: `src/tw_stock_tool/cli/backtest_result_export_cli.py` (CLI, run_backtest_result and JSON export); `src/tw_stock_tool/cli/backtest_artifact_cli.py` (artifact CLI, canonical loader and converter); `src/tw_stock_tool/cli/backtest_report.py` (report CLI, run_backtest); `src/tw_stock_tool/backtesting/serialization.py` and `serialization_files.py` (serialization/artifact); `src/tw_stock_tool/backtesting/parameter_sweep.py`, `strategy_compare.py`, and `walk_forward.py` (runtime/report); `src/tw_stock_tool/gui/app_services.py` and `src/tw_stock_tool/cli/main.py` (runtime); and `src/tw_stock_tool/paper_trading/backtest_converter.py` (conversion). Existing backtest, artifact, report, GUI, converter, and serialization tests protect these boundaries. All are `INTERNAL_CONSUMER_CONTRACT`, high risk; no alternate import is permitted in their canonical workflow.
+
+## I.1 Breaking-change catalogue
+
+| Change | Why breaking | Tests/docs | Window/phase | Rollback |
+|---|---|---|---|---|
+| Change root backtest.py or strategies.py target | breaks imports | wrapper identity tests, migration docs | yes/yes | restore target |
+| Change canonical result identity or fields | breaks consumers/artifacts | identity/artifact tests, release notes | yes/yes | retain class/fields |
+| Accept alternate result in serializer/converter | weakens type boundary | rejection tests, contract docs | yes/yes | reject alternate |
+| Change loader return type or converter input/trade columns/integer shares/metadata | breaks artifacts/conversion | round-trip/converter tests, migration docs | yes/yes | retain old reader/adapter |
+| Remove alternate engine/BaseStrategy imports | unknown external break | import tests, deprecation docs | yes/yes | retain import shim |
+| Move canonical consumer to alternate engine | changes semantics | consumer AST/characterization tests | yes/yes | restore canonical import |
+| Add ambiguous package BacktestResult export | ambiguous identity | import identity tests, API docs | yes/yes | remove ambiguous alias |
+
+Concrete examples: `SUPPORTED_CANONICAL` is canonical result/import identity; `INTERNAL_CONSUMER_CONTRACT` is the listed consumer files; `TEMPORARY_COMPATIBILITY_RETAINED` is alternate engine/BaseStrategy importability; `CHARACTERIZED_NOT_GUARANTEED` is alternate NaN-open propagation; `NOT_SUPPORTED` is alternate result serialization or conversion.
