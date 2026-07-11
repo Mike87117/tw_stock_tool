@@ -136,23 +136,20 @@ It does not by itself coordinate bars across symbols.
 
 ## 4. Confirmed Architectural Facts
 
-- `SimulatedPortfolio` can contain positions for multiple symbols.
-- The current engine creates a fresh portfolio for every invocation.
-- Pending order state is local to one engine invocation.
-- The current result boundary is single-symbol.
-- The historical simulated paper trading CLI accepts one stock.
-- The CLI calls `run_simulated_paper_trading_result(...)` directly.
-- `DataFramePortfolioExposureProvider` can value multiple open positions.
-- That provider requires an exact candidate signal-time price for every open
-  position with positive quantity.
-- Both workflow helpers pass through an optional portfolio exposure provider.
-- No chronological multi-symbol coordinator exists.
-- No user-facing `--max-total-exposure` option exists.
-- The existing risk rule adds a BUY candidate notional to filled exposure and
-  subtracts a SELL candidate notional, but no runtime object yet represents
-  accepted pending BUY reservations shared across symbols.
-- Package export contracts are explicitly tested for paper trading, risk, guard,
-  and kill-switch surfaces; Phase 48.10 does not change an export surface.
+- The legacy full-history engine remains single-symbol.
+- The engine creates and uses `SimulatedPaperTradingRuntimeState`.
+- Bar processing delegates to `step_simulated_symbol_bar`.
+- Pending order state is represented per symbol in runtime state.
+- `run_chronological_multi_symbol_simulated_paper_trading(...)` now exists as a direct module API.
+- The coordinator performs chronological union interleaving.
+- Same-timestamp mutations use ascending symbol order.
+- Missing-symbol timestamps do not create synthetic bars or fills.
+- Pending orders fill only on the same symbol's next actual bar.
+- `ChronologicalRuntimePortfolioExposureProvider` performs as-of valuation using the latest actual row at or before the candidate signal time.
+- Pending BUY reservations are included in effective exposure.
+- Pending SELL reservations remain zero until actual fill.
+- The historical CLI and compatibility engine remain single-symbol.
+- No aggregate portfolio result, multi-symbol CLI, CLI `--max-total-exposure`, broker interface, live trading, semi-auto trading, or auto-trading capability exists.
 
 ## 5. Invalid Architecture Options
 
