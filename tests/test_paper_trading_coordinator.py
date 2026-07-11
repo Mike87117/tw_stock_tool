@@ -155,7 +155,7 @@ class TestChronologicalMultiSymbolCoordinator(unittest.TestCase):
         self.assertIs(returned_state, self.runtime_state)
         self.assertIs(returned_state.portfolio, self.runtime_state.portfolio)
 
-    @patch("tw_stock_tool.paper_trading.coordinator.step_simulated_symbol_bar")
+    @patch("tw_stock_tool.paper_trading.coordinator.build_simulated_symbol_candidate_order", return_value=None)
     def test_actual_chronological_interleaving(self, mock_step):
         run_chronological_multi_symbol_simulated_paper_trading(
             {"A": self.df_a, "B": self.df_b}, self.runtime_state
@@ -180,7 +180,7 @@ class TestChronologicalMultiSymbolCoordinator(unittest.TestCase):
         self.assertEqual(calls[3].kwargs["index_label"], pd.to_datetime("2023-01-04"))
         self.assertEqual(calls[3].kwargs["bar_position"], 1)
 
-    @patch("tw_stock_tool.paper_trading.coordinator.step_simulated_symbol_bar")
+    @patch("tw_stock_tool.paper_trading.coordinator.build_simulated_symbol_candidate_order", return_value=None)
     def test_same_time_deterministic_ordering(self, mock_step):
         df_same = pd.DataFrame({
             "Open": [10.0],
@@ -402,3 +402,247 @@ class TestChronologicalMultiSymbolCoordinator(unittest.TestCase):
         self.assertEqual(len(self.runtime_state.portfolio.trade_log.rejections), 0) # No rejection
         self.assertEqual(len(self.runtime_state.portfolio.trade_log.fills), 0) # No fill
         self.assertNotIn("A", self.runtime_state.pending_orders) # No pending order
+
+    def test_scenario_1_all_fills_precede_every_guard_call(self):
+        # Symbol B has pending order to fill at T
+        # Symbol A has entry signal at T
+        # When A guard runs, B's fill must be reflected
+        from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPosition
+        from tw_stock_tool.paper_trading.runtime import SimulatedPendingOrderState
+
+        pending_b = SimulatedPendingOrderState(
+            order=SimulatedOrder("B-BUY-0", "B", "BUY", 10, pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01")),
+            reference_price=100.0
+        )
+        self.runtime_state.pending_orders["B"] = pending_b
+
+        df_a = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+        df_b = pd.DataFrame({"Open": [105.0], "entry_signal": [False], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+
+        guard_cash_seen = []
+        guard_qty_seen = []
+
+        def mock_guard(order, portfolio):
+            if order.symbol == "A":
+                guard_cash_seen.append(portfolio.cash)
+                pos_b = portfolio.position_for("B")
+                guard_qty_seen.append(pos_b.quantity)
+            return SimulatedPaperTradingGuardDecision.allow()
+
+        run_chronological_multi_symbol_simulated_paper_trading(
+            {"A": df_a, "B": df_b},
+            self.runtime_state,
+            quantity_per_trade=10,
+            guard_decision_provider=mock_guard
+        )
+
+        self.assertEqual(guard_cash_seen[0], 100000.0 - (105.0 * 10))
+        self.assertEqual(guard_qty_seen[0], 10)
+
+    def test_scenario_2_pending_buy_gap_up_affects_later_candidate(self):
+        from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPosition
+        from tw_stock_tool.paper_trading.runtime import SimulatedPendingOrderState
+        from tw_stock_tool.risk.config import SimulatedPaperTradingRiskConfig
+        from tw_stock_tool.simulated_paper_trading_guard.builder import build_guard_decision_provider_from_config
+        from tw_stock_tool.simulated_paper_trading_guard.config import SimulatedPaperTradingGuardConfig
+        from tw_stock_tool.simulated_paper_trading_guard.providers import ChronologicalRuntimePortfolioExposureProvider
+
+        # B pending BUY at reference price = 100.0 -> notional = 1000
+        pending_b = SimulatedPendingOrderState(
+            order=SimulatedOrder("B-BUY-0", "B", "BUY", 10, pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01")),
+            reference_price=100.0
+        )
+        self.runtime_state.pending_orders["B"] = pending_b
+
+        # A current BUY candidate at T=100.0 (qty=10 -> notional=1000)
+        # B actual fill at T=200.0 (actual notional = 2000)
+        df_a = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+        df_b = pd.DataFrame({"Open": [200.0], "entry_signal": [False], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+
+        risk_config = SimulatedPaperTradingRiskConfig(max_total_exposure=2500.0)
+        guard_config = SimulatedPaperTradingGuardConfig(risk=risk_config)
+        dataframes = {"A": df_a, "B": df_b}
+        exposure_provider = ChronologicalRuntimePortfolioExposureProvider(dataframes, self.runtime_state)
+        ref_provider = lambda o, p: float(o.quantity) * 100.0
+
+        def wrapped_ref(order, port):
+            # A candidate reference is 100.0
+            return 100.0
+
+        guard_adapter = build_guard_decision_provider_from_config(guard_config, reference_price_provider=wrapped_ref, portfolio_exposure_provider=exposure_provider)
+
+        run_chronological_multi_symbol_simulated_paper_trading(
+            dataframes,
+            self.runtime_state,
+            quantity_per_trade=10,
+            guard_decision_provider=guard_adapter
+        )
+
+        # B filled for 2000 exposure. A needs 1000. Total = 3000 > 2500. A rejected.
+        self.assertEqual(len(self.runtime_state.portfolio.trade_log.rejections), 1)
+        self.assertEqual(self.runtime_state.portfolio.trade_log.rejections[0].candidate_order.symbol, "A")
+
+    def test_scenario_3_pending_sell_releases_exposure(self):
+        from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPosition
+        from tw_stock_tool.paper_trading.runtime import SimulatedPendingOrderState
+        from tw_stock_tool.risk.config import SimulatedPaperTradingRiskConfig
+        from tw_stock_tool.simulated_paper_trading_guard.builder import build_guard_decision_provider_from_config
+        from tw_stock_tool.simulated_paper_trading_guard.config import SimulatedPaperTradingGuardConfig
+        from tw_stock_tool.simulated_paper_trading_guard.providers import ChronologicalRuntimePortfolioExposureProvider
+
+        self.runtime_state.portfolio.positions["B"] = SimulatedPosition("B", 10, 100.0, 0.0)
+
+        # B pending SELL
+        pending_b = SimulatedPendingOrderState(
+            order=SimulatedOrder("B-SELL-0", "B", "SELL", 10, pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01")),
+            reference_price=100.0
+        )
+        self.runtime_state.pending_orders["B"] = pending_b
+
+        # A creates BUY candidate at T
+        df_a = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+        df_b = pd.DataFrame({"Open": [100.0], "entry_signal": [False], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+
+        # max total exposure = 1500
+        # A needs 1000. If B is not sold, B uses 1000, A fails.
+        # But B is sold at T, so B uses 0. A should be accepted.
+        risk_config = SimulatedPaperTradingRiskConfig(max_total_exposure=1500.0)
+        guard_config = SimulatedPaperTradingGuardConfig(risk=risk_config)
+        dataframes = {"A": df_a, "B": df_b}
+        exposure_provider = ChronologicalRuntimePortfolioExposureProvider(dataframes, self.runtime_state)
+
+        def wrapped_ref(order, port):
+            return 100.0
+
+        guard_adapter = build_guard_decision_provider_from_config(guard_config, reference_price_provider=wrapped_ref, portfolio_exposure_provider=exposure_provider)
+
+        run_chronological_multi_symbol_simulated_paper_trading(
+            dataframes,
+            self.runtime_state,
+            quantity_per_trade=10,
+            guard_decision_provider=guard_adapter
+        )
+
+        self.assertIn("A", self.runtime_state.pending_orders)
+        self.assertEqual(len(self.runtime_state.portfolio.trade_log.rejections), 0)
+
+    def test_scenario_4_same_time_candidate_reservations_remain_sequential(self):
+        from tw_stock_tool.risk.config import SimulatedPaperTradingRiskConfig
+        from tw_stock_tool.simulated_paper_trading_guard.builder import build_guard_decision_provider_from_config
+        from tw_stock_tool.simulated_paper_trading_guard.config import SimulatedPaperTradingGuardConfig
+        from tw_stock_tool.simulated_paper_trading_guard.providers import ChronologicalRuntimePortfolioExposureProvider
+
+        df_a = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-01"]))
+        df_b = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-01"]))
+
+        risk_config = SimulatedPaperTradingRiskConfig(max_total_exposure=1500.0)
+        guard_config = SimulatedPaperTradingGuardConfig(risk=risk_config)
+        dataframes = {"A": df_a, "B": df_b}
+        exposure_provider = ChronologicalRuntimePortfolioExposureProvider(dataframes, self.runtime_state)
+
+        def wrapped_ref(order, port):
+            return 100.0
+
+        guard_adapter = build_guard_decision_provider_from_config(guard_config, reference_price_provider=wrapped_ref, portfolio_exposure_provider=exposure_provider)
+
+        run_chronological_multi_symbol_simulated_paper_trading(
+            dataframes,
+            self.runtime_state,
+            quantity_per_trade=10,
+            guard_decision_provider=guard_adapter
+        )
+
+        # A goes first, reserves 1000.
+        # B goes second, tries to reserve 1000, total 2000 > 1500, rejected.
+        self.assertIn("A", self.runtime_state.pending_orders)
+        self.assertNotIn("B", self.runtime_state.pending_orders)
+        self.assertEqual(len(self.runtime_state.portfolio.trade_log.rejections), 1)
+        self.assertEqual(self.runtime_state.portfolio.trade_log.rejections[0].candidate_order.symbol, "B")
+
+    def test_scenario_5_mapping_order_independence(self):
+        df_a = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-01"]))
+        df_b = pd.DataFrame({"Open": [100.0], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-01"]))
+
+        from tw_stock_tool.risk.config import SimulatedPaperTradingRiskConfig
+        from tw_stock_tool.simulated_paper_trading_guard.builder import build_guard_decision_provider_from_config
+        from tw_stock_tool.simulated_paper_trading_guard.config import SimulatedPaperTradingGuardConfig
+        from tw_stock_tool.simulated_paper_trading_guard.providers import ChronologicalRuntimePortfolioExposureProvider
+
+        def get_res(dataframes):
+            portfolio = SimulatedPortfolio(cash=10000.0)
+            runtime = SimulatedPaperTradingRuntimeState(portfolio)
+            risk_config = SimulatedPaperTradingRiskConfig(max_total_exposure=1500.0)
+            guard_config = SimulatedPaperTradingGuardConfig(risk=risk_config)
+            exposure_provider = ChronologicalRuntimePortfolioExposureProvider(dataframes, runtime)
+            def wrapped_ref(order, port):
+                return 100.0
+            guard_adapter = build_guard_decision_provider_from_config(guard_config, reference_price_provider=wrapped_ref, portfolio_exposure_provider=exposure_provider)
+            run_chronological_multi_symbol_simulated_paper_trading(dataframes, runtime, quantity_per_trade=10, guard_decision_provider=guard_adapter)
+            return runtime
+
+        r1 = get_res({"A": df_a, "B": df_b})
+        r2 = get_res({"B": df_b, "A": df_a})
+
+        self.assertEqual(list(r1.pending_orders.keys()), list(r2.pending_orders.keys()))
+        self.assertEqual(r1.portfolio.trade_log.orders[0].symbol, r2.portfolio.trade_log.orders[0].symbol)
+
+    def test_scenario_6_single_symbol_compatibility(self):
+        from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading_result
+        df_a = pd.DataFrame({"Open": [100.0, 105.0], "entry_signal": [True, False], "exit_signal": [False, True]}, index=pd.to_datetime(["2023-01-01", "2023-01-02"]))
+
+        p1 = SimulatedPortfolio(cash=10000.0)
+        rt1 = SimulatedPaperTradingRuntimeState(p1)
+        run_chronological_multi_symbol_simulated_paper_trading({"A": df_a}, rt1, quantity_per_trade=10)
+
+        res = run_simulated_paper_trading_result(df=df_a, symbol="A", quantity_per_trade=10, initial_cash=10000.0, last_price=105.0)
+        pass
+
+        self.assertEqual(rt1.portfolio.cash, res.final_cash)
+        self.assertEqual(len(rt1.portfolio.trade_log.fills), len(res.fills))
+
+    def test_scenario_7_no_guard_call_during_fill_phase(self):
+        from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPosition
+        from tw_stock_tool.paper_trading.runtime import SimulatedPendingOrderState
+        pending_b = SimulatedPendingOrderState(
+            order=SimulatedOrder("B-BUY-0", "B", "BUY", 10, pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01")),
+            reference_price=100.0
+        )
+        self.runtime_state.pending_orders["B"] = pending_b
+
+        df_b = pd.DataFrame({"Open": [105.0], "entry_signal": [False], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-02"]))
+
+        called = []
+        def mock_guard(order, portfolio):
+            called.append("guard")
+            return SimulatedPaperTradingGuardDecision.allow()
+
+        run_chronological_multi_symbol_simulated_paper_trading(
+            {"B": df_b},
+            self.runtime_state,
+            quantity_per_trade=10,
+            guard_decision_provider=mock_guard
+        )
+
+        self.assertEqual(len(called), 0)
+        self.assertEqual(len(self.runtime_state.portfolio.trade_log.fills), 1)
+
+    def test_scenario_8_existing_invalid_price_behavior(self):
+        import numpy as np
+
+        for bad_price in [np.nan, float('inf'), float('-inf'), 0.0, -5.0, "invalid"]:
+            portfolio = SimulatedPortfolio(cash=10000.0)
+            runtime_state = SimulatedPaperTradingRuntimeState(portfolio)
+            df_bad = pd.DataFrame({"Open": [bad_price], "entry_signal": [True], "exit_signal": [False]}, index=pd.to_datetime(["2023-01-01"]))
+
+            called = []
+            def mock_guard(order, p):
+                called.append("guard")
+                return SimulatedPaperTradingGuardDecision.allow()
+
+            run_chronological_multi_symbol_simulated_paper_trading(
+                {"A": df_bad}, runtime_state, guard_decision_provider=mock_guard
+            )
+
+            self.assertEqual(len(called), 0)
+            self.assertNotIn("A", runtime_state.pending_orders)
+            self.assertEqual(len(runtime_state.portfolio.trade_log.orders), 0)

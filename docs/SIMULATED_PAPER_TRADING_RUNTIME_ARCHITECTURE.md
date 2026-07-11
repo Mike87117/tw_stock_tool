@@ -419,3 +419,11 @@ No aggregate serialization/export exists.
 No multi-symbol CLI exists.
 CLI `--max-total-exposure` does not exist.
 No broker, live-trading, semi-auto, or auto-trading capability exists.
+
+### Phase 48.12.1 implementation
+
+- same-timestamp fill-before-signal correction
+- all fills complete before any new candidate evaluation
+- deterministic candidate ordering remains symbol ascending
+- single-symbol stepper remains a compatibility wrapper
+- aggregate result remains deferred

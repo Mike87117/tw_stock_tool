@@ -757,3 +757,58 @@ class TestSimulatedPaperTradingStepper(unittest.TestCase):
 
         expected_realized_pnl = sell_proceeds - buy_cost # 1179.4 - 1015 = 164.4
         self.assertAlmostEqual(self.portfolio.position_for("AAPL").realized_pnl, expected_realized_pnl)
+
+
+    def test_process_simulated_pending_fill_extracted(self):
+        from tw_stock_tool.paper_trading.stepper import process_simulated_pending_fill
+        from tw_stock_tool.paper_trading.runtime import SimulatedPendingOrderState
+        from tw_stock_tool.paper_trading.models import SimulatedOrder
+        import pandas as pd
+
+        pending_order = SimulatedOrder("A-BUY-0", "A", "BUY", 100, pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"))
+        self.runtime_state.pending_orders["A"] = SimulatedPendingOrderState(order=pending_order, reference_price=100.0)
+
+        process_simulated_pending_fill(
+            runtime_state=self.runtime_state,
+            symbol="A",
+            open_price=105.0,
+            index_label=pd.to_datetime("2023-01-02"),
+        )
+
+        self.assertNotIn("A", self.runtime_state.pending_orders)
+        self.assertEqual(len(self.runtime_state.portfolio.trade_log.fills), 1)
+
+    def test_build_simulated_symbol_candidate_order_extracted(self):
+        from tw_stock_tool.paper_trading.stepper import build_simulated_symbol_candidate_order
+        import pandas as pd
+
+        candidate = build_simulated_symbol_candidate_order(
+            runtime_state=self.runtime_state,
+            symbol="A",
+            bar_position=0,
+            index_label=pd.to_datetime("2023-01-01"),
+            open_price=100.0,
+            entry_signal=True,
+            exit_signal=False,
+            quantity_per_trade=50,
+        )
+
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.side, "BUY")
+        self.assertEqual(candidate.quantity, 50)
+
+    def test_evaluate_and_record_simulated_candidate_extracted(self):
+        from tw_stock_tool.paper_trading.stepper import evaluate_and_record_simulated_candidate
+        from tw_stock_tool.paper_trading.models import SimulatedOrder
+        import pandas as pd
+
+        candidate = SimulatedOrder("A-BUY-0", "A", "BUY", 50, pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"))
+
+        evaluate_and_record_simulated_candidate(
+            runtime_state=self.runtime_state,
+            candidate_order=candidate,
+            open_price=100.0,
+        )
+
+        self.assertIn("A", self.runtime_state.pending_orders)
+        self.assertEqual(len(self.runtime_state.portfolio.trade_log.orders), 1)
