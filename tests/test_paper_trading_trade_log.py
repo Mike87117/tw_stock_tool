@@ -24,7 +24,10 @@ from tw_stock_tool.paper_trading.serialization import (
     deserialize_simulated_paper_trading_result,
     serialize_simulated_paper_trading_result,
 )
-from tw_stock_tool.paper_trading.stepper import process_simulated_pending_fill
+from tw_stock_tool.paper_trading.stepper import (
+    evaluate_and_record_simulated_candidate,
+    process_simulated_pending_fill,
+)
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardDecision
 
 
@@ -115,6 +118,46 @@ class TestCanonicalSimulatedTradeLog(unittest.TestCase):
         self.assertEqual(terminal.status, SimulatedTradeStatus.REJECTED)
         self.assertFalse(terminal.risk_allowed)
         self.assertEqual(terminal.risk_rejection_reasons, ("max_order_notional",))
+
+    def test_guard_provider_exception_is_audited_and_propagates(self):
+        state = SimulatedPaperTradingRuntimeState(SimulatedPortfolio(1000.0))
+        order = SimulatedOrder("2330-BUY-0", "2330", "BUY", 10, "t", "t")
+
+        with self.assertRaisesRegex(RuntimeError, "guard unavailable"):
+            evaluate_and_record_simulated_candidate(
+                state, order, 10.0,
+                guard_decision_provider=lambda _order, _portfolio: (_ for _ in ()).throw(RuntimeError("guard unavailable")),
+            )
+
+        records = state.portfolio.trade_log.records
+        self.assertEqual([record.event_type for record in records], [
+            SimulatedTradeEventType.CANDIDATE_CREATED,
+            SimulatedTradeEventType.EXECUTION_ERROR,
+        ])
+        terminal = records[-1]
+        self.assertEqual((terminal.status, terminal.risk_allowed), (SimulatedTradeStatus.EXECUTION_ERROR, None))
+        self.assertEqual((terminal.error_code, terminal.error_message), ("guard_evaluation_failed", "guard unavailable"))
+        self.assertFalse(state.pending_orders)
+        self.assertEqual((len(state.portfolio.trade_log.orders), len(state.portfolio.trade_log.rejections), len(state.portfolio.trade_log.fills)), (0, 0, 0))
+
+    def test_invalid_guard_provider_return_is_audited_and_propagates(self):
+        state = SimulatedPaperTradingRuntimeState(SimulatedPortfolio(1000.0))
+        order = SimulatedOrder("2330-BUY-0", "2330", "BUY", 10, "t", "t")
+        message = "guard_decision_provider must return SimulatedPaperTradingGuardDecision."
+
+        with self.assertRaisesRegex(PaperTradingModelError, message):
+            evaluate_and_record_simulated_candidate(
+                state, order, 10.0, guard_decision_provider=lambda _order, _portfolio: "invalid"
+            )
+
+        records = state.portfolio.trade_log.records
+        self.assertEqual([record.event_type for record in records], [
+            SimulatedTradeEventType.CANDIDATE_CREATED,
+            SimulatedTradeEventType.EXECUTION_ERROR,
+        ])
+        self.assertEqual((records[-1].error_code, records[-1].error_message), ("guard_evaluation_failed", message))
+        self.assertFalse(state.pending_orders)
+        self.assertEqual((len(state.portfolio.trade_log.orders), len(state.portfolio.trade_log.rejections), len(state.portfolio.trade_log.fills)), (0, 0, 0))
 
     def test_invalid_open_and_portfolio_failures_are_retained(self):
         df = pd.DataFrame({"Open": [10.0, float("nan")], "entry_signal": [True, False], "exit_signal": [False, False]})

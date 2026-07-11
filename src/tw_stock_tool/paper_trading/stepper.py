@@ -155,9 +155,20 @@ def evaluate_and_record_simulated_candidate(
 
     decision = guard_decision
     if guard_decision_provider is not None:
-        decision = guard_decision_provider(candidate_order, runtime_state.portfolio)
-        if not isinstance(decision, SimulatedPaperTradingGuardDecision):
-            raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
+        try:
+            decision = guard_decision_provider(candidate_order, runtime_state.portfolio)
+            if not isinstance(decision, SimulatedPaperTradingGuardDecision):
+                raise PaperTradingModelError("guard_decision_provider must return SimulatedPaperTradingGuardDecision.")
+        except Exception as error:
+            log.record_event(
+                candidate_order,
+                SimulatedTradeEventType.EXECUTION_ERROR,
+                SimulatedTradeStatus.EXECUTION_ERROR,
+                risk_allowed=None,
+                error_code="guard_evaluation_failed",
+                error_message=str(error),
+            )
+            raise
 
     blocked = decision.is_blocked if decision is not None else False
     if decision is not None:
