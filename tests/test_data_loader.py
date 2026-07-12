@@ -762,5 +762,17 @@ class DataLoaderTest(unittest.TestCase):
         with patch.object(data_loader.requests, "get", return_value=Response([])):
             with self.assertRaisesRegex(data_loader.DataLoaderError, "6488.TWO"): data_loader._download_tpex_latest_quote("6488", "1mo", pd.Timestamp("2024-01-01"))
 
+    def test_cache_runtime_delegates_route_through_internal_module(self) -> None:
+        with patch.object(data_loader._cache_runtime, "_cache_path", return_value=Path("delegate.csv")) as cache_path:
+            self.assertEqual(data_loader._cache_path("2330.TW", "1y", "1d", True), Path("delegate.csv"))
+        cache_path.assert_called_once_with("2330.TW", "1y", "1d", True, cache_dir=data_loader.CACHE_DIR)
+        path = Path("cache.csv")
+        with patch.object(data_loader._cache_runtime, "_is_cache_fresh", return_value=True) as fresh, patch.object(data_loader._cache_runtime, "_get_cache_age_days", return_value=1.0) as age, patch.object(data_loader._cache_runtime, "_read_cache", return_value=_download_df()) as read, patch.object(data_loader._cache_runtime, "_write_cache") as write:
+            self.assertTrue(data_loader._is_cache_fresh(path))
+            self.assertEqual(data_loader._get_cache_age_days(path), 1.0)
+            self.assertIs(data_loader._read_cache(path), read.return_value)
+            data_loader._write_cache(_download_df(), path)
+        fresh.assert_called_once_with(path); age.assert_called_once_with(path); read.assert_called_once_with(path); write.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()
