@@ -197,18 +197,32 @@ Feasibility outcome: **EXPLICIT_ADAPTER_DESIGN_REQUIRED_BEFORE_ANY_MIGRATION**. 
 
 Recommend **Alternate Backtest Adapter Design Decision**. A6 does not add adapters, redirects, aliases, migrations, warnings, fixes, serializer/converter changes, schemas, consumer migration, removals, version changes, merged PRs, or Phase A7.
 
-### Independent governance details
 
-Section F concerns: Open, Close, legacy Signal, entry_signal, exit_signal, DataFrame index equality, DataFrame length equality, copying/mutation expectations, legacy-signal normalization, canonical standard-signal normalization, strategy-added columns, and params ownership are independent. The alternate generates signals through a strategy object and accepts no legacy Signal route; canonical accepts precomputed standardized signals and a legacy Signal route. Bool dtype, index equality, and signal length are separately validated at their respective boundaries.
+Canonical-only derivation inventory:
 
-Section G has exactly 17 semantic rows: signal timing; next-open execution; invalid next-open handling; entry sizing; fractional shares; position-size control; commission/fee calculation; tax calculation; slippage; stop loss; take profit; maximum hold days; exit signals; end-of-data handling; open-position final valuation; empty-trade behavior; and initial-capital validation. Direct redirect can alter trade count, share quantities, exit dates, PnL, final capital/equity, and reported metrics.
+| Canonical-only field | Availability from alternate result | Derivation classification | Required source data | Required assumptions | Safe for lossless adapter |
+|---|---|---|---|---|---|
+| initial_capital | not directly available | DERIVABLE_ONLY_WITH_ORIGINAL_INPUT | original cash | explicit math | No |
+| buy_hold_return_pct | unavailable | DERIVABLE_ONLY_WITH_ORIGINAL_INPUT | prices | period definition | No |
+| cagr_pct | unavailable | NO_SAFE_DERIVATION | dates/capital | none | No |
+| exposure_pct | unavailable | NO_SAFE_DERIVATION | equity/positions | none | No |
+| profit_factor | incomplete | DERIVABLE_WITH_ASSUMPTIONS | complete PnL rows | canonical formula | No |
+| best_trade_pct | incomplete | DERIVABLE_WITH_ASSUMPTIONS | complete rows | units | No |
+| worst_trade_pct | incomplete | DERIVABLE_WITH_ASSUMPTIONS | complete rows | units | No |
+| avg_hold_days | unavailable | NO_SAFE_DERIVATION | dates | lifecycle | No |
+| sharpe_ratio | unavailable | NO_SAFE_DERIVATION | equity curve | frequency | No |
+| sortino_ratio | unavailable | NO_SAFE_DERIVATION | equity curve | frequency | No |
+| avg_profit | incomplete | DERIVABLE_WITH_ASSUMPTIONS | complete rows | units | No |
+| avg_loss | incomplete | DERIVABLE_WITH_ASSUMPTIONS | complete rows | units | No |
+| equity_curve | unavailable | NO_SAFE_DERIVATION | prices/signals | recomputation | No |
+| stock | not stored | NOT_AVAILABLE_FROM_ALTERNATE_RESULT | metadata | none | No |
+| strategy | not stored | NOT_AVAILABLE_FROM_ALTERNATE_RESULT | metadata | none | No |
+| parameters | not stored | NOT_AVAILABLE_FROM_ALTERNATE_RESULT | metadata | none | No |
+| start_date | not safely available | NO_SAFE_DERIVATION | full data | boundaries | No |
+| end_date | not safely available | NO_SAFE_DERIVATION | full data | boundaries | No |
 
-Canonical-only field inventory (independent): initial_capital, buy_hold_return_pct, cagr_pct, exposure_pct, profit_factor, best_trade_pct, worst_trade_pct, avg_hold_days, sharpe_ratio, sortino_ratio, avg_profit, avg_loss, equity_curve, stock, strategy, parameters, start_date, end_date. Missing fields are not defaulted or fabricated.
+Additional inputs are not directly stored: Initial cash, Commission, Tax, Slippage, Strategy name, Parameters, Stock symbol, full Start date, full End date, Original signal DataFrame, and Equity curve. Original price/signal data are recomputable only with strategy, params, price data, and original semantics. **A lossless result-only adapter is not possible.**
 
-The full trade-column inventory is Entry Date, Exit Date, Entry Price, Exit Price, Shares, PnL, PnL %, Hold Days, Exit Reason, and Type. A lossless result-only adapter is not possible.
+Artifact boundaries require `EXPLICIT_CANONICAL_RESULT_CONSTRUCTION`, `CANONICAL_SCHEMA_CONVERSION`, `ADAPTER_DESIGN_REQUIRED`, or `NO_SAFE_DIRECT_MAPPING`; rejected alternate results are not mapped by `none`. Existing A2 characterization and A3 artifact tests are `PARTIAL_EXISTING_EVIDENCE`, not adapter gates. No adapter or migration implementation may begin while these criteria are incomplete.
 
-Artifact boundaries are independently mapped for serialize_backtest_result, deserialize_backtest_result, JSON export, JSON load, serialization file writer, serialization file reader, report builders, paper-trading converter, and downstream consumer contracts. Strict canonical type checks reject alternate results; deserialization constructs canonical results; class aliasing cannot supply missing fields; no artifact or converter changes are authorized.
-
-Adapter feasibility options independently evaluated: Direct module alias; Direct class alias; Alternate BacktestEngine redirect to canonical function; Strategy-object bridge; Input DataFrame bridge; Result-only adapter; Full recomputation adapter; Dual-result facade; Serializer-only adapter; Paper-trading converter adapter. Complexity and Artifact compatibility are evaluated per option; no option is authorized. The feasibility outcome is EXPLICIT_ADAPTER_DESIGN_REQUIRED_BEFORE_ANY_MIGRATION.
-
-Entry criteria include: Confirmed migration target; Alternate-versus-canonical semantic priority; Parameter mapping specification; Strategy bridge specification; Signal normalization specification; Cost formula mapping; Slippage policy; Fractional-share policy; EOD lifecycle policy; Invalid-open policy; Complete result-field policy; Unit-conversion policy; Trade-schema policy; Equity-curve policy; Metadata policy; Serialization impact assessment; Paper-trading converter impact assessment; Golden characterization fixtures; Round-trip artifact tests; External-consumer risk assessment; Rollback plan; Version plan; User communication plan; Dedicated production-phase approval. No adapter or migration implementation may begin while these criteria are incomplete.
+Section M remains the final section. Recommended next phase: **Alternate Backtest Adapter Design Decision**. A6 does not add adapters, redirects, aliases, migrations, warnings, fixes, serializer/converter changes, schema changes, consumer migration, removals, version changes, merged PRs, or Phase A7.
