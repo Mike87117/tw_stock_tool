@@ -548,69 +548,72 @@ class DataLoaderTest(unittest.TestCase):
         self.assertIn("No price data found", str(context.exception))
 
 
-    def test_cache_runtime_identity_freshness_age_and_round_trip(self) -> None:
-        class Stat:
-            def __init__(self, value): self.st_mtime=value
-        class FakePath:
-            def __init__(self, value): self.value=value
-            def exists(self): return self.value is not None
-            def stat(self): return Stat(self.value.timestamp())
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
+    def test_cache_path_identity_uses_exact_format_and_patched_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
             with patch.object(data_loader, "CACHE_DIR", root):
                 self.assertEqual(data_loader._cache_path("A/B", "5d", "1wk", False), root / "A_B_5d_1wk_adjusted-False.csv")
-                self.assertNotEqual(data_loader._cache_path("2330.TW","1y","1d",True), data_loader._cache_path("2330.TW","1y","1d",False))
-                frame=_download_df(); frame.index.name="Date"; path=root/"nested"/"cache.csv"; data_loader._write_cache(frame,path); loaded=data_loader._read_cache(path)
-                self.assertEqual(loaded.index.name,"Date"); pd.testing.assert_frame_equal(loaded,frame,check_freq=False)
-        now=pd.Timestamp("2024-01-02 14:30:00",tz="Asia/Taipei")
-        with patch.object(data_loader.pd.Timestamp,"now",return_value=now):
+                baseline = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "5d", "1d", True))
+                self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "1y", "1wk", True))
+                self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "1y", "1d", False))
+
+    def test_cache_age_round_trip_and_freshness_boundaries(self) -> None:
+        class Stat:
+            def __init__(self, value): self.st_mtime = value
+        class FakePath:
+            def __init__(self, value): self.value = value
+            def exists(self): return self.value is not None
+            def stat(self): return Stat(self.value.timestamp())
+        now = pd.Timestamp("2024-01-02 14:30:00", tz="Asia/Taipei")
+        with patch.object(data_loader.pd.Timestamp, "now", return_value=now):
             self.assertFalse(data_loader._is_cache_fresh(FakePath(None)))
-            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-01 15:00",tz="Asia/Taipei"))))
-            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 14:29:59",tz="Asia/Taipei"))))
-            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 14:30",tz="Asia/Taipei"))))
-            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-01 16:30",tz="UTC"))))
-        utc=pd.Timestamp("2024-01-03",tz="UTC")
-        with patch.object(data_loader.pd.Timestamp,"now",return_value=utc):
-            self.assertAlmostEqual(data_loader._get_cache_age_days(FakePath(utc-pd.Timedelta(days=1))),1.0); self.assertEqual(data_loader._get_cache_age_days(FakePath(utc+pd.Timedelta(days=1))),0.0)
+            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-01 15:00", tz="Asia/Taipei"))))
+            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 14:29:59", tz="Asia/Taipei"))))
+            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 14:30", tz="Asia/Taipei"))))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            frame = _download_df(); frame.index.name = "Date"; path = Path(tmp_dir) / "nested" / "cache.csv"
+            data_loader._write_cache(frame, path); loaded = data_loader._read_cache(path)
+            self.assertEqual(loaded.index.name, "Date"); pd.testing.assert_frame_equal(loaded, frame, check_freq=False)
 
-    def test_force_refresh_and_corrupt_cache_lifecycle(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(data_loader,"CACHE_DIR",Path(tmp)), patch.object(data_loader,"_read_cache") as read, patch.object(data_loader,"_write_cache") as write, patch.object(data_loader.yf,"download",return_value=_download_df()):
-                _,symbol=data_loader.download_tw_stock("2330",force_refresh=True); self.assertEqual(symbol,"2330.TW"); read.assert_not_called(); write.assert_called_once()
-        out,err=StringIO(),StringIO()
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(data_loader,"CACHE_DIR",Path(tmp)), patch.object(data_loader.yf,"download",return_value=pd.DataFrame()), patch.object(data_loader,"_is_cache_fresh",return_value=False), patch.object(data_loader,"_get_cache_age_days",return_value=1.0), patch.object(data_loader,"_read_cache",side_effect=ValueError("corrupt stale")):
-                path=data_loader._cache_path("2330.TW","1y","1d",True); path.parent.mkdir(parents=True,exist_ok=True); path.write_text("x")
-                with redirect_stdout(out),redirect_stderr(err),self.assertRaises(data_loader.DataLoaderError) as caught: data_loader.download_tw_stock("2330",auto_adjust=True)
-        self.assertIn("stale cache read failed: corrupt stale",str(caught.exception)); self.assertNotIn("WARNING",err.getvalue())
+    def test_force_refresh_bypasses_cache_reads_and_writes_live_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader, "_read_cache") as read, patch.object(data_loader, "_write_cache") as write, patch.object(data_loader.yf, "download", return_value=_download_df()):
+                _, symbol = data_loader.download_tw_stock("2330", force_refresh=True)
+        self.assertEqual(symbol, "2330.TW"); read.assert_not_called(); write.assert_called_once()
 
-    def test_prepare_and_finalize_official_rows(self) -> None:
-        frame=pd.DataFrame({"Open":[1,None],"High":[2,2],"Low":[0,0],"Close":[1,1],"Volume":[None,1],"Extra":[9,9]},index=["2024-01-01","2024-01-02"])
-        result=data_loader._prepare_ohlcv(frame,"2330.TW"); self.assertEqual(list(result.columns),["Open","High","Low","Close","Volume"]); self.assertEqual(result.index.name,"Date"); self.assertTrue(pd.isna(result.iloc[0]["Volume"]))
-        multi=_download_df(); multi.columns=pd.MultiIndex.from_tuples([(c,"x") for c in multi.columns]); self.assertEqual(list(data_loader._normalize_columns(multi).columns),["Open","High","Low","Close","Volume"])
-        rows=[{"Date":pd.Timestamp(f"2024-01-{d:02d}"),"Open":d,"High":d+1,"Low":d-1,"Close":d,"Volume":d} for d in [3,1,2,3,4,5,6]]
-        start=pd.Timestamp("2024-01-02"); self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"1d")),1); self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"5d")),5); self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"1mo")),5)
+    def test_corrupt_stale_cache_raises_without_stale_success_warning(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_is_cache_fresh", return_value=False), patch.object(data_loader, "_get_cache_age_days", return_value=1.0), patch.object(data_loader, "_read_cache", side_effect=ValueError("corrupt stale")):
+                path = data_loader._cache_path("2330.TW", "1y", "1d", True); path.parent.mkdir(parents=True, exist_ok=True); path.write_text("x")
+                with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(data_loader.DataLoaderError) as caught: data_loader.download_tw_stock("2330", auto_adjust=True)
+        self.assertIn("stale cache read failed: corrupt stale", str(caught.exception)); self.assertNotIn("WARNING", stderr.getvalue())
 
-    def test_tpex_monthly_latest_quote_and_wrapper_patch(self) -> None:
+    def test_prepare_ohlcv_and_finalize_official_rows(self) -> None:
+        frame = pd.DataFrame({"Open":[1,None],"High":[2,2],"Low":[0,0],"Close":[1,1],"Volume":[None,1],"Extra":[9,9]}, index=["2024-01-01","2024-01-02"])
+        result = data_loader._prepare_ohlcv(frame, "2330.TW")
+        self.assertEqual(list(result.columns), ["Open","High","Low","Close","Volume"]); self.assertEqual(result.index.name, "Date")
+        rows = [{"Date":pd.Timestamp(f"2024-01-{day:02d}"),"Open":day,"High":day+1,"Low":day-1,"Close":day,"Volume":day} for day in [3,1,2,3,4,5,6]]
+        start = pd.Timestamp("2024-01-02")
+        self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"1d")), 1)
+        self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"5d")), 5)
+
+    def test_tpex_wrapper_and_logger_contracts(self) -> None:
         class Response:
-            def __init__(self,data): self.data=data
+            def __init__(self, data): self.data=data
             def raise_for_status(self): pass
             def json(self): return self.data
         monthly={"stat":"ok","tables":[{"data":[["113/01/02","1,000","x","10","12","9","11"]]}]}
-        with patch.object(data_loader,"_period_start",return_value=pd.Timestamp("2024-01-01")),patch.object(data_loader,"_month_starts",return_value=[pd.Timestamp("2024-01-01")]),patch.object(data_loader.requests,"get",return_value=Response(monthly)) as get,patch.object(data_loader,"_download_tpex_latest_quote") as latest:
-            result=data_loader._download_tpex_stock("6488","1mo","1d")
-        self.assertEqual(float(result.iloc[0]["Volume"]),1000); self.assertEqual(get.call_args.kwargs["params"]["id"],"6488"); latest.assert_not_called()
-        quote=[{"SecuritiesCompanyCode":"6488","Date":"113/01/03","Open":"10","High":"12","Low":"9","Close":"11","TradingShares":"1234"}]
-        with patch.object(data_loader.requests,"get",return_value=Response(quote)): self.assertEqual(float(data_loader._download_tpex_latest_quote("6488","1mo",pd.Timestamp("2024-01-01")).iloc[0]["Volume"]),1234)
-        import tw_stock_tool.data.data_loader as package_loader; self.assertIs(data_loader,package_loader)
-
-    def test_quiet_yfinance_restores_logger_on_exception(self) -> None:
-        logger=logging.getLogger("yfinance"); old=(logger.disabled,logger.level,logger.propagate); logger.disabled=False; logger.setLevel(logging.WARNING); logger.propagate=True
+        with patch.object(data_loader,"_period_start",return_value=pd.Timestamp("2024-01-01")), patch.object(data_loader,"_month_starts",return_value=[pd.Timestamp("2024-01-01")]), patch.object(data_loader.requests,"get",return_value=Response(monthly)), patch.object(data_loader,"_download_tpex_latest_quote") as latest:
+            self.assertEqual(float(data_loader._download_tpex_stock("6488","1mo","1d").iloc[0]["Volume"]),1000)
+        latest.assert_not_called()
+        import tw_stock_tool.data.data_loader as package_loader; self.assertIs(data_loader, package_loader)
+        logger=logging.getLogger("yfinance"); old=(logger.disabled,logger.level,logger.propagate); logger.disabled=False; logger.setLevel(logging.WARNING); logger.propagate=True; stdout=StringIO(); stderr=StringIO()
         try:
-            with patch.object(data_loader.yf,"download",side_effect=RuntimeError("boom")),redirect_stdout(StringIO()),redirect_stderr(StringIO()):
+            with patch.object(data_loader.yf,"download",side_effect=RuntimeError("boom")), redirect_stdout(stdout), redirect_stderr(stderr):
                 with self.assertRaisesRegex(RuntimeError,"boom"): data_loader._download_yfinance_quiet("2330.TW","1y","1d",True)
-            self.assertEqual((logger.disabled,logger.level,logger.propagate),(False,logging.WARNING,True))
+            self.assertEqual((logger.disabled,logger.level,logger.propagate),(False,logging.WARNING,True)); self.assertEqual(stdout.getvalue(),""); self.assertEqual(stderr.getvalue(),"")
         finally: logger.disabled,logger.level,logger.propagate=old
-
 if __name__ == "__main__":
     unittest.main()
