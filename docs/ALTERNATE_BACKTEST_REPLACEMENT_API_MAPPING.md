@@ -1,133 +1,198 @@
 ﻿# Alternate Backtest Replacement API Mapping
 
 ## A. Mapping outcome
-
-**PARTIAL_CONCEPTUAL_MAPPING_NO_DROP_IN_REPLACEMENT**. Canonical APIs cover related concepts, but strategy interfaces, constructors, execution semantics, result schemas, and artifact boundaries differ. Direct redirect is unsafe. A6 authorizes no adapter or migration. A5 policy remains **RETAIN_WITHOUT_DEPRECATION**.
+**PARTIAL_CONCEPTUAL_MAPPING_NO_DROP_IN_REPLACEMENT**. Canonical APIs cover related concepts, but strategy interfaces, constructors, execution semantics, result schemas, and artifact boundaries differ. Direct redirect is unsafe. A6 authorizes no adapter or migration. Retention remains **RETAIN_WITHOUT_DEPRECATION**.
 
 ## B. Scope and mapping classifications
 
-`EXACT_MAPPING` preserves shape; `RENAMED_EQUIVALENT` changes names; `PARTIAL_MAPPING` maps some fields; `CONCEPTUAL_MAPPING_ONLY` relates concepts; `NO_CANONICAL_EQUIVALENT` has no class/function; `UNSUPPORTED_INTEGRATION` rejects cross-use; `SEMANTICALLY_INCOMPATIBLE` changes behavior; `REQUIRES_EXPLICIT_ADAPTER` needs designed bridging. API shape, call shape, fields, units, behavior, lifecycle, artifact compatibility, drop-in replacement, adapter, and silent redirect are separate. Similar names do not prove equivalence.
+`EXACT_MAPPING`, `RENAMED_EQUIVALENT`, `PARTIAL_MAPPING`, `CONCEPTUAL_MAPPING_ONLY`, `NO_CANONICAL_EQUIVALENT`, `UNSUPPORTED_INTEGRATION`, `SEMANTICALLY_INCOMPATIBLE`, and `REQUIRES_EXPLICIT_ADAPTER` describe shape, fields, units, behavior, lifecycle, artifacts, and feasibility separately. Similar names do not prove equivalence; a theoretical adapter is not authorization.
 
 ## C. Top-level API replacement matrix
 
-| Alternate symbol | Alternate import | Closest canonical API | Classification | Drop-in | Primary incompatibility | Artifact compatibility | Required future work |
-|---|---|---|---|---|---|---|---|
-| BacktestEngine | tw_stock_tool.backtest.engine | backtesting.backtest.run_backtest_result | REQUIRES_EXPLICIT_ADAPTER | No | class/state versus function/signals | no | adapter design |
-| alternate BacktestResult | tw_stock_tool.backtest.engine | backtesting.results.BacktestResult | SEMANTICALLY_INCOMPATIBLE | No | fields, units, lifecycle | rejected | field policy |
-| SignalStrategy | tw_stock_tool.backtest.engine | strategy functions and signal DataFrame | CONCEPTUAL_MAPPING_ONLY | No | object protocol | no | strategy bridge |
-| BaseStrategy | tw_stock_tool.strategies.base | backtesting.strategies functions | NO_CANONICAL_EQUIVALENT | No | no canonical base class | no | API decision |
+| Alternate symbol | Closest canonical API | Classification | Drop-in | Incompatibility |
+|---|---|---|---|---|
+| BacktestEngine | backtesting.backtest.run_backtest_result | REQUIRES_EXPLICIT_ADAPTER | No | class/state versus function/signals |
+| alternate BacktestResult | backtesting.results.BacktestResult | SEMANTICALLY_INCOMPATIBLE | No | fields, units, lifecycle |
+| SignalStrategy | strategy functions and signal DataFrame | CONCEPTUAL_MAPPING_ONLY | No | object protocol |
+| BaseStrategy | backtesting.strategies functions | NO_CANONICAL_EQUIVALENT | No | no canonical base class |
 
 ## D. Construction and invocation mapping
 
-| Alternate operation | Canonical target | Classification | Conversion | Semantic risk | Notes |
-|---|---|---|---|---|---|
-| price_df | df | EXACT_MAPPING | none | low | both DataFrame inputs |
-| strategy | standardized signal DataFrame | REQUIRES_EXPLICIT_ADAPTER | strategy bridge | high | canonical engine does not accept object |
-| params | strategy/config inputs | PARTIAL_MAPPING | preprocessing | medium | ownership differs |
-| initial_cash | initial_capital | RENAMED_EQUIVALENT | rename | medium | formulas differ |
-| commission | fee_rate | PARTIAL_MAPPING | formula verification | high | not automatically exact |
-| tax | tax_rate | PARTIAL_MAPPING | exit-cost verification | high | semantics differ |
-| slippage | none | NO_CANONICAL_EQUIVALENT | policy required | high | no direct canonical argument |
-| .run() | run_backtest_result() | RENAMED_EQUIVALENT | call-site change | medium | no alias |
-| constructor validation | function validation | PARTIAL_MAPPING | explicit rules | high | errors differ |
-| signal validation | standardized signals | PARTIAL_MAPPING | bridge validation | high | object method absent |
-| result return | canonical BacktestResult | SEMANTICALLY_INCOMPATIBLE | result conversion | high | schemas differ |
+| Alternate operation | Canonical target | Classification | Conversion | Semantic risk |
+|---|---|---|---|---|
+| price_df | df | PARTIAL_MAPPING | signal preparation | high |
+| strategy | standardized signal DataFrame | REQUIRES_EXPLICIT_ADAPTER | strategy bridge | high |
+| params | strategy/config inputs | PARTIAL_MAPPING | preprocessing | medium |
+| initial_cash | initial_capital | RENAMED_EQUIVALENT | rename | medium |
+| commission | fee_rate | PARTIAL_MAPPING | formula verification | high |
+| tax | tax_rate | PARTIAL_MAPPING | exit-cost verification | high |
+| slippage | none | NO_CANONICAL_EQUIVALENT | policy | high |
+| .run() | run_backtest_result() | REQUIRES_EXPLICIT_ADAPTER | call/state/result bridge | high |
+| validation | canonical validation | PARTIAL_MAPPING | explicit rules | high |
 
 ## E. Strategy-interface mapping
 
-| Alternate concept | Canonical relation | Classification | Required bridge |
+| Alternate concern | Canonical relation | Classification | Bridge required |
 |---|---|---|---|
 | SignalStrategy.name | registry key/metadata | CONCEPTUAL_MAPPING_ONLY | naming policy |
-| generate_signals(df, params) | strategy function returning DataFrame | PARTIAL_MAPPING | invocation bridge |
-| validate_signals | signal normalization/validation helpers | NO_CANONICAL_EQUIVALENT | validation design |
-| BaseStrategy inheritance | no canonical inheritance contract | NO_CANONICAL_EQUIVALENT | API design |
+| generate_signals | strategy function | PARTIAL_MAPPING | invocation bridge |
+| validate_signals | signal helpers | NO_CANONICAL_EQUIVALENT | validation design |
+| BaseStrategy inheritance | no canonical base class | NO_CANONICAL_EQUIVALENT | API design |
 
-Canonical strategies are function-based; no canonical base class exists. Any bridge is adapter territory and not authorized.
+Canonical strategies are function-based; no canonical inheritance contract exists.
 
 ## F. Input-data and signal mapping
 
-| Concern | Alternate | Canonical | Status | Transformation | Risk |
+| Concern | Alternate requirement/behavior | Canonical requirement/behavior | Mapping classification | Transformation required | Validation/failure risk |
 |---|---|---|---|---|---|
-| Open/Close | required | required | EXACT_MAPPING | none | low |
-| Signal | absent/strategy output | accepted legacy route | PARTIAL_MAPPING | normalize | medium |
-| entry_signal/exit_signal | strategy output, bool | standardized DataFrame | PARTIAL_MAPPING | validate | medium |
-| index/length | strategy frame checks | canonical frame checks | PARTIAL_MAPPING | enforce | high |
-| params | strategy-owned | call/config-owned | CONCEPTUAL_MAPPING_ONLY | bridge | medium |
+| Open | price input | required price input | EXACT_MAPPING | none | low |
+| Close | price input | required price input | EXACT_MAPPING | none | low |
+| legacy Signal | not strategy output | accepted legacy route | PARTIAL_MAPPING | normalize | medium |
+| entry_signal | generated bool column | standardized bool column | PARTIAL_MAPPING | validate | medium |
+| exit_signal | generated bool column | standardized bool column | PARTIAL_MAPPING | validate | medium |
+| DataFrame index equality | strategy frame check | canonical frame check | PARTIAL_MAPPING | enforce | high |
+| DataFrame length equality | strategy frame check | canonical frame check | PARTIAL_MAPPING | enforce | high |
+| Copying/mutation | engine copies input | canonical execution normalizes | PARTIAL_MAPPING | ownership policy | medium |
+| Legacy normalization | no direct route | ensure_standard_signals | CONCEPTUAL_MAPPING_ONLY | signal conversion | high |
+| Standard normalization | strategy output | canonical helper | PARTIAL_MAPPING | helper call | high |
+| Strategy-added columns | strategy-owned | preserved in signal frame | CONCEPTUAL_MAPPING_ONLY | bridge | medium |
+| Params ownership | object call parameter | canonical call/config | PARTIAL_MAPPING | preprocessing | medium |
+
+Alternate generates signals through a strategy object; canonical accepts precomputed standardized or legacy signals. Alternate validates bool/length/index through its strategy; canonical validates its own normalized frame.
 
 ## G. Execution-semantics mapping
 
-| Area | Alternate | Canonical | Classification | Adapter possibility | Redirect risk |
+| Semantic area | Alternate behavior | Canonical behavior | Compatibility classification | Adapter possibility | Silent redirect risk |
 |---|---|---|---|---|---|
-| Signal timing | prior signal, next open | prior signal, next open | PARTIAL_MAPPING | possible | medium |
-| Invalid next open | NaN may propagate | skips invalid execution | KNOWN_DEFECT_NOT_GUARANTEED | design required | high |
-| Entry sizing | fractional all-in | integer affordable | SEMANTICALLY_INCOMPATIBLE | policy required | high |
-| Position size | absent | supported | NO_FEATURE_EQUIVALENT | no direct | high |
-| Costs/tax | commission/tax/slippage | fee/tax, no slippage arg | PARTIAL_MAPPING | formula design | high |
-| Stops/take/max hold | absent | canonical-only | NO_FEATURE_EQUIVALENT | no direct | medium |
-| EOD | mark-to-market | forced SELL_EOD | SEMANTICALLY_INCOMPATIBLE | policy required | high |
-| Final valuation | open mark | close when possible | SEMANTICALLY_INCOMPATIBLE | policy required | high |
-| Initial cash validation | positive | canonical rules | PARTIAL_MAPPING | explicit rules | medium |
+| Signal timing | prior signal | prior signal | PARTIAL_MAPPING | possible | medium |
+| Next-open execution | next open | next open | PARTIAL_MAPPING | possible | medium |
+| Invalid next-open | NaN may propagate | skip invalid | KNOWN_DEFECT_NOT_GUARANTEED | design | high |
+| Entry sizing | fractional all-in | integer affordable | SEMANTICALLY_INCOMPATIBLE | policy | high |
+| Fractional shares | yes | no | CHARACTERIZED_DIFFERENCE | policy | high |
+| Position-size control | absent | supported | NO_FEATURE_EQUIVALENT | no direct | high |
+| Commission/fee | commission | fee_rate | PARTIAL_MAPPING | formulas | high |
+| Tax | exit tax | exit tax | PARTIAL_MAPPING | formulas | medium |
+| Slippage | explicit | no equivalent argument | NO_FEATURE_EQUIVALENT | policy | high |
+| Stop loss | absent | supported | NO_FEATURE_EQUIVALENT | no direct | medium |
+| Take profit | absent | supported | NO_FEATURE_EQUIVALENT | no direct | medium |
+| Maximum hold days | absent | supported | NO_FEATURE_EQUIVALENT | no direct | medium |
+| Exit signals | strategy signal | standardized signal | PARTIAL_MAPPING | bridge | medium |
+| End-of-data | mark-to-market | forced SELL_EOD | SEMANTICALLY_INCOMPATIBLE | policy | high |
+| Open-position valuation | final mark | final close/close trade | SEMANTICALLY_INCOMPATIBLE | policy | high |
+| Empty-trade behavior | compact empty log | canonical metrics/empty trades | PARTIAL_MAPPING | result policy | medium |
+| Initial-capital validation | positive cash | canonical validation | PARTIAL_MAPPING | explicit rules | medium |
+
+Direct redirect can alter trade count, quantities, exit dates, PnL, final equity/capital, and reported metrics.
 
 ## H. Result-model field mapping
 
-| Alternate field | Canonical field | Classification | Unit conversion | Information loss |
-|---|---|---|---|---|
-| total_return | total_return_pct | RENAMED_EQUIVALENT | ratio to percent | possible |
-| max_drawdown | max_drawdown_pct | PARTIAL_MAPPING | unit verification | possible |
-| win_rate | win_rate_pct | PARTIAL_MAPPING | unit verification | possible |
-| trade_count | trade_count | RENAMED_EQUIVALENT | none | EOD may differ |
-| final_equity | final_capital | PARTIAL_MAPPING | lifecycle-dependent | possible |
-| trade_log | trades | SEMANTICALLY_INCOMPATIBLE | schema mapping | columns lost |
-| none | equity_curve, CAGR, Sharpe, Sortino, metadata | NO_CANONICAL_EQUIVALENT | unsafe derivation | unavailable |
+| Alternate field | Canonical field | Mapping classification | Unit conversion | Information loss | Derivable | Required assumptions |
+|---|---|---|---|---|---|---|
+| total_return | total_return_pct | RENAMED_EQUIVALENT | ratio to percent | no | yes | scale |
+| max_drawdown | max_drawdown_pct | PARTIAL_MAPPING | verify units | possible | assumptions | curve |
+| win_rate | win_rate_pct | PARTIAL_MAPPING | ratio to percent | possible | yes | lifecycle |
+| trade_count | trade_count | PARTIAL_MAPPING | none | possible | yes | EOD policy |
+| final_equity | final_capital | PARTIAL_MAPPING | none | possible | assumptions | lifecycle |
+| trade_log | trades | SEMANTICALLY_INCOMPATIBLE | schema | columns | partial | original inputs |
 
-Most canonical metrics cannot safely be recovered from the alternate result alone.
+Canonical-only inventory: `initial_capital` DERIVABLE_WITH_ASSUMPTIONS; `buy_hold_return_pct` DERIVABLE_ONLY_WITH_ORIGINAL_INPUT; `cagr_pct` NO_SAFE_DERIVATION; `exposure_pct` NO_SAFE_DERIVATION; `profit_factor` NOT_AVAILABLE_FROM_ALTERNATE_RESULT; `best_trade_pct` DERIVABLE_WITH_ASSUMPTIONS; `worst_trade_pct` DERIVABLE_WITH_ASSUMPTIONS; `avg_hold_days` NO_SAFE_DERIVATION; `sharpe_ratio` NO_SAFE_DERIVATION; `sortino_ratio` NO_SAFE_DERIVATION; `avg_profit` DERIVABLE_WITH_ASSUMPTIONS; `avg_loss` DERIVABLE_WITH_ASSUMPTIONS; `equity_curve` NO_SAFE_DERIVATION; `stock` NOT_AVAILABLE_FROM_ALTERNATE_RESULT; `strategy` NOT_AVAILABLE_FROM_ALTERNATE_RESULT; `parameters` NOT_AVAILABLE_FROM_ALTERNATE_RESULT; `start_date` DERIVABLE_WITH_ASSUMPTIONS; `end_date` DERIVABLE_WITH_ASSUMPTIONS.
 
 ## I. Trade-log and equity mapping
 
-| Alternate column | Canonical column | Mapping |
+| Trade column | Canonical mapping | Classification |
 |---|---|---|
-| Entry Date | Entry Date | EXACT_MAPPING |
-| Exit Date | Exit Date | EXACT_MAPPING |
-| Entry Price | Entry Price | EXACT_MAPPING |
-| Exit Price | Exit Price | EXACT_MAPPING |
-| Shares | Shares | SEMANTICALLY_INCOMPATIBLE when fractional |
+| Entry Date | Entry Date | PARTIAL_MAPPING |
+| Exit Date | Exit Date | PARTIAL_MAPPING |
+| Entry Price | Entry Price | PARTIAL_MAPPING |
+| Exit Price | Exit Price | PARTIAL_MAPPING |
+| Shares | Shares | SEMANTICALLY_INCOMPATIBLE |
 | PnL | PnL | PARTIAL_MAPPING |
-| PnL % | PnL_pct | unit/name verification required |
-| none | Hold Days, Exit Reason, Type | NO_CANONICAL_EQUIVALENT |
+| PnL % | PnL_pct | PARTIAL_MAPPING |
+| Hold Days | absent alternate | NO_CANONICAL_EQUIVALENT |
+| Exit Reason | absent alternate | NO_CANONICAL_EQUIVALENT |
+| Type | absent alternate | NO_CANONICAL_EQUIVALENT |
 
-A lossless adapter needs original prices/signals, costs, strategy, metadata, and equity rules; result-only conversion is unsafe.
+| Additional input | Why required | Available from alternate result | Lossless mapping | Recomputable | Risk if absent |
+|---|---|---|---|---|---|
+| Original price DataFrame | fills/equity | no | required | yes | high |
+| Original signal DataFrame | lifecycle | no | required | yes | high |
+| Initial cash | capital | partial | required | no | high |
+| Commission | costs | partial | required | yes | high |
+| Tax | costs | partial | required | yes | high |
+| Slippage | fills | partial | required | yes | high |
+| Strategy name | metadata | no | required | no | medium |
+| Parameters | metadata | no | required | no | medium |
+| Stock symbol | metadata | no | required | no | medium |
+| Start date | metadata | partial | required | yes | medium |
+| End date | metadata | partial | required | yes | medium |
+| Equity curve or recomputation rules | metrics | no | required | yes | high |
+
+**A lossless result-only adapter is not possible.**
 
 ## J. Serialization, artifact, and converter mapping
 
-| Boundary | Accepted type | Alternate compatibility | Failure/mapping | Artifact risk | A6 authorization |
-|---|---|---|---|---|---|
-| serialize/deserialize | canonical BacktestResult | rejected | strict type boundary | high | none |
-| JSON file reader/writer | canonical result | rejected | canonical schema | high | none |
-| report builders | canonical/legacy canonical outputs | not alternate | consumer fields differ | high | none |
-| paper-trading converter | canonical BacktestResult | rejected | missing fields/quantities | high | none |
+| Boundary | Accepted type/schema | Alternate compatibility | Failure mode | Mapping needed | Artifact risk | Authorized in A6 |
+|---|---|---|---|---|---|---|
+| serialize_backtest_result | canonical | rejected | type error | none | high | no |
+| deserialize_backtest_result | canonical construction | no alternate | canonical object | none | high | no |
+| JSON export | canonical | rejected | serializer error | none | high | no |
+| JSON load | canonical schema | no alternate | canonical result | none | high | no |
+| file writer | canonical | rejected | type boundary | none | high | no |
+| file reader | canonical | no alternate | schema boundary | none | high | no |
+| report builders | canonical reports | no alternate | field mismatch | mapping | high | no |
+| paper-trading converter | canonical | rejected | model error | mapping | high | no |
+| downstream contracts | canonical consumers | alternate unsupported | contract break | migration | high | no |
 
-Casting or aliasing cannot fill missing fields; fabricated metrics are prohibited.
+Strict canonical checks reject alternate results; aliasing cannot provide missing fields; fabrication is prohibited.
 
 ## K. Adapter and redirect feasibility
 
-| Option | Technically possible | Lossless | Semantic preservation | Required inputs | Main risk | A6 authorization |
-|---|---|---|---|---|---|---|
-| Direct module/class alias | yes | no | no | none | silent behavior change | no |
-| Function redirect | yes | no | no | call rewrite | lifecycle change | no |
-| Strategy bridge | yes | partial | uncertain | object/signals/params | interface drift | no |
-| Input bridge | yes | partial | uncertain | original DataFrame | signal/cost drift | no |
-| Result-only adapter | limited | no | no | original inputs missing | fabricated data | no |
-| Full recomputation | possible | no | canonical semantics only | all original inputs | changes results | no |
-| Dual-result facade | possible | no | complex | both models | maintenance | no |
-| Serializer-only adapter | possible | no | no | missing fields | artifact corruption | no |
-| Converter adapter | possible | no | no | integer/metadata policy | paper semantics | no |
+| Option | Technically possible | Lossless | Semantic preservation | Required inputs | Artifact compatibility | Complexity | Main risk | A6 authorization |
+|---|---|---|---|---|---|---|---|---|
+| Direct module alias | yes | no | no | none | no | low | silent change | no |
+| Direct class alias | yes | no | no | none | no | low | identity break | no |
+| Engine redirect to function | yes | no | no | call changes | no | medium | lifecycle drift | no |
+| Strategy-object bridge | possible | partial | uncertain | strategy/signals | partial | high | interface drift | no |
+| Input DataFrame bridge | possible | partial | uncertain | inputs/signals | partial | medium | signal drift | no |
+| Result-only adapter | limited | no | no | original inputs absent | no | medium | fabricated fields | no |
+| Full recomputation adapter | possible | no | canonical only | all inputs | partial | high | semantics change | no |
+| Dual-result facade | possible | no | complex | both models | partial | high | maintenance | no |
+| Serializer-only adapter | possible | no | no | missing fields | no | medium | corrupt artifact | no |
+| Converter adapter | possible | no | no | quantities/metadata | no | high | paper semantics | no |
 
 Feasibility outcome: **EXPLICIT_ADAPTER_DESIGN_REQUIRED_BEFORE_ANY_MIGRATION**. No option is authorized.
 
 ## L. Migration evidence and implementation entry criteria
 
-Require target behavior, parameter/strategy/signal/cost/slippage/EOD/invalid-open/result/trade/equity/metadata policies, artifact/converter tests, golden fixtures, external risk, rollback, version/communication plan, and dedicated production approval. **No adapter or migration implementation may begin while these criteria are incomplete.**
+| Criterion | Current status | Evidence required | Blocking | Required phase |
+|---|---|---|---|---|
+| Confirmed migration target | incomplete | approved decision | yes | design |
+| Alternate-versus-canonical semantic priority | incomplete | policy | yes | design |
+| Parameter mapping specification | incomplete | formulas | yes | design |
+| Strategy bridge specification | incomplete | API mapping | yes | design |
+| Signal normalization specification | incomplete | fixtures | yes | design |
+| Cost formula mapping | incomplete | golden cases | yes | design |
+| Slippage policy | incomplete | policy | yes | design |
+| Fractional-share policy | incomplete | policy | yes | design |
+| EOD lifecycle policy | incomplete | policy | yes | design |
+| Invalid-open policy | incomplete | policy | yes | design |
+| Complete result-field policy | incomplete | field matrix | yes | design |
+| Unit-conversion policy | incomplete | numeric cases | yes | design |
+| Trade-schema policy | incomplete | schema tests | yes | design |
+| Equity-curve policy | incomplete | curve fixtures | yes | design |
+| Metadata policy | incomplete | consumer evidence | yes | design |
+| Serialization impact assessment | incomplete | artifact tests | yes | design |
+| Paper-trading converter impact assessment | incomplete | converter tests | yes | design |
+| Golden characterization fixtures | present | maintenance | yes | test phase |
+| Round-trip artifact tests | present | maintenance | yes | test phase |
+| External-consumer risk assessment | incomplete | external evidence | yes | evidence phase |
+| Rollback plan | incomplete | approved plan | yes | design |
+| Version plan | incomplete | release policy | yes | design |
+| User communication plan | incomplete | reviewed docs | yes | design |
+| Dedicated production-phase approval | absent | explicit approval | yes | production phase |
+
+**No adapter or migration implementation may begin while these criteria are incomplete.**
 
 ## M. Recommended next phase and non-goals
 
-Recommend **Alternate Backtest Adapter Design Decision**. A6 does not add adapters, redirects, aliases, migrations, warnings, fixes, serializer/converter changes, schema changes, consumer migration, removals, version changes, merged PRs, or Phase A7.
+Recommend **Alternate Backtest Adapter Design Decision**. A6 does not add adapters, redirects, aliases, migrations, warnings, fixes, serializer/converter changes, schemas, consumer migration, removals, version changes, merged PRs, or Phase A7.
