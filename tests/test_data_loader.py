@@ -720,5 +720,47 @@ class DataLoaderTest(unittest.TestCase):
         self.assertIn("2330.TW: Downloaded from TWSE fallback", stdout.getvalue())
         self.assertEqual(stderr.getvalue(), "")
 
+    def test_verbose_false_returns_live_data_without_loader_or_provider_output(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        def noisy(*args, **kwargs):
+            print("provider stdout")
+            print("provider stderr", file=sys.stderr)
+            return _download_df()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", side_effect=noisy), redirect_stdout(stdout), redirect_stderr(stderr):
+                df, symbol = data_loader.download_tw_stock("2330", verbose=False)
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_tpex_monthly_empty_calls_latest_quote_once(self) -> None:
+        class Response:
+            def raise_for_status(self): pass
+            def json(self): return {"stat":"ok", "tables":[{"data":[]}]}
+        start = pd.Timestamp("2024-01-01")
+        expected = _download_df()
+        with patch.object(data_loader, "_period_start", return_value=start), patch.object(data_loader, "_month_starts", return_value=[start]), patch.object(data_loader.requests, "get", return_value=Response()), patch.object(data_loader, "_download_tpex_latest_quote", return_value=expected) as latest:
+            actual = data_loader._download_tpex_stock("6488", "1mo", "1d")
+        latest.assert_called_once_with("6488", "1mo", start)
+        self.assertIs(actual, expected)
+
+    def test_tpex_latest_quote_success_and_no_match(self) -> None:
+        class Response:
+            def __init__(self, payload): self.payload = payload
+            def raise_for_status(self): pass
+            def json(self): return self.payload
+        payload=[{"SecuritiesCompanyCode":"6488","Date":"113/01/03","Open":"10","High":"12","Low":"9","Close":"11","TradingShares":"1,234"}]
+        with patch.object(data_loader.requests, "get", return_value=Response(payload)) as get:
+            df = data_loader._download_tpex_latest_quote("6488", "1mo", pd.Timestamp("2024-01-01"))
+        self.assertEqual(get.call_args.args[0], "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes")
+        self.assertEqual(get.call_args.kwargs["headers"]["User-Agent"], "Mozilla/5.0")
+        self.assertEqual(get.call_args.kwargs["timeout"], 20)
+        self.assertEqual(list(df.columns), ["Open","High","Low","Close","Volume"])
+        self.assertEqual(df.index.name, "Date")
+        self.assertEqual(float(df.iloc[0]["Volume"]), 1234)
+        with patch.object(data_loader.requests, "get", return_value=Response([])):
+            with self.assertRaisesRegex(data_loader.DataLoaderError, "6488.TWO"): data_loader._download_tpex_latest_quote("6488", "1mo", pd.Timestamp("2024-01-01"))
+
 if __name__ == "__main__":
     unittest.main()
