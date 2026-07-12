@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+import logging
 from pathlib import Path
 import sys
 import tempfile
@@ -546,6 +547,232 @@ class DataLoaderTest(unittest.TestCase):
 
         self.assertIn("No price data found", str(context.exception))
 
+
+    def test_cache_path_identity_uses_exact_format_and_patched_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            with patch.object(data_loader, "CACHE_DIR", root):
+                self.assertEqual(data_loader._cache_path("A/B", "5d", "1wk", False), root / "A_B_5d_1wk_adjusted-False.csv")
+                baseline = data_loader._cache_path("2330.TW", "1y", "1d", True)
+                self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "5d", "1d", True))
+                self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "1y", "1wk", True))
+                self.assertNotEqual(baseline, Path(tmp_dir) / "2330.TW_1y_1d_adjusted-False.csv")
+
+    def test_cache_age_round_trip_and_freshness_boundaries(self) -> None:
+        class Stat:
+            def __init__(self, value): self.st_mtime = value
+        class FakePath:
+            def __init__(self, value): self.value = value
+            def exists(self): return self.value is not None
+            def stat(self): return Stat(self.value.timestamp())
+        now = pd.Timestamp("2024-01-02 14:30:00", tz="Asia/Taipei")
+        with patch.object(data_loader.pd.Timestamp, "now", return_value=now):
+            self.assertFalse(data_loader._is_cache_fresh(FakePath(None)))
+            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-01 15:00", tz="Asia/Taipei"))))
+            self.assertFalse(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 14:29:59", tz="Asia/Taipei"))))
+            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 14:30", tz="Asia/Taipei"))))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            frame = _download_df(); frame.index.name = "Date"; path = Path(tmp_dir) / "nested" / "cache.csv"
+            data_loader._write_cache(frame, path); loaded = data_loader._read_cache(path)
+            self.assertEqual(loaded.index.name, "Date"); pd.testing.assert_frame_equal(loaded, frame, check_freq=False)
+
+    def test_force_refresh_bypasses_cache_reads_and_writes_live_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader, "_read_cache") as read, patch.object(data_loader, "_write_cache") as write, patch.object(data_loader.yf, "download", return_value=_download_df()):
+                _, symbol = data_loader.download_tw_stock("2330", force_refresh=True)
+        self.assertEqual(symbol, "2330.TW"); read.assert_not_called(); write.assert_called_once()
+
+    def test_corrupt_stale_cache_raises_without_stale_success_warning(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_is_cache_fresh", return_value=False), patch.object(data_loader, "_get_cache_age_days", return_value=1.0), patch.object(data_loader, "_read_cache", side_effect=ValueError("corrupt stale")):
+                path = data_loader._cache_path("2330.TW", "1y", "1d", True); path.parent.mkdir(parents=True, exist_ok=True); path.write_text("x")
+                with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(data_loader.DataLoaderError) as caught: data_loader.download_tw_stock("2330", auto_adjust=True)
+        self.assertIn("stale cache read failed: corrupt stale", str(caught.exception)); self.assertNotIn("WARNING", stderr.getvalue())
+
+    def test_prepare_ohlcv_and_finalize_official_rows(self) -> None:
+        frame = pd.DataFrame({"Open":[1,None],"High":[2,2],"Low":[0,0],"Close":[1,1],"Volume":[None,1],"Extra":[9,9]}, index=["2024-01-01","2024-01-02"])
+        result = data_loader._prepare_ohlcv(frame, "2330.TW")
+        self.assertEqual(list(result.columns), ["Open","High","Low","Close","Volume"]); self.assertEqual(result.index.name, "Date")
+        rows = [{"Date":pd.Timestamp(f"2024-01-{day:02d}"),"Open":day,"High":day+1,"Low":day-1,"Close":day,"Volume":day} for day in [3,1,2,3,4,5,6]]
+        start = pd.Timestamp("2024-01-02")
+        self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"1d")), 1)
+        self.assertEqual(len(data_loader._finalize_official_rows(rows,"2330",".TW",start,"5d")), 5)
+
+    def test_tpex_wrapper_and_logger_contracts(self) -> None:
+        class Response:
+            def __init__(self, data): self.data=data
+            def raise_for_status(self): pass
+            def json(self): return self.data
+        monthly={"stat":"ok","tables":[{"data":[["113/01/02","1,000","x","10","12","9","11"]]}]}
+        with patch.object(data_loader,"_period_start",return_value=pd.Timestamp("2024-01-01")), patch.object(data_loader,"_month_starts",return_value=[pd.Timestamp("2024-01-01")]), patch.object(data_loader.requests,"get",return_value=Response(monthly)), patch.object(data_loader,"_download_tpex_latest_quote") as latest:
+            self.assertEqual(float(data_loader._download_tpex_stock("6488","1mo","1d").iloc[0]["Volume"]),1000)
+        latest.assert_not_called()
+        import tw_stock_tool.data.data_loader as package_loader; self.assertIs(data_loader, package_loader)
+        logger=logging.getLogger("yfinance"); old=(logger.disabled,logger.level,logger.propagate); logger.disabled=False; logger.setLevel(logging.WARNING); logger.propagate=True; stdout=StringIO(); stderr=StringIO()
+        try:
+            with patch.object(data_loader.yf,"download",side_effect=RuntimeError("boom")), redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaisesRegex(RuntimeError,"boom"): data_loader._download_yfinance_quiet("2330.TW","1y","1d",True)
+            self.assertEqual((logger.disabled,logger.level,logger.propagate),(False,logging.WARNING,True)); self.assertEqual(stdout.getvalue(),""); self.assertEqual(stderr.getvalue(),"")
+        finally: logger.disabled,logger.level,logger.propagate=old
+    def test_force_refresh_official_success_writes_resolved_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader, "_read_cache") as read, patch.object(data_loader, "_write_cache") as write, patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_download_official_stock", return_value=_download_df()):
+                _, symbol = data_loader.download_tw_stock("2330", auto_adjust=False, force_refresh=True)
+        self.assertEqual(symbol, "2330.TW")
+        read.assert_not_called()
+        self.assertEqual(write.call_args.args[1], Path(tmp_dir) / "2330.TW_1y_1d_adjusted-False.csv")
+
+    def test_corrupt_fresh_cache_falls_back_to_live_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader, "_is_cache_fresh", return_value=True), patch.object(data_loader, "_read_cache", side_effect=ValueError("corrupt fresh")), patch.object(data_loader.yf, "download", return_value=_download_df()):
+                df, symbol = data_loader.download_tw_stock("2330")
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
+
+    def test_verbose_yfinance_status_and_quiet_provider_output(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        def noisy(*args, **kwargs):
+            print("provider stdout")
+            print("provider stderr", file=sys.stderr)
+            return _download_df()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", side_effect=noisy), redirect_stdout(stdout), redirect_stderr(stderr):
+                data_loader.download_tw_stock("2330", verbose=True)
+        self.assertIn("2330.TW: Downloaded", stdout.getvalue())
+        self.assertNotIn("provider stdout", stdout.getvalue())
+        self.assertNotIn("provider stderr", stderr.getvalue())
+
+    def test_root_wrapper_helper_patch_delegates_to_package_loader(self) -> None:
+        import tw_stock_tool.data.data_loader as package_loader
+        self.assertIs(data_loader, package_loader)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                self.assertEqual(data_loader._cache_path("2330.TW", "1y", "1d", True).parent, Path(tmp_dir))
+                with patch.object(data_loader, "_read_cache", side_effect=ValueError("root patch")) as patched, patch.object(data_loader, "_is_cache_fresh", return_value=True), patch.object(data_loader.yf, "download", return_value=_download_df()):
+                    package_loader.download_tw_stock("2330")
+                patched.assert_called_once()
+
+    def test_cache_age_days_uses_utc_and_propagates_stat_error(self) -> None:
+        class Stat:
+            def __init__(self, stamp): self.st_mtime = stamp
+        class FakePath:
+            def __init__(self, stamp): self.stamp = stamp
+            def stat(self): return Stat(self.stamp)
+        now = pd.Timestamp("2024-01-03", tz="UTC")
+        with patch.object(data_loader.pd.Timestamp, "now", return_value=now):
+            self.assertAlmostEqual(data_loader._get_cache_age_days(FakePath(now.timestamp() - 86400)), 1.0)
+            self.assertAlmostEqual(data_loader._get_cache_age_days(FakePath(now.timestamp() - 43200)), 0.5)
+            self.assertEqual(data_loader._get_cache_age_days(FakePath(now.timestamp() + 1)), 0.0)
+        class BrokenPath:
+            def stat(self): raise OSError("mtime failure")
+        with self.assertRaisesRegex(OSError, "mtime failure"): data_loader._get_cache_age_days(BrokenPath())
+
+    def test_stale_mtime_failure_is_aggregated_without_cache_read(self) -> None:
+        stderr = StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_is_cache_fresh", return_value=False), patch.object(data_loader, "_get_cache_age_days", side_effect=OSError("mtime failure")), patch.object(data_loader, "_read_cache") as read:
+                path = data_loader._cache_path("2330.TW", "1y", "1d", True); path.parent.mkdir(parents=True, exist_ok=True); path.write_text("x")
+                with redirect_stderr(stderr), self.assertRaises(data_loader.DataLoaderError) as caught: data_loader.download_tw_stock("2330", auto_adjust=True)
+        self.assertIn("stale cache mtime read failed: mtime failure", str(caught.exception)); read.assert_not_called(); self.assertNotIn("WARNING", stderr.getvalue())
+
+    def test_verbose_fresh_and_stale_cache_output_channels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=_download_df()):
+                data_loader.download_tw_stock("2330")
+                out, err = StringIO(), StringIO()
+                with redirect_stdout(out), redirect_stderr(err): data_loader.download_tw_stock("2330", verbose=True)
+        self.assertIn("2330.TW: From cache", out.getvalue()); self.assertEqual(err.getvalue(), "")
+        out, err = StringIO(), StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_is_cache_fresh", return_value=False), patch.object(data_loader, "_get_cache_age_days", return_value=2.0):
+                path = data_loader._cache_path("2330.TW", "1y", "1d", True); data_loader._write_cache(_download_df(), path)
+                with redirect_stdout(out), redirect_stderr(err): data_loader.download_tw_stock("2330", auto_adjust=True, verbose=True)
+        self.assertIn("2330.TW: From stale cache", out.getvalue()); self.assertNotIn("WARNING", out.getvalue()); self.assertIn("[WARNING]", err.getvalue()); self.assertIn("2.0", err.getvalue()); self.assertIn("stale cached data", err.getvalue())
+
+    def test_before_close_and_utc_to_taipei_freshness(self) -> None:
+        class Stat:
+            def __init__(self, stamp): self.st_mtime = stamp
+        class FakePath:
+            def __init__(self, stamp): self.stamp = stamp
+            def exists(self): return True
+            def stat(self): return Stat(self.stamp.timestamp())
+        now = pd.Timestamp("2024-01-02 13:00:00", tz="Asia/Taipei")
+        with patch.object(data_loader.pd.Timestamp, "now", return_value=now):
+            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 09:00:00", tz="Asia/Taipei"))))
+            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-01 16:30:00", tz="UTC"))))
+
+    def test_write_cache_failure_and_malformed_read_propagate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "nested" / "cache.csv"
+            with patch.object(pd.DataFrame, "to_csv", side_effect=OSError("csv failure")):
+                with self.assertRaisesRegex(OSError, "csv failure"):
+                    data_loader._write_cache(_download_df(), path)
+            bad = Path(tmp_dir) / "bad.csv"
+            bad.write_text('"unterminated', encoding="utf-8")
+            with self.assertRaises(Exception): data_loader._read_cache(bad)
+
+    def test_official_fallback_verbose_status(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_download_official_stock", return_value=_download_df()):
+                with redirect_stdout(stdout), redirect_stderr(stderr): data_loader.download_tw_stock("2330", auto_adjust=False, verbose=True)
+        self.assertIn("2330.TW: Downloaded from TWSE fallback", stdout.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_verbose_false_returns_live_data_without_loader_or_provider_output(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        def noisy(*args, **kwargs):
+            print("provider stdout")
+            print("provider stderr", file=sys.stderr)
+            return _download_df()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", side_effect=noisy), redirect_stdout(stdout), redirect_stderr(stderr):
+                df, symbol = data_loader.download_tw_stock("2330", verbose=False)
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_tpex_monthly_empty_calls_latest_quote_once(self) -> None:
+        class Response:
+            def raise_for_status(self): pass
+            def json(self): return {"stat":"ok", "tables":[{"data":[]}]}
+        start = pd.Timestamp("2024-01-01")
+        expected = _download_df()
+        with patch.object(data_loader, "_period_start", return_value=start), patch.object(data_loader, "_month_starts", return_value=[start]), patch.object(data_loader.requests, "get", return_value=Response()), patch.object(data_loader, "_download_tpex_latest_quote", return_value=expected) as latest:
+            actual = data_loader._download_tpex_stock("6488", "1mo", "1d")
+        latest.assert_called_once_with("6488", "1mo", start)
+        self.assertIs(actual, expected)
+
+    def test_tpex_latest_quote_success_and_no_match(self) -> None:
+        class Response:
+            def __init__(self, payload): self.payload = payload
+            def raise_for_status(self): pass
+            def json(self): return self.payload
+        payload=[{"SecuritiesCompanyCode":"6488","Date":"113/01/03","Open":"10","High":"12","Low":"9","Close":"11","TradingShares":"1,234"}]
+        with patch.object(data_loader.requests, "get", return_value=Response(payload)) as get:
+            df = data_loader._download_tpex_latest_quote("6488", "1mo", pd.Timestamp("2024-01-01"))
+        self.assertEqual(get.call_args.args[0], "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes")
+        self.assertEqual(get.call_args.kwargs["headers"]["User-Agent"], "Mozilla/5.0")
+        self.assertEqual(get.call_args.kwargs["timeout"], 20)
+        self.assertEqual(list(df.columns), ["Open","High","Low","Close","Volume"])
+        self.assertEqual(df.index.name, "Date")
+        self.assertEqual(float(df.iloc[0]["Volume"]), 1234)
+        with patch.object(data_loader.requests, "get", return_value=Response([])):
+            with self.assertRaisesRegex(data_loader.DataLoaderError, "6488.TWO"): data_loader._download_tpex_latest_quote("6488", "1mo", pd.Timestamp("2024-01-01"))
+
+    def test_cache_runtime_delegates_route_through_internal_module(self) -> None:
+        with patch.object(data_loader._cache_runtime, "_cache_path", return_value=Path("delegate.csv")) as cache_path:
+            self.assertEqual(data_loader._cache_path("2330.TW", "1y", "1d", True), Path("delegate.csv"))
+        cache_path.assert_called_once_with("2330.TW", "1y", "1d", True, cache_dir=data_loader.CACHE_DIR)
+        path = Path("cache.csv")
+        with patch.object(data_loader._cache_runtime, "_is_cache_fresh", return_value=True) as fresh, patch.object(data_loader._cache_runtime, "_get_cache_age_days", return_value=1.0) as age, patch.object(data_loader._cache_runtime, "_read_cache", return_value=_download_df()) as read, patch.object(data_loader._cache_runtime, "_write_cache") as write:
+            self.assertTrue(data_loader._is_cache_fresh(path))
+            self.assertEqual(data_loader._get_cache_age_days(path), 1.0)
+            self.assertIs(data_loader._read_cache(path), read.return_value)
+            data_loader._write_cache(_download_df(), path)
+        fresh.assert_called_once_with(path); age.assert_called_once_with(path); read.assert_called_once_with(path); write.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()

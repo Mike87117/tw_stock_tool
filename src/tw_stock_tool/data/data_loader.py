@@ -10,6 +10,7 @@ import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.utils.console_lock import console_io_lock
+from tw_stock_tool.data import cache_runtime as _cache_runtime
 
 
 class DataLoaderError(Exception):
@@ -37,45 +38,23 @@ def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
 
 
 def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool) -> Path:
-    safe_symbol = symbol.replace("/", "_")
-    return CACHE_DIR / f"{safe_symbol}_{period}_{interval}_adjusted-{auto_adjust}.csv"
+    return _cache_runtime._cache_path(symbol, period, interval, auto_adjust, cache_dir=CACHE_DIR)
 
 
 def _is_cache_fresh(path: Path) -> bool:
-    if not path.exists():
-        return False
-
-    now = pd.Timestamp.now(tz="Asia/Taipei")
-    mtime = path.stat().st_mtime
-    modified = pd.Timestamp(mtime, unit="s", tz="UTC").tz_convert("Asia/Taipei")
-
-    if modified.date() != now.date():
-        return False
-
-    market_close = now.replace(hour=14, minute=30, second=0, microsecond=0)
-    if now >= market_close:
-        return modified >= market_close
-
-    return True
+    return _cache_runtime._is_cache_fresh(path)
 
 
 def _get_cache_age_days(path: Path) -> float:
-    mtime = path.stat().st_mtime
-    now = pd.Timestamp.now(tz="UTC").timestamp()
-    return max(0.0, (now - mtime) / 86400.0)
+    return _cache_runtime._get_cache_age_days(path)
 
 
 def _read_cache(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, index_col=0, parse_dates=True)
-    df.index.name = "Date"
-    return df
+    return _cache_runtime._read_cache(path)
 
 
 def _write_cache(df: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path)
-
-
+    _cache_runtime._write_cache(df, path)
 def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     df = _normalize_columns(df)
     required = ["Open", "High", "Low", "Close", "Volume"]
