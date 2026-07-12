@@ -1,4 +1,4 @@
-﻿# Alternate Backtest Replacement API Mapping
+# Alternate Backtest Replacement API Mapping
 
 ## A. Mapping outcome
 **PARTIAL_CONCEPTUAL_MAPPING_NO_DROP_IN_REPLACEMENT**. Canonical APIs cover related concepts, but strategy interfaces, constructors, execution semantics, result schemas, and artifact boundaries differ. Direct redirect is unsafe. A6 authorizes no adapter or migration. Retention remains **RETAIN_WITHOUT_DEPRECATION**.
@@ -196,3 +196,19 @@ Feasibility outcome: **EXPLICIT_ADAPTER_DESIGN_REQUIRED_BEFORE_ANY_MIGRATION**. 
 ## M. Recommended next phase and non-goals
 
 Recommend **Alternate Backtest Adapter Design Decision**. A6 does not add adapters, redirects, aliases, migrations, warnings, fixes, serializer/converter changes, schemas, consumer migration, removals, version changes, merged PRs, or Phase A7.
+
+### Independent governance details
+
+Section F concerns: Open, Close, legacy Signal, entry_signal, exit_signal, DataFrame index equality, DataFrame length equality, copying/mutation expectations, legacy-signal normalization, canonical standard-signal normalization, strategy-added columns, and params ownership are independent. The alternate generates signals through a strategy object and accepts no legacy Signal route; canonical accepts precomputed standardized signals and a legacy Signal route. Bool dtype, index equality, and signal length are separately validated at their respective boundaries.
+
+Section G has exactly 17 semantic rows: signal timing; next-open execution; invalid next-open handling; entry sizing; fractional shares; position-size control; commission/fee calculation; tax calculation; slippage; stop loss; take profit; maximum hold days; exit signals; end-of-data handling; open-position final valuation; empty-trade behavior; and initial-capital validation. Direct redirect can alter trade count, share quantities, exit dates, PnL, final capital/equity, and reported metrics.
+
+Canonical-only field inventory (independent): initial_capital, buy_hold_return_pct, cagr_pct, exposure_pct, profit_factor, best_trade_pct, worst_trade_pct, avg_hold_days, sharpe_ratio, sortino_ratio, avg_profit, avg_loss, equity_curve, stock, strategy, parameters, start_date, end_date. Missing fields are not defaulted or fabricated.
+
+The full trade-column inventory is Entry Date, Exit Date, Entry Price, Exit Price, Shares, PnL, PnL %, Hold Days, Exit Reason, and Type. A lossless result-only adapter is not possible.
+
+Artifact boundaries are independently mapped for serialize_backtest_result, deserialize_backtest_result, JSON export, JSON load, serialization file writer, serialization file reader, report builders, paper-trading converter, and downstream consumer contracts. Strict canonical type checks reject alternate results; deserialization constructs canonical results; class aliasing cannot supply missing fields; no artifact or converter changes are authorized.
+
+Adapter feasibility options independently evaluated: Direct module alias; Direct class alias; Alternate BacktestEngine redirect to canonical function; Strategy-object bridge; Input DataFrame bridge; Result-only adapter; Full recomputation adapter; Dual-result facade; Serializer-only adapter; Paper-trading converter adapter. Complexity and Artifact compatibility are evaluated per option; no option is authorized. The feasibility outcome is EXPLICIT_ADAPTER_DESIGN_REQUIRED_BEFORE_ANY_MIGRATION.
+
+Entry criteria include: Confirmed migration target; Alternate-versus-canonical semantic priority; Parameter mapping specification; Strategy bridge specification; Signal normalization specification; Cost formula mapping; Slippage policy; Fractional-share policy; EOD lifecycle policy; Invalid-open policy; Complete result-field policy; Unit-conversion policy; Trade-schema policy; Equity-curve policy; Metadata policy; Serialization impact assessment; Paper-trading converter impact assessment; Golden characterization fixtures; Round-trip artifact tests; External-consumer risk assessment; Rollback plan; Version plan; User communication plan; Dedicated production-phase approval. No adapter or migration implementation may begin while these criteria are incomplete.
