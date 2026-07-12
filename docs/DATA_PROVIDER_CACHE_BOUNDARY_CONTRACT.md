@@ -88,8 +88,8 @@ Candidate order is observable; validation does not establish that a security exi
 | auto_adjust=True after failure | true | no official path | after yfinance | stale stage | aggregate | official skipped | COVERED |
 | auto_adjust=False eligibility | false | official path | after all yfinance | attempt official | aggregate | gate | COVERED |
 | TWSE official fallback | `.TW` candidate | TWSE | before TPEx candidate | normalize/write/return | aggregate | 1d only | COVERED |
-| TPEx monthly fallback | `.TWO` candidate | TPEx monthly | per TWO official | normalize/write/return | latest quote fallback | separate parser | COVERED |
-| TPEx latest-quote fallback | no monthly rows | TPEx quote | after monthly | return latest | aggregate | quote endpoint | COVERED |
+| TPEx monthly fallback | `.TWO` candidate | TPEx monthly | per TWO official | normalize/write/return | latest quote fallback | separate parser | PARTIALLY_COVERED |
+| TPEx latest-quote fallback | no monthly rows | TPEx quote | after monthly | return latest | aggregate | quote endpoint | NOT_COVERED |
 | Official interval limit | non-1d | official | path gate | none | DataLoaderError | 1d only | COVERED |
 | Official candidate order | yfinance exhausted | TWSE then TPEx by candidate | after live | return first success | aggregate | no reorder | PARTIALLY_COVERED |
 | Provider success cache write | normalized live success | runtime cache | before return | write then return | collect write error | nonfatal write | COVERED |
@@ -136,26 +136,25 @@ Before 14:30 Asia/Taipei, a current-local-date cache is fresh; at/after 14:30 it
 
 | Data concern | Current contract | Transformation | Failure behavior | Downstream dependency | Existing test evidence | Missing characterization |
 |---|---|---|---|---|---|---|
-| MultiIndex flattening | flattened | column level selection | missing columns error | analysis | COVERED | variants |
-| Required OHLCV | Open/High/Low/Close/Volume | select/order | DataLoaderError | backtesting | COVERED | source variants |
-| Exact column order | Open High Low Close Volume | reorder | n/a | callers | COVERED | cache/live comparison |
-| Missing OHLC rows | dropped | dropna OHLC | empty error | analysis | COVERED | mixed cases |
-| Volume | retained | numeric source column | missing error | reports | PARTIALLY_COVERED | null policy |
-| Empty usable data | rejected | post-drop check | DataLoaderError | callers | COVERED | official empty |
+| MultiIndex flattening | flattened when received | column level selection | missing columns error | analysis | NOT_COVERED | direct MultiIndex fixture |
+| Required OHLCV | Open/High/Low/Close/Volume required | select/order | DataLoaderError | backtesting | PARTIALLY_COVERED | all required-column cases |
+| Exact column order | Open High Low Close Volume | reorder | n/a | callers | PARTIALLY_COVERED | explicit order assertion |
+| Missing OHLC rows | dropped | dropna OHLC | empty error | analysis | PARTIALLY_COVERED | mixed-null fixture |
+| Volume | retained | source column | missing error | reports | PARTIALLY_COVERED | null policy |
+| Empty usable data | rejected | post-drop check | DataLoaderError | callers | PARTIALLY_COVERED | direct empty-after-drop fixture |
 | DatetimeIndex | accepted | preserve | n/a | time series | PARTIALLY_COVERED | timezone |
-| Index conversion | convertible index parsed | `to_datetime` | invalid error | cache | COVERED | edge formats |
+| Index conversion | convertible index parsed | `to_datetime` | invalid error | cache | NOT_COVERED | valid string-index fixture |
 | Invalid index | rejected | validation | DataLoaderError | callers | COVERED | cache corrupt |
-| Index name | `Date` | assign name | n/a | CSV/tests | PARTIALLY_COVERED | cache read |
-| Duplicate official dates | deduplicated | Date dedupe | n/a | official data | PARTIALLY_COVERED | explicit test |
-| Official-date sorting | ascending | sort Date | n/a | time series | PARTIALLY_COVERED | explicit test |
-| Period-start filtering | official rows filtered | start bound | empty error | period contract | PARTIALLY_COVERED | boundaries |
-| `1d` row limiting | no intraday limit path | period/provider logic | n/a | callers | NOT_COVERED | exact bound |
-| `5d` row limiting | provider period behavior | provider result | n/a | callers | NOT_COVERED | exact bound |
+| Index name | `Date` | assign name | n/a | CSV/tests | PARTIALLY_COVERED | direct assertion |
+| Duplicate official dates | deduplicated | Date dedupe | n/a | official data | NOT_COVERED | duplicate-row fixture |
+| Official-date sorting | ascending | sort Date | n/a | time series | NOT_COVERED | unsorted-row fixture |
+| Period-start filtering | official rows filtered | start bound | empty error | period contract | NOT_COVERED | boundary fixture |
+| Official `1d` period limiting | official rows return `df.tail(1)` | `_finalize_official_rows` after filtering | n/a | official fallback | NOT_COVERED | deterministic official rows |
+| Official `5d` period limiting | official rows return `df.tail(5)` | `_finalize_official_rows` after filtering | n/a | official fallback | NOT_COVERED | deterministic official rows |
 | Returned symbol identity | successful candidate | tuple element | n/a | callers | COVERED | cache/live |
 | Cache/live equivalence | normalized frames | same prepare path | errors | callers | PARTIALLY_COVERED | frame equivalence |
 
-Output columns are exactly `Open`, `High`, `Low`, `Close`, `Volume`; OHLC-null rows are removed; index must become datetime-compatible and is named `Date`; official rows are deduplicated/sorted. Cache/live tests establish frame equivalence, not byte identity.
-
+Output columns are exactly `Open`, `High`, `Low`, `Close`, `Volume`; OHLC-null rows are removed; index must become datetime-compatible and is named `Date`; official rows are deduplicated, indexed, sorted, filtered by start date, then apply `df.tail(1)` for `1d` or `df.tail(5)` for `5d`. Other periods are not reduced by those branches. The helper does not manually trim yfinance results. Cache/live tests establish frame equivalence, not byte identity.
 ## H. Diagnostics, errors, and concurrency contract
 
 | Diagnostic/error surface | Current behavior | Output channel | Concurrency requirement | Caller-visible | Test coverage | Extraction requirement |
@@ -187,46 +186,57 @@ Suppression redirects process-global stdout/stderr and remains serialized; logge
 
 | Tracked file | Imported surface | Direct or indirect use | Arguments supplied | Return values consumed | Error handling | Compatibility dependency |
 |---|---|---|---|---|---|---|
-| analysis/analysis.py | download_tw_stock | direct `analyze_stock` | stock/period/interval | df,symbol | caller flow | tuple/schema |
-| analysis/scanner.py | analyze_stock | indirect scanner | scan inputs | analysis dict | catches workflow errors | loader via analysis |
-| cli/price_data_smoke_check.py | data_loader.download_tw_stock | direct | symbol/options | df,symbol | report failure | tuple/error |
-| cli/clean_stocks.py | download_tw_stock | direct | stock/period | df,symbol | invalid handling | resolution |
-| utils/verify_batch.py | download_tw_stock | direct | stock/period/interval | df,symbol | batch errors | tuple/schema |
-| cli/main.py | DataLoaderError | indirect dispatch | CLI command | exception | catches | exception type |
-| GUI/service callers | analysis/scanner workflows | indirect | UI inputs | analysis result | workflow handling | loader contract |
-| report/ML/batch tracked callers | analysis path or verify_batch | indirect | workflow inputs | frames/results | workflow handling | schema |
+| src/tw_stock_tool/analysis/analysis.py | download_tw_stock | direct via `analyze_stock` | stock/period/interval | df,symbol | propagates workflow error | tuple/schema |
+| src/tw_stock_tool/cli/clean_stocks.py | download_tw_stock | direct | stock/period | df,symbol | invalid-stock handling | resolution |
+| src/tw_stock_tool/cli/price_data_smoke_check.py | data_loader.download_tw_stock | direct live smoke | symbol/options | df,symbol | smoke failure report | tuple/error |
+| src/tw_stock_tool/utils/verify_batch.py | download_tw_stock | direct | stock/period/interval | df,symbol | batch errors | tuple/schema |
+| src/tw_stock_tool/analysis/scanner.py | analyze_stock | indirect | scan inputs | analysis dict | workflow handling | loader via analysis |
+| src/tw_stock_tool/backtesting/parameter_sweep.py | analyze_stock | indirect | stock/period/refresh | analysis | propagates | loader via analysis |
+| src/tw_stock_tool/backtesting/strategy_compare.py | analyze_stock | indirect | stock/period | analysis | propagates | loader via analysis |
+| src/tw_stock_tool/backtesting/walk_forward.py | analyze_stock | indirect | stock/period | analysis | propagates | loader via analysis |
+| src/tw_stock_tool/cli/backtest_report.py | analyze_stock | indirect | CLI values | analysis | CLI handling | loader via analysis |
+| src/tw_stock_tool/cli/backtest_result_export_cli.py | analyze_stock | indirect | CLI values | analysis | CLI handling | loader via analysis |
+| src/tw_stock_tool/cli/main.py | analyze_stock | indirect | CLI values | analysis | dispatch handling | loader via analysis |
+| src/tw_stock_tool/cli/simulated_paper_trading_cli.py | analyze_stock | indirect | CLI values | analysis | CLI handling | loader via analysis |
+| src/tw_stock_tool/gui/app_services.py | analysis_module.analyze_stock | indirect | UI values | analysis | service handling | loader via analysis |
+| src/tw_stock_tool/ml/ml_dataset.py | analyze_stock | indirect | stock/period | analysis | propagates | loader via analysis |
+| src/tw_stock_tool/scanners/daily_watchlist.py | analyze_stock | indirect | watchlist values | analysis | catches workflow errors | loader via analysis |
+| src/tw_stock_tool/cli/main.py | DataLoaderError | error-only dependency | CLI command | exception | catches | exception type/text |
+| tests/test_data_loader.py | root data_loader | test direct calls | fixtures | df,symbol/errors | assertions | wrapper identity/patches |
+
+No concrete report-specific runtime caller beyond the listed CLI report modules was identified by tracked-file search; no other concrete GUI or ML runtime caller was identified beyond the listed paths.
 
 ### Wrapper and import surfaces
 
 | Surface | Target | Re-export behavior | Executable behavior | Test evidence | External-use uncertainty | Required preservation |
 |---|---|---|---|---|---|---|
-| Root data_loader.py | package loader | wrapper module | import facade | wrapper tests | unknown | module identity |
-| Root cache_utils.py | package cache_utils | wrapper module | import facade | cache tests | unknown | functions |
-| Root cache_manager.py | package manager | wrapper module | CLI forwarding | CLI tests | unknown | main behavior |
-| Package submodule imports | data package | direct submodules | n/a | source/tests | unknown | paths |
-| `tw_stock_tool.data.__init__` | package init | limited exports | n/a | source | unknown | initializer |
-| CLI cache command | cache_manager | command dispatch | administration CLI | cache tests | unknown | CLI output |
-| README/documented imports | data loader/cache docs | documented usage | n/a | docs | unknown | examples |
+| Root `data_loader.py` | `tw_stock_tool.data.data_loader` | compatibility wrapper; redirects module identity | no independent implementation | test_data_loader | unknown | module identity |
+| Root `cache_utils.py` | `tw_stock_tool.data.cache_utils` | compatibility wrapper; redirects module identity | no independent implementation | test_cache_utils | unknown | functions |
+| Root `cache_manager.py` | `tw_stock_tool.data.cache_manager` | compatibility wrapper; redirects module identity | Does not independently call `main()` | wrapper/source | unknown | module identity |
+| `src/tw_stock_tool/data/cache_manager.py` | cache_utils | package module | owns administration CLI implementation | cache tests | unknown | main behavior |
+| Package submodule imports | data package submodules | direct paths | n/a | source/tests | unknown | paths |
+| `tw_stock_tool.data.__init__` | package initializer | no public exports | n/a | source | unknown | empty export surface |
+| CLI cache command | package cache_manager | command dispatch | administration CLI | cache tests | unknown | CLI output |
+| README documented imports | loader/cache docs | documented use | n/a | docs | unknown | examples |
 
 ### Patch and monkeypatch surfaces
 
 | Surface | Current patch/call location | Why used | Extraction break risk | Compatibility strategy required later |
 |---|---|---|---|---|
-| CACHE_DIR | test_data_loader/config tests | isolate cache | high | delegate/config patch |
-| yf.download | test_data_loader | deterministic provider | high | preserve adapter patch |
-| requests.get | provider tests | deterministic official data | high | preserve patch |
-| _is_cache_fresh | test_data_loader | choose cache stage | high | delegate |
-| _read_cache | test_data_loader | failure/cache data | high | delegate |
-| _write_cache | test_data_loader | nonfatal write | high | delegate |
-| _get_cache_age_days | test_data_loader | stale policy | high | delegate |
-| _download_twse_stock | test_data_loader | fallback behavior | high | preserve |
-| _download_tpex_stock | test_data_loader | fallback behavior | high | preserve |
-| _download_official_stock | test_data_loader | official gate | high | preserve |
-| _download_yfinance_quiet | test_data_loader/scanner | quiet provider | high | preserve |
-| pd.Timestamp.now | freshness tests | deterministic time | high | inject/delegate |
+| CACHE_DIR | tests/test_data_loader.py; tests/test_config_paths.py | isolate cache | high | delegate/config patch |
+| yf.download | tests/test_data_loader.py | deterministic provider | high | preserve adapter patch |
+| requests.get | tests/test_data_loader.py | deterministic official data | high | preserve patch |
+| _is_cache_fresh | tests/test_data_loader.py | choose cache stage | high | delegate |
+| _read_cache | tests/test_data_loader.py | failure/cache data | high | delegate |
+| _write_cache | tests/test_data_loader.py | nonfatal write | high | delegate |
+| _get_cache_age_days | tests/test_data_loader.py | stale policy | high | delegate |
+| _download_twse_stock | tests/test_data_loader.py | fallback behavior | high | preserve |
+| _download_tpex_stock | tests/test_data_loader.py | fallback behavior | high | preserve |
+| _download_official_stock | tests/test_data_loader.py | official gate | high | preserve |
+| _download_yfinance_quiet | tests/test_data_loader.py; tests/test_scanner.py | quiet provider | high | preserve |
+| pd.Timestamp.now | no tracked direct patch identified | potential time seam | high | characterize before move |
 
 A private name can still be an effective test or external patch surface.
-
 ## J. Existing test coverage and characterization gaps
 
 **CHARACTERIZATION_GAPS_REMAIN_BEFORE_EXTRACTION**
@@ -236,7 +246,7 @@ A private name can still be an effective test or external patch surface.
 | Fresh cache read/write | test_download_writes... | COVERED | identity variants | yes | filename cases |
 | Force refresh | test_force_refresh... | COVERED | write after force | yes | add |
 | TWSE fallback | test_twse_fallback... | COVERED | order | yes | add |
-| TPEx fallback | test_tpex_fallback... | COVERED | parsing | yes | add |
+| TPEx fallback | test_tpex_fallback... | PARTIALLY_COVERED | outer orchestration only; monthly parsing not direct | yes | parser fixture |
 | `.TW` then `.TWO` | test_numeric_symbol... | COVERED | errors | yes | add |
 | Explicit `.TW` | test_explicit_tw... | COVERED | case | yes | add |
 | Explicit `.TWO` | test_explicit_two... | COVERED | case | yes | add |
@@ -264,11 +274,11 @@ A private name can still be an effective test or external patch surface.
 | Corrupt fresh/live success | read-failure test | PARTIALLY_COVERED | real corrupt CSV | yes | add |
 | Corrupt stale aggregation | none | NOT_COVERED | read failure | yes | add |
 | Official attempt order | partial fallback tests | PARTIALLY_COVERED | all candidates | yes | add |
-| TPEx latest quote | provider tests | PARTIALLY_COVERED | no monthly rows | yes | add |
-| Exact columns | loader tests | COVERED | cached frame | yes | add |
-| MultiIndex normalization | loader tests | COVERED | levels | yes | add |
-| Missing OHLC removal | loader tests | COVERED | mixed nulls | yes | add |
-| Index conversion | loader tests | COVERED | timezone | yes | add |
+| TPEx latest quote | no direct deterministic test | NOT_COVERED | monthly-empty and quote parsing | yes | quote fallback fixture |
+| Exact columns | normal five-column fixtures | PARTIALLY_COVERED | explicit order assertion | yes | ordered-column fixture |
+| MultiIndex normalization | no direct MultiIndex fixture | NOT_COVERED | flattening | yes | MultiIndex fixture |
+| Missing OHLC removal | source behavior only | PARTIALLY_COVERED | mixed nulls | yes | null-row fixture |
+| Index conversion | invalid-index rejection only | NOT_COVERED | valid string index | yes | conversion fixture |
 | Verbose strings | none | NOT_COVERED | all statuses | yes | add |
 | Stale-warning channel | stale tests | PARTIALLY_COVERED | exact stderr | yes | add |
 
@@ -326,6 +336,6 @@ The future seam is only `_cache_path`, `_is_cache_fresh`, `_get_cache_age_days`,
 
 ## M. Recommended next phase and non-goals
 
-Recommend exactly **Track B2 ??Data Provider/Cache Boundary Characterization Tests**. B2 should start from final B1 HEAD, add deterministic tests only, fill blocking cache-runtime gaps, preserve production code, confirm the proposed seam remains viable, produce a precise extraction contract, remain HOLD, and not begin extraction.
+Recommend exactly **Track B2 — Data Provider/Cache Boundary Characterization Tests**. B2 should start from final B1 HEAD, add deterministic tests only, fill blocking cache-runtime gaps, preserve production code, confirm the proposed seam remains viable, produce a precise extraction contract, remain HOLD, and not begin extraction.
 
 B1 does not modify production code, add tests, extract cache/provider helpers, add modules, change cache policy/provider order/official fallback/symbol resolution/DataFrame output/errors/diagnostics, modify wrappers or Track A documents, merge or retarget PRs, start Track B2, or start Phase A9.
