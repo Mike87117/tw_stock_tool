@@ -556,7 +556,7 @@ class DataLoaderTest(unittest.TestCase):
                 baseline = data_loader._cache_path("2330.TW", "1y", "1d", True)
                 self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "5d", "1d", True))
                 self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "1y", "1wk", True))
-                self.assertNotEqual(baseline, data_loader._cache_path("2330.TW", "1y", "1d", False))
+                self.assertNotEqual(baseline, Path(tmp_dir) / "2330.TW_1y_1d_adjusted-False.csv")
 
     def test_cache_age_round_trip_and_freshness_boundaries(self) -> None:
         class Stat:
@@ -615,5 +615,43 @@ class DataLoaderTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,"boom"): data_loader._download_yfinance_quiet("2330.TW","1y","1d",True)
             self.assertEqual((logger.disabled,logger.level,logger.propagate),(False,logging.WARNING,True)); self.assertEqual(stdout.getvalue(),""); self.assertEqual(stderr.getvalue(),"")
         finally: logger.disabled,logger.level,logger.propagate=old
+    def test_force_refresh_official_success_writes_resolved_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader, "_read_cache") as read, patch.object(data_loader, "_write_cache") as write, patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_download_official_stock", return_value=_download_df()):
+                _, symbol = data_loader.download_tw_stock("2330", auto_adjust=False, force_refresh=True)
+        self.assertEqual(symbol, "2330.TW")
+        read.assert_not_called()
+        self.assertEqual(write.call_args.args[1], Path(tmp_dir) / "2330.TW_1y_1d_adjusted-False.csv")
+
+    def test_corrupt_fresh_cache_falls_back_to_live_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader, "_is_cache_fresh", return_value=True), patch.object(data_loader, "_read_cache", side_effect=ValueError("corrupt fresh")), patch.object(data_loader.yf, "download", return_value=_download_df()):
+                df, symbol = data_loader.download_tw_stock("2330")
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
+
+    def test_verbose_yfinance_status_and_quiet_provider_output(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        def noisy(*args, **kwargs):
+            print("provider stdout")
+            print("provider stderr", file=sys.stderr)
+            return _download_df()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", side_effect=noisy), redirect_stdout(stdout), redirect_stderr(stderr):
+                data_loader.download_tw_stock("2330", verbose=True)
+        self.assertIn("2330.TW: Downloaded", stdout.getvalue())
+        self.assertNotIn("provider stdout", stdout.getvalue())
+        self.assertNotIn("provider stderr", stderr.getvalue())
+
+    def test_root_wrapper_helper_patch_delegates_to_package_loader(self) -> None:
+        import tw_stock_tool.data.data_loader as package_loader
+        self.assertIs(data_loader, package_loader)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                self.assertEqual(data_loader._cache_path("2330.TW", "1y", "1d", True).parent, Path(tmp_dir))
+                with patch.object(data_loader, "_read_cache", side_effect=ValueError("root patch")) as patched, patch.object(data_loader, "_is_cache_fresh", return_value=True), patch.object(data_loader.yf, "download", return_value=_download_df()):
+                    package_loader.download_tw_stock("2330")
+                patched.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()
