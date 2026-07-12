@@ -690,5 +690,35 @@ class DataLoaderTest(unittest.TestCase):
                 with redirect_stdout(out), redirect_stderr(err): data_loader.download_tw_stock("2330", auto_adjust=True, verbose=True)
         self.assertIn("2330.TW: From stale cache", out.getvalue()); self.assertNotIn("WARNING", out.getvalue()); self.assertIn("[WARNING]", err.getvalue()); self.assertIn("2.0", err.getvalue()); self.assertIn("stale cached data", err.getvalue())
 
+    def test_before_close_and_utc_to_taipei_freshness(self) -> None:
+        class Stat:
+            def __init__(self, stamp): self.st_mtime = stamp
+        class FakePath:
+            def __init__(self, stamp): self.stamp = stamp
+            def exists(self): return True
+            def stat(self): return Stat(self.stamp.timestamp())
+        now = pd.Timestamp("2024-01-02 13:00:00", tz="Asia/Taipei")
+        with patch.object(data_loader.pd.Timestamp, "now", return_value=now):
+            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-02 09:00:00", tz="Asia/Taipei"))))
+            self.assertTrue(data_loader._is_cache_fresh(FakePath(pd.Timestamp("2024-01-01 16:30:00", tz="UTC"))))
+
+    def test_write_cache_failure_and_malformed_read_propagate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "nested" / "cache.csv"
+            with patch.object(pd.DataFrame, "to_csv", side_effect=OSError("csv failure")):
+                with self.assertRaisesRegex(OSError, "csv failure"):
+                    data_loader._write_cache(_download_df(), path)
+            bad = Path(tmp_dir) / "bad.csv"
+            bad.write_text('"unterminated', encoding="utf-8")
+            with self.assertRaises(Exception): data_loader._read_cache(bad)
+
+    def test_official_fallback_verbose_status(self) -> None:
+        stdout, stderr = StringIO(), StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)), patch.object(data_loader.yf, "download", return_value=pd.DataFrame()), patch.object(data_loader, "_download_official_stock", return_value=_download_df()):
+                with redirect_stdout(stdout), redirect_stderr(stderr): data_loader.download_tw_stock("2330", auto_adjust=False, verbose=True)
+        self.assertIn("2330.TW: Downloaded from TWSE fallback", stdout.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
+
 if __name__ == "__main__":
     unittest.main()
