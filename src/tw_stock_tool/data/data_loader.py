@@ -10,6 +10,7 @@ import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.utils.console_lock import console_io_lock
+from tw_stock_tool.data import cache_runtime
 
 
 class DataLoaderError(Exception):
