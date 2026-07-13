@@ -4,7 +4,7 @@
 
 `RESEARCH_CORRECTNESS_DEFECTS_CONFIRMED`
 
-Track C1 established the original evidence. Track C2.1 resolved ML horizon leakage, Track C2.2 resolved rising and flat RSI edge cases, and Track C2.3.1 resolved Risk snapshot, Risk monetary-limit, and Guard reference-price finiteness.
+Track C1 established the original evidence. Track C2.1 resolved ML horizon leakage, Track C2.2 resolved rising and flat RSI edge cases, Track C2.3.1 resolved Risk and Guard finiteness, and Track C2.3.2 resolved Paper Trading monetary finiteness and mutable-fill contamination.
 
 ## Repository baseline
 
@@ -22,7 +22,7 @@ Track C1 established the original evidence. Track C2.1 resolved ML horizon leaka
 | C1-ML-1 | Horizon leakage | RESOLVED in Track C2.1 | `TrackC1ResearchCorrectnessTest.test_walk_forward_purges_train_labels_that_reach_test_window` | Horizon-sized purge gap between train and test. |
 | C1-FIN-1 | Backtest finite values | DEFECT_CONFIRMED | `test_backtest_rejects_all_nonfinite_parameters_and_prices` | Validate all parameters and Open/Close. |
 | C1-FIN-2 | Risk snapshot and limits | RESOLVED in Track C2.3.1 | `test_risk_snapshot_rejects_all_nonfinite_numeric_fields`; `test_risk_monetary_limits_reject_all_nonfinite_values` | Require finite Risk snapshot values and monetary/exposure limits. |
-| C1-FIN-3 | Simulated fill/portfolio | DEFECT_CONFIRMED | `test_simulated_fill_and_portfolio_reject_all_nonfinite_money`; `test_portfolio_arithmetic_rejects_nonfinite_fill_before_contamination` | Reject non-finite values before arithmetic. |
+| C1-FIN-3 | Simulated fill/portfolio | RESOLVED in Track C2.3.2 | `test_simulated_fill_and_portfolio_reject_all_nonfinite_money`; `test_portfolio_arithmetic_rejects_nonfinite_fill_before_contamination` | Reject non-finite values before arithmetic or state mutation. |
 | C1-FIN-4 | Guard reference price | RESOLVED in Track C2.3.1 | `test_guard_adapter_rejects_all_nonfinite_positive_reference_prices` | Require finite positive reference price. |
 | C1-MET-1 | Sharpe/Sortino annualization | DEFECT_CONFIRMED | `test_metrics_have_daily_factor_and_no_interval_context` | Represent 1d/1wk/1mo annualization. |
 | C1-CLI-1 | Runtime exit behavior | DEFECT_CONFIRMED | `test_ai_walk_forward_runtime_exception_returns_nonzero_exit_status`; `test_analyze_cli_runtime_validation_returns_nonzero_exit_status` | Return or propagate nonzero exit. |
@@ -33,11 +33,12 @@ RESOLVED:
 
 - ML horizon leakage — Track C2.1.
 - RSI rising and flat edge cases — Track C2.2.
-- Risk snapshot, Risk monetary limits, and Guard reference price finiteness — Track C2.3.1.
+- Risk snapshot, Risk monetary limits, and Guard reference price — Track C2.3.1.
+- SimulatedFill, SimulatedPortfolio, and fill-arithmetic contamination — Track C2.3.2.
 
 REMAINING DEFECT_CONFIRMED:
 
-- finite-number validation defects at Backtest, SimulatedFill, SimulatedPortfolio, and portfolio arithmetic boundaries;
+- finite-number validation defects at Backtest boundaries;
 - fixed daily annualization;
 - caught CLI runtime exceptions returning `None`.
 
@@ -45,26 +46,23 @@ CORRECTLY_REJECTED includes argparse invalid options, guard exposure bool/non-fi
 
 ## Expected failure inventory
 
-The current inventory contains exactly five tests:
+The current inventory contains exactly three tests:
 
-1. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_simulated_fill_and_portfolio_reject_all_nonfinite_money`
-2. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_portfolio_arithmetic_rejects_nonfinite_fill_before_contamination`
-3. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_backtest_rejects_all_nonfinite_parameters_and_prices`
-4. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_ai_walk_forward_runtime_exception_returns_nonzero_exit_status`
-5. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_analyze_cli_runtime_validation_returns_nonzero_exit_status`
+1. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_backtest_rejects_all_nonfinite_parameters_and_prices`
+2. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_ai_walk_forward_runtime_exception_returns_nonzero_exit_status`
+3. `tests.test_track_c1_research_correctness.TrackC1ResearchCorrectnessTest.test_analyze_cli_runtime_validation_returns_nonzero_exit_status`
 
 The ML leakage test is intentionally absent because it passes after Track C2.1.
 
 ## Direct and inferred impact
 
-Direct tests show Track C2.2 keeps rising and flat RSI rows available to Analyze. Track C2.3.1 rejects non-finite Risk snapshot fields, Risk monetary limits, and Guard reference prices. Non-finite values remain open in Backtest, SimulatedFill, SimulatedPortfolio, and portfolio arithmetic. The original ML split leakage was resolved in Track C2.1. Scanner, Daily Report, ML Dataset, and Parameter Sweep effects remain code-path inference unless separately integration-tested.
+Direct tests show Track C2.2 keeps rising and flat RSI rows available to Analyze. Track C2.3.1 rejects non-finite Risk snapshot fields, Risk monetary limits, and Guard reference prices. Track C2.3.2 rejects non-finite SimulatedFill and SimulatedPortfolio monetary values and blocks mutable invalid fills before state mutation. The remaining finite-number defect is Backtest validation. The original ML split leakage was resolved in Track C2.1. Scanner, Daily Report, ML Dataset, and Parameter Sweep effects remain code-path inference unless separately integration-tested.
 
 ## Remaining bounded recommendation
 
-1. Paper Trading finite-number validation.
-2. Backtest finite-number validation.
-3. Interval-aware metrics.
-4. Unified CLI nonzero exit behavior.
+1. Backtest finite-number validation.
+2. Interval-aware metrics.
+3. Unified CLI nonzero exit behavior.
 ## Non-goals
 
-Track C1 did not change production behavior. Track C2.1 changed only ML split leakage. Track C2.2 changed only RSI rising and flat edge-case behavior. Track C2.3.1 changed only Risk snapshot, Risk monetary-limit, and Guard reference-price finite validation; it did not alter Paper Trading fill/portfolio validation, Backtest validation, metrics, CLI behavior, targets, models, reports, artifacts, strategies, data sources, or broker integration.
+Track C1 did not change production behavior. Track C2.1 changed only ML split leakage. Track C2.2 changed only RSI rising and flat edge-case behavior. Track C2.3.1 changed only Risk and Guard finite validation. Track C2.3.2 changed only Paper Trading monetary validation and mutable-fill defenses; it did not alter the Paper Trading engine, Backtest validation, metrics, CLI behavior, targets, reports, artifacts, strategies, data sources, or broker integration.

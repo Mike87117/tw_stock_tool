@@ -1,3 +1,4 @@
+import math
 import unittest
 from datetime import datetime
 
@@ -61,6 +62,104 @@ class TestPaperTradingModels(unittest.TestCase):
             slippage=0.0,
         )
         self.assertEqual(sell_fill.net_cash_effect, 100000.0 - 142.0 - 300.0)
+
+    def test_simulated_fill_rejects_nonfinite_monetary_fields(self) -> None:
+        for field in ("price", "fee", "tax", "slippage"):
+            for value in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(field=field, value=value):
+                    values = dict(
+                        order_id="matrix",
+                        symbol="2330",
+                        side="BUY",
+                        quantity=1,
+                        price=100.0,
+                        filled_at=None,
+                    )
+                    values[field] = value
+                    with self.assertRaises(PaperTradingModelError):
+                        SimulatedFill(**values)
+
+    def test_simulated_fill_rejects_booleans_and_wrong_types(self) -> None:
+        for field in ("price", "fee", "tax", "slippage"):
+            for value in (True, False, "invalid", None):
+                with self.subTest(field=field, value=value):
+                    values = dict(
+                        order_id="types",
+                        symbol="2330",
+                        side="BUY",
+                        quantity=1,
+                        price=100.0,
+                        filled_at=None,
+                    )
+                    values[field] = value
+                    with self.assertRaises(PaperTradingModelError):
+                        SimulatedFill(**values)
+
+    def test_simulated_fill_accepts_valid_monetary_boundaries(self) -> None:
+        integer_price = SimulatedFill("int", "2330", "BUY", 1, 100, None)
+        float_price_and_costs = SimulatedFill(
+            "float",
+            "2330",
+            "BUY",
+            1,
+            100.5,
+            None,
+            fee=1.0,
+            tax=2.5,
+            slippage=0.25,
+        )
+
+        self.assertEqual(integer_price.price, 100)
+        self.assertEqual((integer_price.fee, integer_price.tax, integer_price.slippage), (0.0, 0.0, 0.0))
+        self.assertEqual(float_price_and_costs.price, 100.5)
+        self.assertEqual(
+            (float_price_and_costs.fee, float_price_and_costs.tax, float_price_and_costs.slippage),
+            (1.0, 2.5, 0.25),
+        )
+
+    def test_simulated_portfolio_validates_initial_cash(self) -> None:
+        for value in (True, float("nan"), float("inf"), -float("inf"), -1.0, "1000", None):
+            with self.subTest(value=value):
+                with self.assertRaises(PaperTradingModelError):
+                    SimulatedPortfolio(cash=value)
+
+        for value in (0, 0.0, 1000, 1000.5):
+            with self.subTest(value=value):
+                self.assertEqual(SimulatedPortfolio(cash=value).cash, value)
+
+    def test_simulated_portfolio_rejects_mutated_fill_before_state_changes(self) -> None:
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        fill = SimulatedFill("o", "2330", "BUY", 1, 100.0, None)
+        fill.price = float("nan")
+        initial_cash = portfolio.cash
+        initial_positions = dict(portfolio.positions)
+        initial_fills = list(portfolio.trade_log.fills)
+
+        with self.assertRaises(PaperTradingModelError):
+            portfolio.apply_fill(fill)
+
+        self.assertEqual(portfolio.cash, initial_cash)
+        self.assertEqual(portfolio.cash, 1000.0)
+        self.assertTrue(math.isfinite(portfolio.cash))
+        self.assertEqual(portfolio.positions, initial_positions)
+        self.assertEqual(portfolio.position_for("2330").quantity, 0)
+        self.assertEqual(portfolio.trade_log.fills, initial_fills)
+        self.assertEqual(len(portfolio.trade_log.fills), 0)
+
+    def test_simulated_position_rejects_mutated_fill_before_state_changes(self) -> None:
+        position = SimulatedPosition(symbol="2330")
+        position.apply_fill(SimulatedFill("first", "2330", "BUY", 2, 100.0, None))
+        fill = SimulatedFill("second", "2330", "BUY", 1, 200.0, None)
+        fill.fee = float("inf")
+        initial_state = (position.quantity, position.average_cost, position.realized_pnl)
+
+        with self.assertRaises(PaperTradingModelError):
+            position.apply_fill(fill)
+
+        self.assertEqual(
+            (position.quantity, position.average_cost, position.realized_pnl),
+            initial_state,
+        )
 
     def test_simulated_position(self) -> None:
         pos = SimulatedPosition(symbol="2330")

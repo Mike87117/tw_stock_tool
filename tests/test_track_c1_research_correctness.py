@@ -123,9 +123,7 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
         cases = [(f"quantity_limit/{name}", lambda value=value: check_max_position_quantity(_snapshot(), value), RiskModelError) for name, value in NONFINITE_VALUES]
         self.assertEqual(_collect_unrejected_cases(cases), [])
 
-    @unittest.expectedFailure
     def test_simulated_fill_and_portfolio_reject_all_nonfinite_money(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         cases = []
         for field in ("price", "fee", "tax", "slippage"):
             for value_name, value in NONFINITE_VALUES:
@@ -134,16 +132,24 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
             cases.append((f"portfolio.cash/{value_name}", lambda value=value: SimulatedPortfolio(value), PaperTradingModelError))
         self.assertEqual(_collect_unrejected_cases(cases), [])
 
-    @unittest.expectedFailure
     def test_portfolio_arithmetic_rejects_nonfinite_fill_before_contamination(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         portfolio = SimulatedPortfolio(1000.0)
-        fill = SimulatedFill("o", "2330", "BUY", 1, float("nan"), None)
-        portfolio.apply_fill(fill)
-        position = portfolio.position_for("2330")
+        fill = SimulatedFill("o", "2330", "BUY", 1, 100.0, None)
+        fill.price = float("nan")
+        initial_cash = portfolio.cash
+        initial_positions = dict(portfolio.positions)
+        initial_fills = list(portfolio.trade_log.fills)
+
+        with self.assertRaises(PaperTradingModelError):
+            portfolio.apply_fill(fill)
+
+        self.assertEqual(portfolio.cash, initial_cash)
+        self.assertEqual(portfolio.cash, 1000.0)
         self.assertTrue(math.isfinite(portfolio.cash))
-        self.assertTrue(math.isfinite(position.average_cost))
-        self.assertEqual(position.quantity, 0)
+        self.assertEqual(portfolio.positions, initial_positions)
+        self.assertEqual(portfolio.position_for("2330").quantity, 0)
+        self.assertEqual(portfolio.trade_log.fills, initial_fills)
+        self.assertEqual(len(portfolio.trade_log.fills), 0)
 
     @unittest.expectedFailure
     def test_backtest_rejects_all_nonfinite_parameters_and_prices(self):

@@ -16,6 +16,19 @@ class PaperTradingModelError(Exception):
     pass
 
 
+def _validate_finite_real(name: str, value: object, *, strictly_positive: bool) -> None:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.")
+
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.")
+    if strictly_positive and numeric <= 0:
+        raise PaperTradingModelError(f"{name} must be positive.")
+    if not strictly_positive and numeric < 0:
+        raise PaperTradingModelError(f"{name} must be non-negative.")
+
+
 class SimulatedTradeEventType(StrEnum):
     """Canonical simulated-order lifecycle event vocabulary."""
 
@@ -161,10 +174,9 @@ class SimulatedFill:
             raise PaperTradingModelError(f"Invalid side: {self.side}")
         if self.quantity <= 0:
             raise PaperTradingModelError("Quantity must be positive.")
-        if self.price <= 0:
-            raise PaperTradingModelError("Price must be positive.")
-        if self.fee < 0 or self.tax < 0 or self.slippage < 0:
-            raise PaperTradingModelError("Fee, tax, and slippage must be non-negative.")
+        _validate_finite_real("Price", self.price, strictly_positive=True)
+        for name in ("fee", "tax", "slippage"):
+            _validate_finite_real(name, getattr(self, name), strictly_positive=False)
 
     @property
     def gross_amount(self) -> float:
@@ -182,6 +194,15 @@ class SimulatedFill:
         return self.gross_amount - self.fee - self.tax - self.slippage
 
 
+def _validate_simulated_fill(fill: object) -> SimulatedFill:
+    if not isinstance(fill, SimulatedFill):
+        raise PaperTradingModelError("fill must be a SimulatedFill.")
+    _validate_finite_real("Price", fill.price, strictly_positive=True)
+    for name in ("fee", "tax", "slippage"):
+        _validate_finite_real(name, getattr(fill, name), strictly_positive=False)
+    return fill
+
+
 @dataclass(slots=True)
 class SimulatedPosition:
     """Track simulated holdings for one symbol."""
@@ -191,6 +212,7 @@ class SimulatedPosition:
     realized_pnl: float = 0.0
 
     def apply_fill(self, fill: SimulatedFill) -> None:
+        _validate_simulated_fill(fill)
         if fill.symbol != self.symbol:
             raise PaperTradingModelError(f"Fill symbol {fill.symbol} does not match position symbol {self.symbol}.")
 
@@ -271,10 +293,10 @@ class SimulatedPortfolio:
     trade_log: SimulatedTradeLog = field(default_factory=SimulatedTradeLog)
 
     def __post_init__(self) -> None:
-        if self.cash < 0:
-            raise PaperTradingModelError("Initial cash must be non-negative.")
+        _validate_finite_real("Initial cash", self.cash, strictly_positive=False)
 
     def apply_fill(self, fill: SimulatedFill) -> None:
+        _validate_simulated_fill(fill)
         if fill.side == "BUY":
             cash_needed = -fill.net_cash_effect
             if self.cash < cash_needed:
