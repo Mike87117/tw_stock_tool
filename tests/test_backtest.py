@@ -1,3 +1,4 @@
+import math
 import unittest
 
 import pandas as pd
@@ -182,20 +183,130 @@ class BacktestTest(unittest.TestCase):
         self.assertEqual(trade["Entry Price"], 105)
         self.assertEqual(trade["Exit Price"], 119)
 
-    def test_nan_open_price_skips_execution_safely(self) -> None:
-        frame = _backtest_frame(
-            closes=[100, 110, 120, 130],
-            signals=["BUY", "HOLD", "HOLD", "HOLD"],
-            opens=[100, float('nan'), 115, 125],
-        )
+    def test_nonfinite_parameters_raise(self) -> None:
+        for field in (
+            "initial_capital",
+            "fee_rate",
+            "tax_rate",
+            "position_size",
+            "stop_loss_pct",
+            "take_profit_pct",
+        ):
+            for value in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(BacktestError):
+                        run_backtest(
+                            _backtest_frame([100, 110], ["HOLD", "HOLD"]),
+                            **{field: value},
+                        )
+
+    def test_scoped_parameters_reject_booleans_and_wrong_types(self) -> None:
+        required = ("initial_capital", "fee_rate", "tax_rate", "position_size")
+        for field in required:
+            for value in (True, False, "1.0", None):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(BacktestError):
+                        run_backtest(
+                            _backtest_frame([100, 110], ["HOLD", "HOLD"]),
+                            **{field: value},
+                        )
+
+        for field in ("stop_loss_pct", "take_profit_pct"):
+            for value in (True, False, "1.0"):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(BacktestError):
+                        run_backtest(
+                            _backtest_frame([100, 110], ["HOLD", "HOLD"]),
+                            **{field: value},
+                        )
+
+    def test_valid_finite_parameters_remain_accepted(self) -> None:
+        frame = _backtest_frame([100, 110], ["HOLD", "HOLD"])
         result = run_backtest(
             frame,
             initial_capital=10000,
-            fee_rate=0,
-            tax_rate=0,
+            fee_rate=0.0,
+            tax_rate=0.0,
+            position_size=1.0,
+            stop_loss_pct=None,
+            take_profit_pct=None,
         )
-        # Because open is NaN on index 1, the BUY should be skipped and pending_order cleared.
-        self.assertEqual(len(result["Trades"]), 0)
+        self.assertEqual(result["Final Capital"], 10000)
+
+        negative_thresholds = run_backtest(
+            frame,
+            initial_capital=10000,
+            fee_rate=0.0,
+            tax_rate=0.0,
+            stop_loss_pct=-5.0,
+            take_profit_pct=-5.0,
+        )
+        self.assertEqual(negative_thresholds["Final Capital"], 10000)
+
+    def test_nonfinite_open_and_close_raise(self) -> None:
+        for column in ("Open", "Close"):
+            for value in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(column=column, value=value):
+                    frame = _backtest_frame(
+                        [100, 110, 120],
+                        ["HOLD", "HOLD", "HOLD"],
+                    )
+                    frame[column] = frame[column].astype(float)
+                    frame.loc[frame.index[1], column] = value
+                    with self.assertRaisesRegex(BacktestError, column):
+                        run_backtest(frame)
+
+    def test_price_columns_reject_booleans_and_wrong_types(self) -> None:
+        for column in ("Open", "Close"):
+            for value in (True, "invalid", None):
+                with self.subTest(column=column, value=value):
+                    frame = _backtest_frame(
+                        [100, 110, 120],
+                        ["HOLD", "HOLD", "HOLD"],
+                    )
+                    frame[column] = frame[column].astype(object)
+                    frame.loc[frame.index[1], column] = value
+                    with self.assertRaisesRegex(BacktestError, column):
+                        run_backtest(frame)
+
+    def test_nonfinite_open_price_raises(self) -> None:
+        frame = _backtest_frame(
+            closes=[100, 110, 120, 130],
+            signals=["BUY", "HOLD", "HOLD", "HOLD"],
+            opens=[100, float("nan"), 115, 125],
+        )
+        with self.assertRaises(BacktestError):
+            run_backtest(frame, initial_capital=10000, fee_rate=0, tax_rate=0)
+
+    def test_nonpositive_finite_open_price_skips_execution_safely(self) -> None:
+        for open_price in (0.0, -10.0):
+            with self.subTest(open_price=open_price):
+                frame = _backtest_frame(
+                    closes=[100, 110, 120],
+                    signals=["BUY", "HOLD", "HOLD"],
+                    opens=[100, open_price, 115],
+                )
+                result = run_backtest(
+                    frame,
+                    initial_capital=10000,
+                    fee_rate=0,
+                    tax_rate=0,
+                )
+                self.assertEqual(result["Trade Count"], 0)
+                self.assertTrue(result["Trades"].empty)
+                self.assertEqual(result["Final Capital"], 10000)
+                self.assertTrue(result["Equity Curve"].map(math.isfinite).all())
+
+    def test_run_backtest_result_shares_finite_validation(self) -> None:
+        frame = _backtest_frame([100, 110, 120], ["HOLD", "HOLD", "HOLD"])
+        with self.assertRaises(BacktestError):
+            run_backtest_result(frame, initial_capital=float("nan"))
+
+        invalid_price = frame.copy()
+        invalid_price["Close"] = invalid_price["Close"].astype(float)
+        invalid_price.loc[invalid_price.index[1], "Close"] = float("inf")
+        with self.assertRaises(BacktestError):
+            run_backtest_result(invalid_price)
 
     def test_invalid_position_size_raises(self) -> None:
         with self.assertRaises(BacktestError):

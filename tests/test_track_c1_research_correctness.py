@@ -151,9 +151,7 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
         self.assertEqual(portfolio.trade_log.fills, initial_fills)
         self.assertEqual(len(portfolio.trade_log.fills), 0)
 
-    @unittest.expectedFailure
     def test_backtest_rejects_all_nonfinite_parameters_and_prices(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         cases = []
         for field in ("initial_capital", "fee_rate", "tax_rate", "position_size", "stop_loss_pct", "take_profit_pct"):
             for value_name, value in NONFINITE_VALUES:

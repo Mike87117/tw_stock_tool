@@ -1,3 +1,5 @@
+import math
+from numbers import Real
 from typing import Any
 
 import pandas as pd
@@ -21,17 +23,58 @@ class BacktestError(Exception):
     pass
 
 
-def _validate_inputs(df: pd.DataFrame, position_size: float) -> None:
+def _validate_finite_real(
+    name: str,
+    value: object,
+    *,
+    allow_none: bool = False,
+) -> None:
+    if allow_none and value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise BacktestError(f"{name} must be a finite numeric value.")
+    if not math.isfinite(float(value)):
+        raise BacktestError(f"{name} must be a finite numeric value.")
+
+
+def _validate_price_columns(df: pd.DataFrame) -> None:
+    for column in ("Open", "Close"):
+        for value in df[column]:
+            _validate_finite_real(column, value)
+
+
+def _validate_inputs(
+    df: pd.DataFrame,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
+    stop_loss_pct: float | None,
+    take_profit_pct: float | None,
+    position_size: float,
+) -> None:
     if df.empty:
         raise BacktestError("無資料可回測。")
-    if not 0 < position_size <= 1:
-        raise BacktestError("position_size 必須大於 0 且小於等於 1。")
     if "Close" not in df.columns or "Open" not in df.columns:
         raise BacktestError("回測資料缺少欄位: ['Open', 'Close']")
-    
+
     from tw_stock_tool.backtesting.signals import has_legacy_signal, has_standard_signals
     if not has_legacy_signal(df) and not has_standard_signals(df):
         raise BacktestError("回測資料缺少訊號欄位，必須提供 'Signal' 或 'entry_signal'/'exit_signal'")
+
+    for name, value in (
+        ("initial_capital", initial_capital),
+        ("fee_rate", fee_rate),
+        ("tax_rate", tax_rate),
+        ("position_size", position_size),
+    ):
+        _validate_finite_real(name, value)
+    _validate_finite_real("stop_loss_pct", stop_loss_pct, allow_none=True)
+    _validate_finite_real("take_profit_pct", take_profit_pct, allow_none=True)
+
+    if not 0 < position_size <= 1:
+        raise BacktestError("position_size 必須大於 0 且小於等於 1。")
+
+    _validate_price_columns(df)
 
 
 def _hold_days(index: pd.Index, entry_pos: int, exit_pos: int) -> int:
@@ -58,7 +101,15 @@ def run_backtest_result(
     max_hold_days: int | None = None,
     position_size: float = 1.0,
 ) -> BacktestResult:
-    _validate_inputs(df, position_size)
+    _validate_inputs(
+        df,
+        initial_capital,
+        fee_rate,
+        tax_rate,
+        stop_loss_pct,
+        take_profit_pct,
+        position_size,
+    )
     from tw_stock_tool.backtesting.signals import ensure_standard_signals
     df_exec = ensure_standard_signals(df)
 
