@@ -103,18 +103,14 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
         self.assertEqual(first_test_date, dataset.index[13])
         self.assertLess(last_train_label_source_date, first_test_date)
 
-    @unittest.expectedFailure
     def test_risk_snapshot_rejects_all_nonfinite_numeric_fields(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         cases = []
         for field in ("price", "cash", "current_position_notional", "total_exposure"):
             for value_name, value in NONFINITE_VALUES:
                 cases.append((f"{field}/{value_name}", lambda field=field, value=value: _snapshot(**{field: value}), RiskModelError))
         self.assertEqual(_collect_unrejected_cases(cases), [])
 
-    @unittest.expectedFailure
     def test_risk_monetary_limits_reject_all_nonfinite_values(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         snapshot = _snapshot()
         cases = []
         for name, rule in (("order_notional_limit", check_max_order_notional), ("position_notional_limit", check_max_position_notional), ("total_exposure_limit", check_max_total_exposure)):
@@ -172,9 +168,7 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
             cases.append((value_name, lambda value=value: SimulatedPaperTradingGuardAdapter(KillSwitchState(), lambda *_: value, lambda _: RiskDecision.allow())(order, SimulatedPortfolio(1000.0)), SimulatedPaperTradingGuardError))
         self.assertEqual(_collect_unrejected_cases(cases), [])
 
-    @unittest.expectedFailure
     def test_guard_adapter_rejects_all_nonfinite_positive_reference_prices(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         order = SimulatedOrder("o", "2330", "BUY", 1, None)
         cases = [(name, lambda value=value: SimulatedPaperTradingGuardAdapter(KillSwitchState(), lambda *_: value, lambda _: RiskDecision.allow())(order, SimulatedPortfolio(1000.0)), SimulatedPaperTradingGuardError) for name, value in (("nan", float("nan")), ("positive_infinity", float("inf")))]
         self.assertEqual(_collect_unrejected_cases(cases), [])

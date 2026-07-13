@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from typing import Any, Tuple, Union, Sequence, Literal
 
@@ -74,20 +75,20 @@ class RiskInputSnapshot:
         if not isinstance(self.quantity, int) or isinstance(self.quantity, bool) or self.quantity <= 0:
             raise RiskModelError("quantity must be a positive integer.")
             
-        if not isinstance(self.price, (int, float)) or isinstance(self.price, bool) or self.price <= 0:
-            raise RiskModelError("price must be a positive number.")
+        if not isinstance(self.price, (int, float)) or isinstance(self.price, bool) or not math.isfinite(float(self.price)) or self.price <= 0:
+            raise RiskModelError("price must be a finite positive number.")
             
-        if not isinstance(self.cash, (int, float)) or isinstance(self.cash, bool) or self.cash < 0:
-            raise RiskModelError("cash must be a non-negative number.")
+        if not isinstance(self.cash, (int, float)) or isinstance(self.cash, bool) or not math.isfinite(float(self.cash)) or self.cash < 0:
+            raise RiskModelError("cash must be a finite non-negative number.")
             
         if not isinstance(self.current_position_quantity, int) or isinstance(self.current_position_quantity, bool) or self.current_position_quantity < 0:
             raise RiskModelError("current_position_quantity must be a non-negative integer.")
             
-        if not isinstance(self.current_position_notional, (int, float)) or isinstance(self.current_position_notional, bool) or self.current_position_notional < 0:
-            raise RiskModelError("current_position_notional must be a non-negative number.")
+        if not isinstance(self.current_position_notional, (int, float)) or isinstance(self.current_position_notional, bool) or not math.isfinite(float(self.current_position_notional)) or self.current_position_notional < 0:
+            raise RiskModelError("current_position_notional must be a finite non-negative number.")
             
-        if not isinstance(self.total_exposure, (int, float)) or isinstance(self.total_exposure, bool) or self.total_exposure < 0:
-            raise RiskModelError("total_exposure must be a non-negative number.")
+        if not isinstance(self.total_exposure, (int, float)) or isinstance(self.total_exposure, bool) or not math.isfinite(float(self.total_exposure)) or self.total_exposure < 0:
+            raise RiskModelError("total_exposure must be a finite non-negative number.")
             
         if not isinstance(self.current_open_positions, int) or isinstance(self.current_open_positions, bool) or self.current_open_positions < 0:
             raise RiskModelError("current_open_positions must be a non-negative integer.")

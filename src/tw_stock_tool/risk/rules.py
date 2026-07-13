@@ -1,14 +1,19 @@
+import math
 from collections.abc import Sequence
 from typing import Any
 
 from .models import RiskDecision, RiskInputSnapshot, RiskModelError, RiskRuleEvaluation, RiskEvaluationSummary
 
+def _validate_positive_finite_number(name: str, value: object) -> None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)) or value <= 0:
+        raise RiskModelError(f"{name} must be a finite positive number.")
+
+
 def check_max_order_notional(snapshot: RiskInputSnapshot, max_order_notional: float) -> RiskDecision:
     if not isinstance(snapshot, RiskInputSnapshot):
         raise RiskModelError("snapshot must be a RiskInputSnapshot.")
         
-    if not isinstance(max_order_notional, (int, float)) or isinstance(max_order_notional, bool) or max_order_notional <= 0:
-        raise RiskModelError("max_order_notional must be a positive number.")
+    _validate_positive_finite_number("max_order_notional", max_order_notional)
 
     metadata = {
         "symbol": snapshot.symbol,
@@ -53,8 +58,7 @@ def check_max_position_notional(snapshot: RiskInputSnapshot, max_position_notion
     if not isinstance(snapshot, RiskInputSnapshot):
         raise RiskModelError("snapshot must be a RiskInputSnapshot.")
         
-    if not isinstance(max_position_notional, (int, float)) or isinstance(max_position_notional, bool) or max_position_notional <= 0:
-        raise RiskModelError("max_position_notional must be a positive number.")
+    _validate_positive_finite_number("max_position_notional", max_position_notional)
 
     metadata = {
         "symbol": snapshot.symbol,
@@ -79,8 +83,7 @@ def check_max_total_exposure(snapshot: RiskInputSnapshot, max_total_exposure: fl
     if not isinstance(snapshot, RiskInputSnapshot):
         raise RiskModelError("snapshot must be a RiskInputSnapshot.")
         
-    if not isinstance(max_total_exposure, (int, float)) or isinstance(max_total_exposure, bool) or max_total_exposure <= 0:
-        raise RiskModelError("max_total_exposure must be a positive number.")
+    _validate_positive_finite_number("max_total_exposure", max_total_exposure)
 
     if snapshot.side == "BUY":
         projected_total_exposure = snapshot.total_exposure + snapshot.order_notional
