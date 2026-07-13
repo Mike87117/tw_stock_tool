@@ -45,6 +45,12 @@ def _rising_ohlcv(rows=100):
     return pd.DataFrame({"Open": close, "High": [value + 1 for value in close], "Low": [value - 1 for value in close], "Close": close, "Volume": [1000.0] * rows}, index=index)
 
 
+def _flat_ohlcv(rows=130):
+    index = pd.date_range("2024-01-01", periods=rows, freq="D")
+    close = [100.0] * rows
+    return pd.DataFrame({"Open": close, "High": [101.0] * rows, "Low": [99.0] * rows, "Close": close, "Volume": [1000.0] * rows}, index=index)
+
+
 def _backtest_frame():
     return pd.DataFrame({"Open": [100.0, 101.0, 102.0], "Close": [100.0, 101.0, 102.0], "Signal": ["HOLD", "HOLD", "HOLD"]}, index=pd.date_range("2024-01-01", periods=3, freq="D"))
 
@@ -56,16 +62,32 @@ def _snapshot(**overrides):
 
 
 class TrackC1ResearchCorrectnessTest(unittest.TestCase):
-    def test_generate_signals_keeps_rows_with_nonfinite_rsi(self):
+    def test_generate_signals_keeps_rows_with_finite_rsi(self):
         indicators = add_indicators(_rising_ohlcv())
         result = generate_signals(indicators)
         self.assertEqual(len(result), len(indicators))
-        self.assertTrue(result["RSI"].iloc[14:].isna().all())
+        self.assertTrue((result["RSI"].iloc[14:] == 100.0).all())
 
-    def test_analyze_stock_drops_all_rising_rows_when_rsi_is_nan(self):
+    def test_analyze_stock_keeps_rising_rows_when_rsi_is_finite(self):
         with patch.object(analysis, "download_tw_stock", return_value=(_rising_ohlcv(), "2330.TW")):
-            with self.assertRaises(ValueError):
-                analysis.analyze_stock("2330")
+            result = analysis.analyze_stock("2330")
+
+        self.assertFalse(result.signal_df.empty)
+        self.assertEqual(float(result.latest["RSI"]), 100.0)
+        self.assertEqual(float(result.summary["RSI"]), 100.0)
+        self.assertTrue(math.isfinite(float(result.latest["RSI"])))
+        self.assertEqual(result.latest.name, result.signal_df.index[-1])
+
+    def test_analyze_stock_keeps_flat_rows_with_neutral_rsi(self):
+        with patch.object(analysis, "download_tw_stock", return_value=(_flat_ohlcv(), "2330.TW")):
+            result = analysis.analyze_stock("2330")
+
+        self.assertFalse(result.signal_df.empty)
+        self.assertEqual(float(result.latest["RSI"]), 50.0)
+        self.assertEqual(float(result.summary["RSI"]), 50.0)
+        self.assertTrue(math.isfinite(float(result.latest["RSI"])))
+        self.assertFalse(bool(result.latest["RSI_Hot"]))
+        self.assertFalse(bool(result.latest["RSI_Cold"]))
 
     def test_walk_forward_purges_train_labels_that_reach_test_window(self):
         horizon = 5

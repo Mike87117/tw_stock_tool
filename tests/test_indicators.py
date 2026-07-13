@@ -1,3 +1,4 @@
+import math
 import unittest
 
 import pandas as pd
@@ -47,21 +48,44 @@ class IndicatorTest(unittest.TestCase):
         with self.assertRaises(IndicatorError):
             add_indicators(_sample_ohlcv(rows=10))
 
-
-    @unittest.expectedFailure
     def test_rsi_continuous_gains_reaches_100_after_warmup(self) -> None:
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         rsi = _rsi(pd.Series(range(100, 140), dtype=float))
-        self.assertTrue((rsi.iloc[14:] == 100).all())
+        self.assertTrue(rsi.iloc[:14].isna().all())
+        self.assertTrue((rsi.iloc[14:] == 100.0).all())
+        self.assertTrue(rsi.iloc[14:].map(math.isfinite).all())
 
     def test_rsi_continuous_losses_reaches_0_after_warmup(self) -> None:
-        # Track C1 NOT_REPRODUCED: continuous losses correctly reach RSI 0.
         rsi = _rsi(pd.Series(range(140, 100, -1), dtype=float))
-        self.assertTrue((rsi.iloc[14:] == 0).all())
+        self.assertTrue(rsi.iloc[:14].isna().all())
+        self.assertTrue((rsi.iloc[14:] == 0.0).all())
+        self.assertTrue(rsi.iloc[14:].map(math.isfinite).all())
 
-    def test_rsi_flat_series_currently_remains_nan_after_warmup(self) -> None:
+    def test_rsi_flat_series_is_neutral_50_after_warmup(self) -> None:
         rsi = _rsi(pd.Series([100.0] * 40))
-        self.assertTrue(rsi.iloc[14:].isna().all())
+        self.assertTrue(rsi.iloc[:14].isna().all())
+        self.assertTrue((rsi.iloc[14:] == 50.0).all())
+        self.assertTrue(rsi.iloc[14:].map(math.isfinite).all())
+
+    def test_rsi_mixed_movement_uses_formula_with_bounded_finite_values(self) -> None:
+        rsi = _rsi(pd.Series([100.0, 102.0, 101.0, 104.0, 102.0] * 10))
+        warmed = rsi.iloc[14:]
+
+        self.assertTrue(warmed.map(math.isfinite).all())
+        self.assertTrue(warmed.between(0.0, 100.0).all())
+        self.assertFalse(warmed.isin([0.0, 50.0, 100.0]).all())
+
+    def test_rsi_preserves_input_index_length_and_values(self) -> None:
+        close = pd.Series(
+            [100.0, 102.0, 101.0, 103.0] * 10,
+            index=pd.date_range("2024-01-01", periods=40, freq="D"),
+        )
+        original = close.copy()
+
+        rsi = _rsi(close)
+
+        self.assertTrue(rsi.index.equals(close.index))
+        self.assertEqual(len(rsi), len(close))
+        pd.testing.assert_series_equal(close, original)
 
 if __name__ == "__main__":
     unittest.main()
