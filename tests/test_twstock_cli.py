@@ -15,8 +15,9 @@ class TwStockCliTest(unittest.TestCase):
             captured.append(sys.argv[:])
 
         with patch.object(twstock_cli.doctor, "main", side_effect=fake_main) as mocked:
-            twstock_cli.main(["doctor", "--live"])
+            status = twstock_cli.main(["doctor", "--live"])
 
+        self.assertEqual(status, 0)
         mocked.assert_called_once_with()
         self.assertEqual(captured[0], ["doctor.py", "--live"])
 
@@ -204,6 +205,38 @@ class TwStockCliTest(unittest.TestCase):
             "--test-days", "63",
             "--output-md",
         ])
+
+    def test_child_integer_status_is_propagated_and_argv_is_restored(self) -> None:
+        original = sys.argv[:]
+        captured: list[list[str]] = []
+
+        def fake_main() -> int:
+            captured.append(sys.argv[:])
+            return 7
+
+        with patch.object(twstock_cli.cache_manager, "main", side_effect=fake_main) as mocked:
+            status = twstock_cli.main(["cache", "--summary"])
+
+        self.assertEqual(status, 7)
+        mocked.assert_called_once_with()
+        self.assertEqual(captured, [["cache_manager.py", "--summary"]])
+        self.assertEqual(sys.argv, original)
+
+    def test_analyze_failure_status_is_propagated(self) -> None:
+        with patch.object(twstock_cli.analyze_cli, "main", return_value=1) as mocked:
+            status = twstock_cli.main(["analyze", "--stock", ""])
+
+        self.assertEqual(status, 1)
+        mocked.assert_called_once_with()
+
+    def test_child_system_exit_is_not_swallowed_and_argv_is_restored(self) -> None:
+        original = sys.argv[:]
+        with patch.object(twstock_cli.doctor, "main", side_effect=SystemExit(3)):
+            with self.assertRaises(SystemExit) as raised:
+                twstock_cli.main(["doctor"])
+
+        self.assertEqual(raised.exception.code, 3)
+        self.assertEqual(sys.argv, original)
 
     def test_unknown_subcommand_shows_error(self) -> None:
         with redirect_stderr(StringIO()):

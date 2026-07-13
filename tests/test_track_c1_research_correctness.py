@@ -209,14 +209,10 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
             analyze_cli._parse_args(["--period", "invalid"])
         self.assertNotEqual(raised.exception.code, 0)
 
-    @unittest.expectedFailure
     def test_ai_walk_forward_runtime_exception_returns_nonzero_exit_status(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         args = type("Args", (), {"stock": "2330", "period": "1y", "horizon": 5, "train_size": 8, "test_size": 4, "step_size": None, "force_refresh": False, "dropna": True})()
         with patch.object(ai_walk_forward, "run_ai_walk_forward", side_effect=ValueError("controlled failure")), patch.object(ai_walk_forward, "_parse_args", return_value=args):
             self.assertEqual(ai_walk_forward.main(), 1)
 
-    @unittest.expectedFailure
     def test_analyze_cli_runtime_validation_returns_nonzero_exit_status(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         self.assertEqual(analyze_cli.main(["--stock", ""]), 1)

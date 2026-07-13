@@ -1,3 +1,5 @@
+from contextlib import redirect_stdout
+from io import StringIO
 import unittest
 from unittest.mock import patch
 
@@ -22,6 +24,32 @@ def _sample_dataset(rows: int = 12) -> pd.DataFrame:
 
 
 class AIWalkForwardTest(unittest.TestCase):
+    def test_main_returns_zero_and_keeps_success_output(self) -> None:
+        args = type("Args", (), {"stock": "2330", "period": "1y", "horizon": 5, "train_size": 8, "test_size": 4, "step_size": None, "force_refresh": False, "dropna": True})()
+        result = pd.DataFrame({"Window": [1]})
+        output = StringIO()
+
+        with patch.object(ai_walk_forward, "_parse_args", return_value=args), patch.object(
+            ai_walk_forward, "run_ai_walk_forward", return_value=result
+        ), redirect_stdout(output):
+            status = ai_walk_forward.main()
+
+        self.assertEqual(status, 0)
+        self.assertIn("Window", output.getvalue())
+        self.assertIn("No model is trained", output.getvalue())
+
+    def test_main_returns_one_and_keeps_error_output(self) -> None:
+        args = type("Args", (), {"stock": "2330", "period": "1y", "horizon": 5, "train_size": 8, "test_size": 4, "step_size": None, "force_refresh": False, "dropna": True})()
+        output = StringIO()
+
+        with patch.object(ai_walk_forward, "_parse_args", return_value=args), patch.object(
+            ai_walk_forward, "run_ai_walk_forward", side_effect=ValueError("controlled failure")
+        ), redirect_stdout(output):
+            status = ai_walk_forward.main()
+
+        self.assertEqual(status, 1)
+        self.assertIn("Error: controlled failure", output.getvalue())
+
     def test_split_time_windows_keeps_chronological_order(self) -> None:
         dataset = _sample_dataset(10)
         windows = ai_walk_forward.split_time_windows(

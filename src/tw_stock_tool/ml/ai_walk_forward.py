@@ -179,7 +179,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> int:
     try:
         args = _parse_args()
         result = run_ai_walk_forward(
@@ -194,9 +194,11 @@ def main() -> None:
         )
         print(result.to_string(index=False))
         print("\nNo model is trained. This is a time-split validation skeleton only.")
+        return 0
     except Exception as exc:
         print(f"Error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
