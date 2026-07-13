@@ -165,6 +165,7 @@ def run_baseline_ml_model(
         train_size=train_size,
         test_size=test_size,
         step_size=step_size,
+        purge_size=horizon,
     ):
         try:
             rows.append(

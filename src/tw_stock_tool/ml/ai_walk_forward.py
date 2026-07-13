@@ -57,21 +57,28 @@ def split_time_windows(
     train_size: int,
     test_size: int,
     step_size: int | None = None,
+    *,
+    purge_size: int = 0,
 ) -> list[tuple[int, pd.DataFrame, pd.DataFrame]]:
     """Split a dataset into chronological train/test windows without shuffle."""
     _validate_positive_int("train_size", train_size)
     _validate_positive_int("test_size", test_size)
     actual_step_size = test_size if step_size is None else step_size
     _validate_positive_int("step_size", actual_step_size)
+    if purge_size < 0:
+        raise ValueError("purge_size must be greater than or equal to 0.")
 
     ordered = dataset.sort_index().copy()
-    required_rows = train_size + test_size
+    required_rows = train_size + purge_size + test_size
     windows: list[tuple[int, pd.DataFrame, pd.DataFrame]] = []
     start = 0
     window_number = 1
     while start + required_rows <= len(ordered):
-        train = ordered.iloc[start:start + train_size].copy()
-        test = ordered.iloc[start + train_size:start + required_rows].copy()
+        train_end = start + train_size
+        test_start = train_end + purge_size
+        test_end = test_start + test_size
+        train = ordered.iloc[start:train_end].copy()
+        test = ordered.iloc[test_start:test_end].copy()
         windows.append((window_number, train, test))
         start += actual_step_size
         window_number += 1
@@ -148,6 +155,7 @@ def run_ai_walk_forward(
         train_size=train_size,
         test_size=test_size,
         step_size=step_size,
+        purge_size=horizon,
     ):
         rows.append(_window_row(window_number, train, test, features, target))
     return pd.DataFrame(rows, columns=AI_WALK_FORWARD_COLUMNS)

@@ -128,6 +128,37 @@ class AIWalkForwardTest(unittest.TestCase):
         self.assertEqual(args.step_size, 2)
         self.assertFalse(args.dropna)
 
+    def test_zero_purge_keeps_adjacent_compatibility(self) -> None:
+        dataset = _sample_dataset(6)
+        _, train, test = ai_walk_forward.split_time_windows(dataset, train_size=4, test_size=2)[0]
+        self.assertEqual(len(train), 4)
+        self.assertEqual(len(test), 2)
+        self.assertEqual(train.index[-1], dataset.index[3])
+        self.assertEqual(test.index[0], dataset.index[4])
+
+    def test_explicit_purge_gap_excludes_gap_rows(self) -> None:
+        dataset = _sample_dataset(11)
+        _, train, test = ai_walk_forward.split_time_windows(dataset, train_size=4, test_size=2, purge_size=5)[0]
+        self.assertEqual(train.index[-1], dataset.index[3])
+        self.assertEqual(test.index[0], dataset.index[9])
+        self.assertTrue(set(dataset.index[4:9]).isdisjoint(set(train.index) | set(test.index)))
+
+    def test_purge_size_counts_toward_required_rows(self) -> None:
+        with self.assertRaisesRegex(ValueError, "need at least 11"):
+            ai_walk_forward.split_time_windows(_sample_dataset(10), train_size=4, test_size=2, purge_size=5)
+
+    def test_negative_purge_size_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            ai_walk_forward.split_time_windows(_sample_dataset(), train_size=4, test_size=2, purge_size=-1)
+
+    def test_run_ai_walk_forward_uses_horizon_sized_real_purge(self) -> None:
+        dataset = _sample_dataset(17)
+        with patch.object(ai_walk_forward, "build_ml_dataset", return_value=dataset):
+            result = ai_walk_forward.run_ai_walk_forward("2330", horizon=5, train_size=4, test_size=2)
+        self.assertEqual(result.iloc[0]["Train End"], dataset.index[3])
+        self.assertEqual(result.iloc[0]["Test Start"], dataset.index[9])
+        self.assertEqual(result.iloc[0]["Train Rows"], 4)
+        self.assertEqual(result.iloc[0]["Test Rows"], 2)
 
 if __name__ == "__main__":
     unittest.main()

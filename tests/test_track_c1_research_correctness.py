@@ -1,4 +1,4 @@
-﻿import math
+import math
 import unittest
 from unittest.mock import patch
 
@@ -67,16 +67,19 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 analysis.analyze_stock("2330")
 
-    @unittest.expectedFailure
     def test_walk_forward_purges_train_labels_that_reach_test_window(self):
-        # Track C1 confirmed defect. Expected failure must be removed in Track C2.
         horizon = 5
-        dataset = pd.DataFrame({"Close": range(13)}, index=pd.date_range("2024-01-01", periods=13, freq="D"))
-        _, train, test = split_time_windows(dataset, train_size=8, test_size=4)
+        dataset = pd.DataFrame({"Close": range(17)}, index=pd.date_range("2024-01-01", periods=17, freq="D"))
+        _, train, test = split_time_windows(dataset, train_size=8, test_size=4, purge_size=horizon)[0]
         first_test_date = test.index[0]
         label_dates = [(feature_row_date, dataset.index[dataset.index.get_loc(feature_row_date) + horizon]) for feature_row_date in train.index]
         self.assertLess(train.index[-1], first_test_date)
         self.assertFalse(any(feature_row_date < first_test_date <= label_source_date for feature_row_date, label_source_date in label_dates))
+        self.assertEqual(dataset.index.get_loc(first_test_date) - dataset.index.get_loc(train.index[-1]) - 1, horizon)
+        last_train_label_source_date = label_dates[-1][1]
+        self.assertEqual(last_train_label_source_date, dataset.index[12])
+        self.assertEqual(first_test_date, dataset.index[13])
+        self.assertLess(last_train_label_source_date, first_test_date)
 
     @unittest.expectedFailure
     def test_risk_snapshot_rejects_all_nonfinite_numeric_fields(self):
