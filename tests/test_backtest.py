@@ -16,6 +16,14 @@ def _backtest_frame(closes: list[float], signals: list[str], opens: list[float] 
     )
 
 
+def _interval_backtest_frame() -> pd.DataFrame:
+    return _backtest_frame(
+        closes=[100.0, 110.0, 99.0, 108.0, 91.8, 101.0],
+        signals=["BUY", "HOLD", "HOLD", "HOLD", "HOLD", "HOLD"],
+        opens=[100.0, 100.0, 100.0, 100.0, 100.0, 100.0],
+    )
+
+
 class BacktestTest(unittest.TestCase):
     def test_buy_sell_basic_trade_executes_next_day(self) -> None:
         frame = _backtest_frame(
@@ -307,6 +315,124 @@ class BacktestTest(unittest.TestCase):
         invalid_price.loc[invalid_price.index[1], "Close"] = float("inf")
         with self.assertRaises(BacktestError):
             run_backtest_result(invalid_price)
+
+    def test_interval_scaling_and_trading_results_are_invariant(self) -> None:
+        frame = _interval_backtest_frame()
+        results = {
+            interval: run_backtest_result(
+                frame,
+                initial_capital=10000,
+                fee_rate=0,
+                tax_rate=0,
+                interval=interval,
+            )
+            for interval in ("1d", "1wk", "1mo")
+        }
+        daily = results["1d"]
+        weekly = results["1wk"]
+        monthly = results["1mo"]
+
+        self.assertAlmostEqual(daily.sharpe_ratio / weekly.sharpe_ratio, math.sqrt(252 / 52))
+        self.assertAlmostEqual(weekly.sharpe_ratio / monthly.sharpe_ratio, math.sqrt(52 / 12))
+        self.assertAlmostEqual(daily.sortino_ratio / weekly.sortino_ratio, math.sqrt(252 / 52))
+        self.assertAlmostEqual(weekly.sortino_ratio / monthly.sortino_ratio, math.sqrt(52 / 12))
+
+        invariant_fields = (
+            "initial_capital",
+            "final_capital",
+            "total_return_pct",
+            "buy_hold_return_pct",
+            "cagr_pct",
+            "exposure_pct",
+            "trade_count",
+            "win_rate_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "best_trade_pct",
+            "worst_trade_pct",
+            "avg_hold_days",
+            "avg_profit",
+            "avg_loss",
+            "start_date",
+            "end_date",
+        )
+        for candidate in (weekly, monthly):
+            for field in invariant_fields:
+                with self.subTest(interval=candidate, field=field):
+                    self.assertEqual(getattr(candidate, field), getattr(daily, field))
+            pd.testing.assert_frame_equal(candidate.trades, daily.trades)
+            pd.testing.assert_series_equal(candidate.equity_curve, daily.equity_curve)
+
+        self.assertNotEqual(daily.sharpe_ratio, weekly.sharpe_ratio)
+        self.assertNotEqual(weekly.sharpe_ratio, monthly.sharpe_ratio)
+        self.assertNotEqual(daily.sortino_ratio, weekly.sortino_ratio)
+        self.assertNotEqual(weekly.sortino_ratio, monthly.sortino_ratio)
+
+    def test_legacy_api_propagates_interval_exactly(self) -> None:
+        frame = _interval_backtest_frame()
+        expected = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+            interval="1wk",
+        ).to_legacy_dict()
+        actual = run_backtest(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+            interval="1wk",
+        )
+        for key in expected:
+            if key == "Trades":
+                pd.testing.assert_frame_equal(actual[key], expected[key])
+            elif key == "Equity Curve":
+                pd.testing.assert_series_equal(actual[key], expected[key])
+            else:
+                self.assertEqual(actual[key], expected[key])
+
+    def test_backtest_apis_reject_invalid_intervals(self) -> None:
+        frame = _interval_backtest_frame()
+        for api in (run_backtest_result, run_backtest):
+            for interval in (None, True, "", "daily", "5m"):
+                with self.subTest(api=api.__name__, interval=interval):
+                    with self.assertRaisesRegex(BacktestError, "interval"):
+                        api(frame, interval=interval)
+
+    def test_default_interval_matches_explicit_daily(self) -> None:
+        frame = _interval_backtest_frame()
+        implicit = run_backtest_result(frame, initial_capital=10000, fee_rate=0, tax_rate=0)
+        explicit = run_backtest_result(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+            interval="1d",
+        )
+        for field in implicit.__dataclass_fields__:
+            if field == "trades":
+                pd.testing.assert_frame_equal(implicit.trades, explicit.trades)
+            elif field == "equity_curve":
+                pd.testing.assert_series_equal(implicit.equity_curve, explicit.equity_curve)
+            else:
+                self.assertEqual(getattr(implicit, field), getattr(explicit, field))
+
+        implicit_legacy = run_backtest(frame, initial_capital=10000, fee_rate=0, tax_rate=0)
+        explicit_legacy = run_backtest(
+            frame,
+            initial_capital=10000,
+            fee_rate=0,
+            tax_rate=0,
+            interval="1d",
+        )
+        for key in implicit_legacy:
+            if key == "Trades":
+                pd.testing.assert_frame_equal(implicit_legacy[key], explicit_legacy[key])
+            elif key == "Equity Curve":
+                pd.testing.assert_series_equal(implicit_legacy[key], explicit_legacy[key])
+            else:
+                self.assertEqual(implicit_legacy[key], explicit_legacy[key])
 
     def test_invalid_position_size_raises(self) -> None:
         with self.assertRaises(BacktestError):

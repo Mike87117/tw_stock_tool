@@ -9,6 +9,25 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from tw_stock_tool.utils.config import DEFAULT_INTERVAL, VALID_INTERVALS
+
+
+_PERIODS_PER_YEAR_BY_INTERVAL = {
+    "1d": 252,
+    "1wk": 52,
+    "1mo": 12,
+}
+
+
+def _periods_per_year(interval: str) -> int:
+    if not isinstance(interval, str) or interval not in VALID_INTERVALS:
+        supported = ", ".join(sorted(VALID_INTERVALS))
+        raise ValueError(
+            f"Unsupported interval: {interval!r}. "
+            f"Supported intervals: {supported}."
+        )
+    return _PERIODS_PER_YEAR_BY_INTERVAL[interval]
+
 
 def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator == 0:
@@ -103,21 +122,35 @@ def calculate_profit_factor(trades: Sequence[dict[str, Any]] | pd.DataFrame) -> 
     return _safe_ratio(gross_profit, gross_loss)
 
 
-def calculate_sharpe(equity_curve: pd.Series | Sequence[float]) -> float:
-    """Return annualized Sharpe ratio from equity-curve daily returns."""
+def calculate_sharpe(
+    equity_curve: pd.Series | Sequence[float],
+    interval: str = DEFAULT_INTERVAL,
+) -> float:
+    """Return annualized Sharpe ratio from equity-curve periodic returns."""
+    periods_per_year = _periods_per_year(interval)
     returns = _equity_returns(equity_curve)
     if returns.empty:
         return 0.0
-    return _safe_ratio(float(returns.mean()), float(returns.std(ddof=0))) * math.sqrt(252)
+    return (
+        _safe_ratio(float(returns.mean()), float(returns.std(ddof=0)))
+        * math.sqrt(periods_per_year)
+    )
 
 
-def calculate_sortino(equity_curve: pd.Series | Sequence[float]) -> float:
+def calculate_sortino(
+    equity_curve: pd.Series | Sequence[float],
+    interval: str = DEFAULT_INTERVAL,
+) -> float:
     """Return annualized Sortino ratio from equity-curve downside returns."""
+    periods_per_year = _periods_per_year(interval)
     returns = _equity_returns(equity_curve)
     downside = returns[returns < 0]
     if downside.empty:
         return 0.0
-    return _safe_ratio(float(returns.mean()), float(downside.std(ddof=0))) * math.sqrt(252)
+    return (
+        _safe_ratio(float(returns.mean()), float(downside.std(ddof=0)))
+        * math.sqrt(periods_per_year)
+    )
 
 
 def calculate_avg_hold_days(trades: Sequence[dict[str, Any]] | pd.DataFrame) -> float:

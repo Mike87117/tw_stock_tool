@@ -184,13 +184,26 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
             cases.append((value_name, lambda value=value: SimulatedPaperTradingGuardAdapter(KillSwitchState(), lambda *_: 100.0, lambda _: RiskDecision.allow(), portfolio_exposure_provider=lambda *_: value)(order, SimulatedPortfolio(1000.0)), SimulatedPaperTradingGuardError))
         self.assertEqual(_collect_unrejected_cases(cases), [])
 
-    def test_metrics_have_daily_factor_and_no_interval_context(self):
+    def test_metrics_use_interval_specific_annualization(self):
         equity = pd.Series([100.0, 110.0, 99.0, 108.0, 91.8, 101.0])
         returns = equity.pct_change().dropna()
+        downside = returns[returns < 0]
+        sharpe_base = returns.mean() / returns.std(ddof=0)
+        sortino_base = returns.mean() / downside.std(ddof=0)
         self.assertEqual(VALID_INTERVALS, {"1d", "1wk", "1mo"})
-        self.assertAlmostEqual(calculate_sharpe(equity), returns.mean() / returns.std(ddof=0) * math.sqrt(252))
-        self.assertAlmostEqual(calculate_sortino(equity), returns.mean() / returns[returns < 0].std(ddof=0) * math.sqrt(252))
-
+        for interval, periods_per_year in (("1d", 252), ("1wk", 52), ("1mo", 12)):
+            with self.subTest(metric="sharpe", interval=interval):
+                self.assertAlmostEqual(
+                    calculate_sharpe(equity, interval),
+                    sharpe_base * math.sqrt(periods_per_year),
+                )
+            with self.subTest(metric="sortino", interval=interval):
+                self.assertAlmostEqual(
+                    calculate_sortino(equity, interval),
+                    sortino_base * math.sqrt(periods_per_year),
+                )
+        self.assertEqual(calculate_sharpe(equity), calculate_sharpe(equity, "1d"))
+        self.assertEqual(calculate_sortino(equity), calculate_sortino(equity, "1d"))
     def test_argparse_invalid_option_exits_nonzero(self):
         with self.assertRaises(SystemExit) as raised:
             analyze_cli._parse_args(["--period", "invalid"])

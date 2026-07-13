@@ -17,6 +17,7 @@ from tw_stock_tool.backtesting.metrics import (
     calculate_win_rate,
 )
 from tw_stock_tool.backtesting.results import BacktestResult
+from tw_stock_tool.utils.config import DEFAULT_INTERVAL, VALID_INTERVALS
 
 
 class BacktestError(Exception):
@@ -51,6 +52,7 @@ def _validate_inputs(
     stop_loss_pct: float | None,
     take_profit_pct: float | None,
     position_size: float,
+    interval: str,
 ) -> None:
     if df.empty:
         raise BacktestError("無資料可回測。")
@@ -71,6 +73,12 @@ def _validate_inputs(
     _validate_finite_real("stop_loss_pct", stop_loss_pct, allow_none=True)
     _validate_finite_real("take_profit_pct", take_profit_pct, allow_none=True)
 
+    if not isinstance(interval, str) or interval not in VALID_INTERVALS:
+        supported = ", ".join(sorted(VALID_INTERVALS))
+        raise BacktestError(
+            f"Unsupported interval: {interval!r}. "
+            f"Supported intervals: {supported}."
+        )
     if not 0 < position_size <= 1:
         raise BacktestError("position_size 必須大於 0 且小於等於 1。")
 
@@ -100,6 +108,7 @@ def run_backtest_result(
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
     position_size: float = 1.0,
+    interval: str = DEFAULT_INTERVAL,
 ) -> BacktestResult:
     _validate_inputs(
         df,
@@ -109,6 +118,7 @@ def run_backtest_result(
         stop_loss_pct,
         take_profit_pct,
         position_size,
+        interval,
     )
     from tw_stock_tool.backtesting.signals import ensure_standard_signals
     df_exec = ensure_standard_signals(df)
@@ -241,8 +251,8 @@ def run_backtest_result(
         best_trade_pct=max(trade_pcts) if trade_pcts else 0.0,
         worst_trade_pct=min(trade_pcts) if trade_pcts else 0.0,
         avg_hold_days=calculate_avg_hold_days(closed_trades),
-        sharpe_ratio=calculate_sharpe(equity),
-        sortino_ratio=calculate_sortino(equity),
+        sharpe_ratio=calculate_sharpe(equity, interval=interval),
+        sortino_ratio=calculate_sortino(equity, interval=interval),
         avg_profit=sum(t["PnL"] for t in wins) / len(wins) if wins else 0.0,
         avg_loss=sum(t["PnL"] for t in losses) / len(losses) if losses else 0.0,
         trades=pd.DataFrame(trades),
@@ -261,6 +271,7 @@ def run_backtest(
     take_profit_pct: float | None = None,
     max_hold_days: int | None = None,
     position_size: float = 1.0,
+    interval: str = DEFAULT_INTERVAL,
 ) -> dict[str, Any]:
     result = run_backtest_result(
         df=df,
@@ -271,5 +282,6 @@ def run_backtest(
         take_profit_pct=take_profit_pct,
         max_hold_days=max_hold_days,
         position_size=position_size,
+        interval=interval,
     )
     return result.to_legacy_dict()
