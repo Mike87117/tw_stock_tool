@@ -139,6 +139,15 @@ class BaselineMLModelTest(unittest.TestCase):
         self.assertEqual(args.random_state, 7)
         self.assertFalse(args.dropna)
 
+    def test_run_baseline_uses_horizon_sized_real_purge(self) -> None:
+        dataset = _sample_dataset(17)
+        with patch.object(baseline_ml_model, "build_ml_dataset", return_value=dataset):
+            result = baseline_ml_model.run_baseline_ml_model("2330", horizon=5, train_size=8, test_size=4, n_estimators=5, random_state=7)
+        self.assertEqual(result.iloc[0]["Train End"], dataset.index[7])
+        self.assertEqual(result.iloc[0]["Test Start"], dataset.index[13])
+        self.assertEqual(result.iloc[0]["Train Rows"], 8)
+        self.assertEqual(result.iloc[0]["Test Rows"], 4)
+        self.assertTrue(result[["Accuracy", "Precision", "Recall", "F1"]].notna().all().all())
 
 if __name__ == "__main__":
     unittest.main()

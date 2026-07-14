@@ -40,19 +40,23 @@ def _patched_argv(program_name: str, args: list[str]) -> Iterator[None]:
         sys.argv = original
 
 
-def _dispatch_existing_main(module_main: Callable[[], None], program_name: str, args: list[str]) -> None:
+def _dispatch_existing_main(
+    module_main: Callable[[], int | None],
+    program_name: str,
+    args: list[str],
+) -> int:
     """Run an existing CLI main with pass-through arguments."""
     with _patched_argv(program_name, args):
-        module_main()
+        result = module_main()
+    return 0 if result is None else result
 
 
-def _run_stock_list_update(args: list[str]) -> None:
-    _dispatch_existing_main(stock_list_updater.main, "stock_list_updater.py", args)
+def _run_stock_list_update(args: list[str]) -> int:
+    return _dispatch_existing_main(stock_list_updater.main, "stock_list_updater.py", args)
 
 
-def _run_stock_list_smoke_check(args: list[str]) -> None:
-    _dispatch_existing_main(stock_list_smoke_check.main, "stock_list_smoke_check.py", args)
-
+def _run_stock_list_smoke_check(args: list[str]) -> int:
+    return _dispatch_existing_main(stock_list_smoke_check.main, "stock_list_smoke_check.py", args)
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified tw_stock_tool CLI")
@@ -182,10 +186,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    args.handler(args)
-
+    return args.handler(args)
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

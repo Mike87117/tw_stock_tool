@@ -137,21 +137,41 @@ class TestSimulatedPaperTradingGuardAdapter(unittest.TestCase):
             adapter(self.order, "not a portfolio") # type: ignore
 
     def test_invalid_reference_price_provider(self):
+        for value in (True, 0.0, -1.0, float("nan"), float("inf"), -float("inf"), "100", None):
+            with self.subTest(value=value):
+                adapter = SimulatedPaperTradingGuardAdapter(
+                    self.kill_switch_inactive,
+                    lambda o, p, value=value: value,
+                    lambda s: RiskDecision.allow(),
+                )
+                with self.assertRaises(SimulatedPaperTradingGuardError):
+                    adapter(self.order, self.portfolio)
+
+    def test_invalid_reference_price_fails_before_risk_provider(self):
+        risk_provider_calls = []
         adapter = SimulatedPaperTradingGuardAdapter(
             self.kill_switch_inactive,
-            lambda o, p: -10.0, # invalid price
-            lambda s: RiskDecision.allow()
+            reference_price_provider=lambda *_: float("nan"),
+            risk_decision_provider=lambda snapshot: risk_provider_calls.append(snapshot) or RiskDecision.allow(),
         )
+
         with self.assertRaises(SimulatedPaperTradingGuardError):
             adapter(self.order, self.portfolio)
 
-        adapter2 = SimulatedPaperTradingGuardAdapter(
-            self.kill_switch_inactive,
-            lambda o, p: "not a number", # invalid price
-            lambda s: RiskDecision.allow()
-        )
-        with self.assertRaises(SimulatedPaperTradingGuardError):
-            adapter2(self.order, self.portfolio)
+        self.assertEqual(risk_provider_calls, [])
+
+    def test_finite_integer_and_float_reference_prices_build_snapshots(self):
+        snapshots = []
+        for value in (100, 100.5):
+            with self.subTest(value=value):
+                adapter = SimulatedPaperTradingGuardAdapter(
+                    self.kill_switch_inactive,
+                    reference_price_provider=lambda *_args, value=value: value,
+                    risk_decision_provider=lambda snapshot: snapshots.append(snapshot) or RiskDecision.allow(),
+                )
+                adapter(self.order, self.portfolio)
+
+        self.assertEqual([snapshot.price for snapshot in snapshots], [100.0, 100.5])
 
     def test_invalid_risk_decision_provider(self):
         adapter = SimulatedPaperTradingGuardAdapter(

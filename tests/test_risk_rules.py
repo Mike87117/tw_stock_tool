@@ -51,6 +51,15 @@ class TestRiskRules(unittest.TestCase):
         with self.assertRaises(RiskModelError):
             check_max_order_notional(self.snapshot, "1000") # type: ignore
 
+    def test_monetary_limits_reject_nonfinite_values(self):
+        from tw_stock_tool.risk.rules import check_max_position_notional, check_max_total_exposure
+
+        for rule in (check_max_order_notional, check_max_position_notional, check_max_total_exposure):
+            for value in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(rule=rule.__name__, value=value):
+                    with self.assertRaises(RiskModelError):
+                        rule(self.snapshot, value)
+
     def test_public_import(self):
         from tw_stock_tool.risk import check_max_order_notional as cmon
         self.assertEqual(cmon, check_max_order_notional)

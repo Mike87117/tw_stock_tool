@@ -187,6 +187,7 @@ def run_analysis_result(options: MainOptions) -> dict[str, object]:
         take_profit_pct=options.take_profit_pct,
         max_hold_days=options.max_hold_days,
         position_size=options.position_size,
+        interval=options.interval,
     )
     summary = analysis.summary
 
@@ -256,18 +257,21 @@ def run_analysis(options: MainOptions) -> None:
 
     print("\n\u63d0\u9192\uff1a\u672c\u5de5\u5177\u50c5\u4f9b\u6280\u8853\u5206\u6790\u8207\u56de\u6e2c\u7814\u7a76\uff0c\u4e0d\u4fdd\u8b49\u6295\u8cc7\u7e3e\u6548\uff0c\u4e5f\u4e0d\u63d0\u4f9b\u81ea\u52d5\u4e0b\u55ae\u3002")
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     try:
         effective_argv = sys.argv[1:] if argv is None else argv
         options = _interactive_options() if not effective_argv else _cli_options(effective_argv)
         run_analysis(options)
+        return 0
     except (ValueError, DataLoaderError, IndicatorError, ReportError) as exc:
         print(f"錯誤：{exc}")
+        return 1
     except KeyboardInterrupt:
         print("\n已取消。")
+        return 1
     except Exception as exc:
         print(f"未預期錯誤：{exc}")
-
+        return 1
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -155,10 +155,12 @@ class ExpandedBacktestPathCharacterizationTest(unittest.TestCase):
         canonical.stock = "x"
         with self.assertRaises(Exception): alt.final_equity = 0
 
-    def test_canonical_invalid_open_skips_while_alternate_marks_nan(self):
+    def test_canonical_invalid_open_raises_while_alternate_marks_nan(self):
         df = self.prices(opens=(10.0, float("nan"), 14.0, 16.0)); signals = self.signals(df)
-        canonical = run_backtest_result(signals, fee_rate=0, tax_rate=0); alt, _ = self.alternate(df, signals.entry_signal, signals.exit_signal)
-        self.assertEqual(canonical.trade_count, 0); self.assertTrue(pd.isna(alt.final_equity))
+        with self.assertRaises(BacktestError):
+            run_backtest_result(signals, fee_rate=0, tax_rate=0)
+        alt, _ = self.alternate(df, signals.entry_signal, signals.exit_signal)
+        self.assertTrue(pd.isna(alt.final_equity))
 
     def test_canonical_controls_exit_next_open(self):
         df = self.prices(opens=(10, 10, 8, 7), closes=(10, 9, 7, 7)); signals = self.signals(df, exit=(False, False, False, False))

@@ -157,6 +157,31 @@ class TestRiskModels(unittest.TestCase):
         with self.assertRaises(RiskModelError):
             RiskInputSnapshot(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=10000.0, total_exposure=True) # type: ignore
 
+    def test_snapshot_rejects_nonfinite_monetary_fields(self):
+        for field in ("price", "cash", "current_position_notional", "total_exposure"):
+            for value in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(field=field, value=value):
+                    values = dict(symbol="2330", side="BUY", quantity=1000, price=100.0, cash=10000.0)
+                    values[field] = value
+                    with self.assertRaises(RiskModelError):
+                        RiskInputSnapshot(**values)
+
+    def test_snapshot_accepts_finite_zero_non_negative_boundaries(self):
+        snapshot = RiskInputSnapshot(
+            symbol="2330",
+            side="BUY",
+            quantity=1000,
+            price=100,
+            cash=0.0,
+            current_position_notional=0.0,
+            total_exposure=0.0,
+        )
+
+        self.assertEqual(snapshot.price, 100)
+        self.assertEqual(snapshot.cash, 0.0)
+        self.assertEqual(snapshot.current_position_notional, 0.0)
+        self.assertEqual(snapshot.total_exposure, 0.0)
+
     def test_snapshot_public_import(self):
         from tw_stock_tool.risk import RiskInputSnapshot as RIS
         self.assertEqual(RIS, RiskInputSnapshot)

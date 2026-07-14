@@ -49,8 +49,8 @@ class SimulatedPaperTradingGuardAdapter:
             raise SimulatedPaperTradingGuardError("portfolio must be a SimulatedPortfolio.")
 
         ref_price = self.reference_price_provider(order, portfolio)
-        if not isinstance(ref_price, (int, float)) or isinstance(ref_price, bool) or ref_price <= 0:
-            raise SimulatedPaperTradingGuardError("reference_price_provider must return a positive number.")
+        if not isinstance(ref_price, (int, float)) or isinstance(ref_price, bool) or not math.isfinite(float(ref_price)) or ref_price <= 0:
+            raise SimulatedPaperTradingGuardError("reference_price_provider must return a finite positive number.")
 
         pos_model = portfolio.position_for(order.symbol)
         current_pos_quantity = pos_model.quantity
