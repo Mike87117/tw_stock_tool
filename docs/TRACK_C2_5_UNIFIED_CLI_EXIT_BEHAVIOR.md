@@ -64,3 +64,7 @@ This phase does not migrate every child CLI to integer returns, change applicati
 ## Remaining Track C2 work
 
 No additional approved implementation item is started here. The next step is an aggregate closeout audit and merge decision.
+
+## Compatibility follow-up
+
+Track C2.5.1 completes operating-system exit propagation for the three root compatibility wrappers: `main.py`, `ai_walk_forward.py`, and `twstock_cli.py`. The original Track C2.5 package-module history above remains unchanged.

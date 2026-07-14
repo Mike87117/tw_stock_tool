@@ -636,9 +636,12 @@ class TwStockCliTest(unittest.TestCase):
         repo_root = Path(__file__).parent.parent
         script_path = repo_root / "twstock_cli.py"
 
-        with patch("tw_stock_tool.cli.twstock_cli.main") as mock_main:
-            runpy.run_path(str(script_path), run_name="__main__")
-            mock_main.assert_called_once_with()
+        with patch("tw_stock_tool.cli.twstock_cli.main", return_value=0) as mock_main:
+            with self.assertRaises(SystemExit) as raised:
+                runpy.run_path(str(script_path), run_name="__main__")
+
+        self.assertEqual(raised.exception.code, 0)
+        mock_main.assert_called_once_with()
 
 
 if __name__ == "__main__":

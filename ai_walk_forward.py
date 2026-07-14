@@ -6,6 +6,6 @@ import sys as _sys
 _impl = _import_module("tw_stock_tool.ml.ai_walk_forward")
 
 if __name__ == "__main__":
-    _impl.main()
+    raise SystemExit(_impl.main())
 else:
     _sys.modules[__name__] = _impl
