@@ -184,6 +184,25 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
             cases.append((value_name, lambda value=value: SimulatedPaperTradingGuardAdapter(KillSwitchState(), lambda *_: 100.0, lambda _: RiskDecision.allow(), portfolio_exposure_provider=lambda *_: value)(order, SimulatedPortfolio(1000.0)), SimulatedPaperTradingGuardError))
         self.assertEqual(_collect_unrejected_cases(cases), [])
 
+    def test_analyze_propagates_selected_interval_to_backtest(self):
+        signal_df = _backtest_frame()
+        analysis_result = type(
+            "AnalysisResult",
+            (),
+            {"signal_df": signal_df, "symbol": "2330.TW", "summary": {}},
+        )()
+        with patch.object(analyze_cli, "OUTPUT_DIR"), patch.object(
+            analyze_cli, "analyze_stock", return_value=analysis_result
+        ) as analyze_stock, patch.object(
+            analyze_cli, "run_backtest", return_value={}
+        ) as backtest:
+            analyze_cli.run_analysis_result(
+                analyze_cli.MainOptions(stock_id="2330", interval="1wk")
+            )
+
+        self.assertEqual(analyze_stock.call_args.kwargs["interval"], "1wk")
+        self.assertEqual(backtest.call_args.kwargs["interval"], "1wk")
+
     def test_metrics_use_interval_specific_annualization(self):
         equity = pd.Series([100.0, 110.0, 99.0, 108.0, 91.8, 101.0])
         returns = equity.pct_change().dropna()

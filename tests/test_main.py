@@ -1,7 +1,12 @@
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+
+import pandas as pd
 
 import main
 
@@ -59,6 +64,72 @@ class MainCliTest(unittest.TestCase):
         self.assertEqual(status, 0)
         interactive.assert_called_once()
         run_analysis.assert_called_once_with(fake_options)
+
+    def test_run_analysis_result_propagates_weekly_interval(self) -> None:
+        signal_df = pd.DataFrame(
+            {"Open": [100.0], "Close": [100.0], "Signal": ["HOLD"]}
+        )
+        analysis = SimpleNamespace(signal_df=signal_df, symbol="2330.TW", summary={})
+        options = main.MainOptions(stock_id="2330", interval="1wk")
+
+        with TemporaryDirectory() as temp_dir, patch.object(
+            main, "OUTPUT_DIR", Path(temp_dir)
+        ), patch.object(main, "analyze_stock", return_value=analysis) as analyze_stock, patch.object(
+            main, "run_backtest", return_value={}
+        ) as run_backtest:
+            main.run_analysis_result(options)
+
+        analyze_stock.assert_called_once_with(
+            "2330",
+            period=main.DEFAULT_PERIOD,
+            interval="1wk",
+            auto_adjust=main.DEFAULT_AUTO_ADJUST,
+            force_refresh=False,
+        )
+        run_backtest.assert_called_once_with(
+            signal_df,
+            initial_capital=main.INITIAL_CAPITAL,
+            fee_rate=main.FEE_RATE,
+            tax_rate=main.TAX_RATE,
+            stop_loss_pct=options.stop_loss_pct,
+            take_profit_pct=options.take_profit_pct,
+            max_hold_days=options.max_hold_days,
+            position_size=options.position_size,
+            interval="1wk",
+        )
+
+    def test_run_analysis_result_propagates_default_daily_interval(self) -> None:
+        signal_df = pd.DataFrame(
+            {"Open": [100.0], "Close": [100.0], "Signal": ["HOLD"]}
+        )
+        analysis = SimpleNamespace(signal_df=signal_df, symbol="2330.TW", summary={})
+        options = main.MainOptions(stock_id="2330")
+
+        with TemporaryDirectory() as temp_dir, patch.object(
+            main, "OUTPUT_DIR", Path(temp_dir)
+        ), patch.object(main, "analyze_stock", return_value=analysis) as analyze_stock, patch.object(
+            main, "run_backtest", return_value={}
+        ) as run_backtest:
+            main.run_analysis_result(options)
+
+        analyze_stock.assert_called_once_with(
+            "2330",
+            period=main.DEFAULT_PERIOD,
+            interval="1d",
+            auto_adjust=main.DEFAULT_AUTO_ADJUST,
+            force_refresh=False,
+        )
+        run_backtest.assert_called_once_with(
+            signal_df,
+            initial_capital=main.INITIAL_CAPITAL,
+            fee_rate=main.FEE_RATE,
+            tax_rate=main.TAX_RATE,
+            stop_loss_pct=options.stop_loss_pct,
+            take_profit_pct=options.take_profit_pct,
+            max_hold_days=options.max_hold_days,
+            position_size=options.position_size,
+            interval="1d",
+        )
 
     def test_validate_rejects_bad_position_size(self) -> None:
         with self.assertRaises(ValueError):

@@ -187,6 +187,7 @@ def run_analysis_result(options: MainOptions) -> dict[str, object]:
         take_profit_pct=options.take_profit_pct,
         max_hold_days=options.max_hold_days,
         position_size=options.position_size,
+        interval=options.interval,
     )
     summary = analysis.summary
 

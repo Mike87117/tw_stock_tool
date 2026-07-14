@@ -64,4 +64,8 @@ This phase does not expose interval selection through Parameter Sweep, Walk Forw
 
 ## Remaining Track C2 work
 
-1. Unified CLI nonzero exit behavior.
+1. Unified CLI nonzero exit behavior.
+
+## Analyze propagation follow-up
+
+Track C2.4.2 propagates the already existing Analyze interval selection into the canonical Backtest. Other workflows that do not currently expose interval selection remain outside this follow-up.
