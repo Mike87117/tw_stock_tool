@@ -143,7 +143,7 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
                     with redirect_stdout(output):
                         result = scanner_cli.main()
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self.assertIn("錯誤：", output.getvalue())
         scan_mock.assert_not_called()
         export_mock.assert_not_called()
@@ -162,7 +162,7 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
                         with redirect_stdout(output):
                             result = scanner_cli.main()
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self.assertIn("錯誤：controlled report failure", output.getvalue())
         self.assertNotIn("Excel:", output.getvalue())
         self._assert_no_artifacts()
@@ -170,82 +170,74 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
     def test_direct_cancellation_is_printed_without_exporting(self) -> None:
         result, output = self._run_direct_scan_failure(KeyboardInterrupt())
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self.assertIn("已取消", output)
         self._assert_no_artifacts()
 
     def test_direct_unexpected_error_is_printed_without_exporting(self) -> None:
         result, output = self._run_direct_scan_failure(RuntimeError("controlled failure"))
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self.assertIn("未預期錯誤：controlled failure", output)
         self._assert_no_artifacts()
 
-    @unittest.expectedFailure
     def test_direct_value_error_should_return_nonzero(self) -> None:
         result, _ = self._run_direct_missing_file()
         self.assertEqual(result, 1)
 
-    @unittest.expectedFailure
     def test_direct_report_error_should_return_nonzero(self) -> None:
         result, _ = self._run_direct_scan_failure(ReportError("controlled report failure"))
         self.assertEqual(result, 1)
 
-    @unittest.expectedFailure
     def test_direct_cancellation_should_return_nonzero(self) -> None:
         result, _ = self._run_direct_scan_failure(KeyboardInterrupt())
         self.assertEqual(result, 1)
 
-    @unittest.expectedFailure
     def test_direct_unexpected_error_should_return_nonzero(self) -> None:
         result, _ = self._run_direct_scan_failure(RuntimeError("controlled failure"))
         self.assertEqual(result, 1)
 
-    def test_package_module_process_reports_failure_but_exits_zero(self) -> None:
+    def test_package_module_process_reports_failure_and_exits_one(self) -> None:
         completed = self._package_module_failure()
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self.assertIn("錯誤：", completed.stdout)
         self.assertNotIn("Traceback", completed.stdout + completed.stderr)
         self._assert_no_artifacts()
 
-    @unittest.expectedFailure
     def test_package_module_runtime_failure_should_exit_nonzero(self) -> None:
         self.assertEqual(self._package_module_failure().returncode, 1)
 
-    def test_root_wrapper_process_reports_failure_but_exits_zero(self) -> None:
+    def test_root_wrapper_process_reports_failure_and_exits_one(self) -> None:
         completed = self._root_wrapper_failure()
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self.assertIn("錯誤：", completed.stdout)
         self.assertNotIn("Traceback", completed.stdout + completed.stderr)
         self._assert_no_artifacts()
 
-    @unittest.expectedFailure
     def test_root_wrapper_runtime_failure_should_exit_nonzero(self) -> None:
         self.assertEqual(self._root_wrapper_failure().returncode, 1)
 
-    def test_unified_function_normalizes_scanner_failure_to_zero(self) -> None:
+    def test_unified_function_propagates_scanner_failure_status(self) -> None:
         status, output = self._run_unified_missing_file()
 
-        self.assertEqual(status, 0)
+        self.assertEqual(status, 1)
         self.assertIn("錯誤：", output)
         self._assert_no_artifacts()
 
-    @unittest.expectedFailure
     def test_unified_function_scanner_failure_should_return_nonzero(self) -> None:
         status, _ = self._run_unified_missing_file()
         self.assertEqual(status, 1)
 
-    def test_unified_module_process_reports_failure_but_exits_zero(self) -> None:
+    def test_unified_module_process_reports_failure_and_exits_one(self) -> None:
         completed = self._unified_module_failure()
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self.assertIn("錯誤：", completed.stdout)
         self.assertNotIn("Traceback", completed.stdout + completed.stderr)
         self._assert_no_artifacts()
 
-    @unittest.expectedFailure
     def test_unified_module_scanner_failure_should_exit_nonzero(self) -> None:
         self.assertEqual(self._unified_module_failure().returncode, 1)
 
