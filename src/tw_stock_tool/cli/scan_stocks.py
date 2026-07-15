@@ -111,7 +111,7 @@ def _write_error_log(ranking_df, output_dir: Path) -> Path | None:
     return log_path
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         stock_ids = _collect_stock_ids(args)
@@ -151,11 +151,14 @@ def main() -> None:
             print(f"錯誤紀錄: {error_log}")
     except (ValueError, ReportError) as exc:
         print(f"錯誤：{exc}")
+        return 1
     except KeyboardInterrupt:
         print("\n已取消掃描。")
+        return 1
     except Exception as exc:
         print(f"未預期錯誤：{exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
