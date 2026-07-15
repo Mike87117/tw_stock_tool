@@ -224,12 +224,82 @@ None.
 Parent baseline before branching:
 
 ```text
-py -m unittest discover -s tests       # 1,504 passed, 0 expected failures
-python -m unittest discover -s tests   # 1,504 passed, 0 expected failures
+py -m unittest discover -s tests
 ```
 
-C5.1 targeted and combined validation will be recorded after the new tests are
-executed. No live market-data service or real cache operation is used.
+```text
+Tests run: 1504
+Passed: 1504
+Expected failures: 0
+Failures: 0
+Errors: 0
+Final status: OK
+```
+
+C5.1 characterization module:
+
+```text
+py -m unittest tests.test_track_c5_1_cache_manager_cli_entrypoint_exit_behavior
+```
+
+```text
+Tests run: 14
+Passed: 6
+Expected failures: 8
+Failures: 0
+Errors: 0
+Final status: OK
+```
+
+Combined targeted validation:
+
+```text
+py -m unittest tests.test_track_c5_1_cache_manager_cli_entrypoint_exit_behavior tests.test_twstock_cli tests.test_root_wrappers tests.test_root_cli_wrapper_exit_codes tests.test_cache_utils tests.test_track_c4_1_scanner_cli_exit_behavior
+```
+
+```text
+Tests run: 91
+Passed: 83
+Expected failures: 8
+Failures: 0
+Errors: 0
+Final status: OK
+```
+
+Full canonical suite:
+
+```text
+py -m unittest discover -s tests
+```
+
+```text
+Tests run: 1518
+Passed: 1510
+Expected failures: 8
+Failures: 0
+Errors: 0
+Final status: OK
+```
+
+Repository Python suite:
+
+```text
+python -m unittest discover -s tests
+```
+
+```text
+Tests run: 1518
+Passed: 1510
+Expected failures: 8
+Failures: 0
+Errors: 0
+Final status: OK
+```
+
+`git diff --check`: PASS. BOM verification: PASS. No cache, CSV,
+spreadsheet, report, or Scanner artifact entered the commit. Retained ignored
+artifacts were untouched, and the working tree was clean after commit. No live
+market-data service or real cache operation was used.
 
 ## Deferred related candidates
 
