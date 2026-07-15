@@ -12,7 +12,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         if args.list:
@@ -33,7 +33,8 @@ def main() -> None:
                 print(summary.to_string(index=False))
     except Exception as exc:
         print(f"錯誤：{exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

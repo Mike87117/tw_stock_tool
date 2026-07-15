@@ -111,7 +111,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
             self.assertIn("Size KB", output)
             self._assert_temp_dir_unchanged(temp_path, before)
 
-    @unittest.expectedFailure
     def test_direct_list_failure_should_return_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -130,7 +129,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
             self._assert_temp_dir_unchanged(temp_path, before)
             self.assertEqual(result, 1)
 
-    @unittest.expectedFailure
     def test_direct_clear_failure_should_return_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -149,7 +147,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
             self._assert_temp_dir_unchanged(temp_path, before)
             self.assertEqual(result, 1)
 
-    @unittest.expectedFailure
     def test_direct_summary_failure_should_return_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -168,7 +165,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
             self._assert_temp_dir_unchanged(temp_path, before)
             self.assertEqual(result, 1)
 
-    @unittest.expectedFailure
     def test_package_module_failure_should_exit_one_without_traceback(self) -> None:
         completed = self._run_python(
             """
@@ -189,7 +185,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         self.assertIn("controlled summary failure", combined)
         self.assertNotIn("Traceback", combined)
 
-    @unittest.expectedFailure
     def test_root_wrapper_runtime_should_invoke_cache_manager_and_exit_one(self) -> None:
         wrapper = repr(str(REPOSITORY_ROOT / "cache_manager.py"))
         completed = self._run_python(
@@ -211,7 +206,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         self.assertIn("controlled summary failure", combined)
         self.assertNotIn("Traceback", combined)
 
-    @unittest.expectedFailure
     def test_root_wrapper_invalid_argument_should_exit_two(self) -> None:
         completed = self._run_process(str(REPOSITORY_ROOT / "cache_manager.py"), "--definitely-invalid-option")
         combined = completed.stdout + completed.stderr
@@ -242,7 +236,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         self.assertIn("usage:", combined)
         self.assertIn("error", combined.lower())
 
-    @unittest.expectedFailure
     def test_unified_function_failure_should_return_one_and_restore_argv(self) -> None:
         original_argv = sys.argv[:]
         output = StringIO()
@@ -261,7 +254,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         self.assertIn("controlled summary failure", output.getvalue())
         self.assertEqual(status, 1)
 
-    @unittest.expectedFailure
     def test_unified_module_failure_should_exit_one_without_traceback(self) -> None:
         completed = self._run_python(
             """
