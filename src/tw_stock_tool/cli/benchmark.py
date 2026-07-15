@@ -182,7 +182,7 @@ def _print_section(title: str, df: pd.DataFrame) -> None:
         print(df.to_string(index=False))
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         result = run_benchmark(
@@ -209,7 +209,8 @@ def main() -> None:
                 print(path)
     except Exception as exc:
         print(f"Error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

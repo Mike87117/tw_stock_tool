@@ -122,7 +122,7 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         self.assertIn("(empty)", stdout)
         self.assertEqual(stderr, "")
 
-    def test_direct_validation_failure_is_visible_but_returns_none(self) -> None:
+    def test_direct_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             before = list(temp_path.iterdir())
@@ -134,17 +134,16 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
 
             self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self._assert_validation_failure_output(stdout, stderr)
         scan_mock.assert_not_called()
         paths_mock.assert_not_called()
 
-    @unittest.expectedFailure
     def test_direct_validation_failure_should_return_one(self) -> None:
         result, _, _ = self._run_direct()
         self.assertEqual(result, 1)
 
-    def test_direct_runtime_failure_is_visible_but_returns_none(self) -> None:
+    def test_direct_runtime_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             before = list(temp_path.iterdir())
@@ -160,13 +159,12 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
 
             self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self.assertIn("Error: controlled benchmark failure", stdout)
         self.assertNotIn("Traceback", stdout + stderr)
         run_mock.assert_called_once()
         paths_mock.assert_not_called()
 
-    @unittest.expectedFailure
     def test_direct_runtime_failure_should_return_one(self) -> None:
         with patch.object(
             benchmark_cli,
@@ -176,54 +174,52 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             result, _, _ = self._run_direct("--stocks", "2330")
         self.assertEqual(result, 1)
 
-    def test_package_module_validation_failure_is_visible_but_exits_zero(self) -> None:
+    def test_package_module_validation_failure_is_visible_and_exits_one(self) -> None:
         completed = self._package_validation_failure()
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self._assert_validation_failure_output(completed.stdout, completed.stderr)
 
-    @unittest.expectedFailure
     def test_package_module_validation_failure_should_exit_one(self) -> None:
         self.assertEqual(self._package_validation_failure().returncode, 1)
 
-    def test_root_wrapper_validation_failure_invokes_benchmark_but_exits_zero(self) -> None:
+    def test_root_wrapper_validation_failure_invokes_benchmark_and_exits_one(self) -> None:
         completed = self._root_validation_failure()
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self._assert_validation_failure_output(completed.stdout, completed.stderr)
 
     def test_root_wrapper_execution_calls_package_main(self) -> None:
         with patch.object(benchmark_cli, "main", return_value=None) as main_mock:
-            runpy.run_path(str(REPOSITORY_ROOT / "benchmark.py"), run_name="__main__")
+            with self.assertRaises(SystemExit) as raised:
+                runpy.run_path(str(REPOSITORY_ROOT / "benchmark.py"), run_name="__main__")
 
+        self.assertIsNone(raised.exception.code)
         main_mock.assert_called_once_with()
 
-    @unittest.expectedFailure
     def test_root_wrapper_validation_failure_should_exit_one(self) -> None:
         self.assertEqual(self._root_validation_failure().returncode, 1)
 
-    def test_unified_function_validation_failure_is_visible_but_returns_zero(self) -> None:
+    def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             before = list(temp_path.iterdir())
             status, stdout, stderr = self._run_unified_validation_failure()
             self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertEqual(status, 0)
+        self.assertEqual(status, 1)
         self._assert_validation_failure_output(stdout, stderr)
 
-    @unittest.expectedFailure
     def test_unified_function_validation_failure_should_return_one(self) -> None:
         status, _, _ = self._run_unified_validation_failure()
         self.assertEqual(status, 1)
 
-    def test_unified_module_validation_failure_is_visible_but_exits_zero(self) -> None:
+    def test_unified_module_validation_failure_is_visible_and_exits_one(self) -> None:
         completed = self._unified_module_validation_failure()
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self._assert_validation_failure_output(completed.stdout, completed.stderr)
 
-    @unittest.expectedFailure
     def test_unified_module_validation_failure_should_exit_one(self) -> None:
         self.assertEqual(self._unified_module_validation_failure().returncode, 1)
 
