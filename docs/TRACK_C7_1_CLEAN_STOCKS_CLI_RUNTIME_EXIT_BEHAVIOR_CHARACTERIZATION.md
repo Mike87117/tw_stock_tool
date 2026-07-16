@@ -153,7 +153,7 @@ the CLI.
 ## Sibling contract evidence
 
 The bounded sibling control forced a Scanner runtime failure and observed its
-handled status `1`. It then patched the existing Benchmark child to return
+handled status `1`. It then patched the existing Scanner child to return
 integer `1` and confirmed the unchanged unified dispatcher propagated `1` while
 restoring `sys.argv`. No sibling audit or implementation was started.
 
@@ -181,6 +181,10 @@ restoring `sys.argv`. No sibling audit or implementation was started.
 - `CONTRACT_UNDECIDED`: 0
 - `NOT_APPLICABLE`: 0
 - `INFERENCE_ONLY`: 0
+
+The seven correctly handled controls are legacy direct success, root `runpy`
+package-main invocation, package argparse, root argparse, unified argparse,
+root import alias, and bounded sibling integer-status propagation.
 
 ## Expected-failure inventory
 
