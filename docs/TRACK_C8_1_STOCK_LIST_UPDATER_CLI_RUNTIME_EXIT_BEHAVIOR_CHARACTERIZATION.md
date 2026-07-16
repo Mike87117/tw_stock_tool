@@ -169,10 +169,26 @@ modified or audited beyond this control.
 
 ## Finding matrix
 
-The six directly observed false-success boundaries are direct validation,
-direct runtime, package validation, root validation, unified function
-validation, and unified module validation. Each has one ordinary observation
-test and one separate `@unittest.expectedFailure` future-contract test.
+| ID | Finding | Evidence | Classification |
+| --- | --- | --- | --- |
+| C8.1-01 | Legacy direct success returns `None` | Direct synthetic success control | `CORRECTLY_HANDLED` |
+| C8.1-02 | Direct validation failure returns `None` | Direct one-row TWSE validation observation | `DEFECT_CONFIRMED` |
+| C8.1-03 | Direct controlled runtime failure returns `None` | Direct patched runtime observation | `DEFECT_CONFIRMED` |
+| C8.1-04 | Package validation failure exits `0` | Offline package-module subprocess observation | `DEFECT_CONFIRMED` |
+| C8.1-05 | Root validation failure exits `0` | Offline root-wrapper subprocess observation | `DEFECT_CONFIRMED` |
+| C8.1-06 | Root wrapper invokes package `main()` exactly once | Root `runpy` invocation control | `CORRECTLY_HANDLED` |
+| C8.1-07 | Unified function validation failure returns `0` | Direct unified invocation with one-row TWSE frame | `DEFECT_CONFIRMED` |
+| C8.1-08 | Unified module validation failure exits `0` | Offline unified-module subprocess observation | `DEFECT_CONFIRMED` |
+| C8.1-09 | Package argparse remains exit `2` | Package invalid-option subprocess control | `CORRECTLY_HANDLED` |
+| C8.1-10 | Root argparse remains exit `2` | Root invalid-option subprocess control | `CORRECTLY_HANDLED` |
+| C8.1-11 | Unified argparse remains exit `2` | Unified invalid-option subprocess control | `CORRECTLY_HANDLED` |
+| C8.1-12 | Root import alias remains compatible | Direct root/package import control | `CORRECTLY_HANDLED` |
+| C8.1-13 | Sibling integer status and dispatcher propagation remain correct | Bounded Clean Stocks/dispatcher control | `CORRECTLY_HANDLED` |
+
+The root `runpy` row classifies the invocation behavior only: the package
+`main()` callable is invoked exactly once and resolves through the expected
+package module. The root process status-propagation defect is represented by
+C8.1-05 and is not counted as a separate seventh defect.
 
 ## Classification totals
 
