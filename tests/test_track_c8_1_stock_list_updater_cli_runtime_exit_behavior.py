@@ -140,7 +140,7 @@ requests.get = _fake_get
         self.assertEqual(stderr, "")
         self.assertNotIn("Traceback", stdout + stderr)
 
-    def test_direct_validation_failure_is_visible_and_returns_none(self) -> None:
+    def test_direct_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output = temp_path / "stocks.txt"
@@ -156,7 +156,7 @@ requests.get = _fake_get
 
             self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self._assert_error_output(
             stdout,
             stderr,
@@ -167,7 +167,6 @@ requests.get = _fake_get
         request_mock.assert_not_called()
         self.assertFalse(output.exists())
 
-    @unittest.expectedFailure
     def test_direct_validation_failure_should_return_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "stocks.txt"
@@ -177,7 +176,7 @@ requests.get = _fake_get
                 )
         self.assertEqual(result, 1)
 
-    def test_direct_runtime_failure_is_visible_and_returns_none(self) -> None:
+    def test_direct_runtime_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output = temp_path / "stocks.txt"
@@ -193,7 +192,7 @@ requests.get = _fake_get
 
             self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertIsNone(result)
+        self.assertEqual(result, 1)
         self.assertIn("Error: controlled stock list updater failure", stdout)
         self.assertNotIn("Traceback", stdout + stderr)
         self.assertFalse(output.exists())
@@ -204,7 +203,6 @@ requests.get = _fake_get
             add_suffix=False,
         )
 
-    @unittest.expectedFailure
     def test_direct_runtime_failure_should_return_one(self) -> None:
         with patch.object(
             stock_cli,
@@ -214,7 +212,7 @@ requests.get = _fake_get
             result, _, _ = self._run_direct("--market", "twse", "--output", "stocks.txt")
         self.assertEqual(result, 1)
 
-    def test_package_module_validation_failure_is_visible_and_exits_zero(self) -> None:
+    def test_package_module_validation_failure_is_visible_and_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output = temp_path / "stocks.txt"
@@ -231,7 +229,7 @@ requests.get = _fake_get
             self.assertEqual(list(temp_path.iterdir()), before)
 
         self.assertFalse(helper_path.exists())
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self._assert_error_output(
             completed.stdout,
             completed.stderr,
@@ -239,7 +237,6 @@ requests.get = _fake_get
         )
         self.assertFalse(output.exists())
 
-    @unittest.expectedFailure
     def test_package_module_validation_failure_should_exit_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "stocks.txt"
@@ -254,7 +251,7 @@ requests.get = _fake_get
         self.assertFalse(helper_path.exists())
         self.assertEqual(completed.returncode, 1)
 
-    def test_root_wrapper_validation_failure_is_visible_and_exits_zero(self) -> None:
+    def test_root_wrapper_validation_failure_is_visible_and_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output = temp_path / "stocks.txt"
@@ -270,7 +267,7 @@ requests.get = _fake_get
             self.assertEqual(list(temp_path.iterdir()), before)
 
         self.assertFalse(helper_path.exists())
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self._assert_error_output(
             completed.stdout,
             completed.stderr,
@@ -278,16 +275,16 @@ requests.get = _fake_get
         )
         self.assertFalse(output.exists())
 
-    def test_root_wrapper_execution_calls_package_main_once_and_ignores_return_status(self) -> None:
+    def test_root_wrapper_execution_calls_package_main_once_and_propagates_status(self) -> None:
         with patch.object(stock_cli, "main", return_value=1) as main_mock:
-            namespace = runpy.run_path(
-                str(REPOSITORY_ROOT / "stock_list_updater.py"), run_name="__main__"
-            )
+            with self.assertRaises(SystemExit) as raised:
+                runpy.run_path(
+                    str(REPOSITORY_ROOT / "stock_list_updater.py"), run_name="__main__"
+                )
 
-        self.assertIs(namespace["_impl"], stock_cli)
+        self.assertEqual(raised.exception.code, 1)
         main_mock.assert_called_once_with()
 
-    @unittest.expectedFailure
     def test_root_wrapper_validation_failure_should_exit_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "stocks.txt"
@@ -301,7 +298,7 @@ requests.get = _fake_get
         self.assertFalse(helper_path.exists())
         self.assertEqual(completed.returncode, 1)
 
-    def test_unified_function_validation_failure_is_visible_and_returns_zero(self) -> None:
+    def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output = temp_path / "stocks.txt"
@@ -322,7 +319,7 @@ requests.get = _fake_get
 
             self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertEqual(status, 0)
+        self.assertEqual(status, 1)
         self.assertEqual(sys.argv, original_argv)
         self._assert_error_output(
             stdout.getvalue(),
@@ -334,7 +331,6 @@ requests.get = _fake_get
         request_mock.assert_not_called()
         self.assertFalse(output.exists())
 
-    @unittest.expectedFailure
     def test_unified_function_validation_failure_should_return_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "stocks.txt"
@@ -344,7 +340,7 @@ requests.get = _fake_get
                 )
         self.assertEqual(status, 1)
 
-    def test_unified_module_validation_failure_is_visible_and_exits_zero(self) -> None:
+    def test_unified_module_validation_failure_is_visible_and_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output = temp_path / "stocks.txt"
@@ -363,7 +359,7 @@ requests.get = _fake_get
             self.assertEqual(list(temp_path.iterdir()), before)
 
         self.assertFalse(helper_path.exists())
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         self._assert_error_output(
             completed.stdout,
             completed.stderr,
@@ -371,7 +367,6 @@ requests.get = _fake_get
         )
         self.assertFalse(output.exists())
 
-    @unittest.expectedFailure
     def test_unified_module_validation_failure_should_exit_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "stocks.txt"
