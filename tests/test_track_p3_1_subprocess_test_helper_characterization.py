@@ -7,6 +7,8 @@ from pathlib import Path
 import sys
 import textwrap
 import unittest
+
+import tests.subprocess_test_support as subprocess_support
 from unittest.mock import patch, sentinel
 
 
@@ -94,8 +96,19 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
     ) -> None:
         case = case_type("runTest")
         with (
-            patch.object(module.os, "environ", {"PYTHONPATH": INHERITED_PYTHONPATH}),
-            patch.object(module.subprocess, "run", return_value=sentinel.completed) as run,
+            patch.object(
+                subprocess_support.os,
+                "environ",
+                {
+                    "PYTHONPATH": INHERITED_PYTHONPATH,
+                    "PYTHONDONTWRITEBYTECODE": "inherited-bytecode",
+                },
+            ),
+            patch.object(
+                subprocess_support.subprocess,
+                "run",
+                return_value=sentinel.completed,
+            ) as run,
         ):
             result = case._run_process(*args)
 
@@ -119,7 +132,7 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 "TrackC41ScannerCliExitBehaviorTest",
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
-                None,
+                "inherited-bytecode",
                 "replace",
             ),
             (
@@ -200,14 +213,25 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
         mode: str | None = None,
     ) -> None:
         with (
-            patch.object(module.os, "environ", {"PYTHONPATH": INHERITED_PYTHONPATH}),
+            patch.object(
+                subprocess_support.os,
+                "environ",
+                {
+                    "PYTHONPATH": INHERITED_PYTHONPATH,
+                    "PYTHONDONTWRITEBYTECODE": "inherited-bytecode",
+                },
+            ),
             patch.object(module.Path, "write_text", autospec=True) as write_text,
             patch.object(
                 module.tempfile,
                 "TemporaryDirectory",
                 wraps=module.tempfile.TemporaryDirectory,
             ) as temporary_directory,
-            patch.object(module.subprocess, "run", return_value=sentinel.completed) as run,
+            patch.object(
+                subprocess_support.subprocess,
+                "run",
+                return_value=sentinel.completed,
+            ) as run,
         ):
             if mode is None:
                 returned = case._run_offline_process(*args)
@@ -295,6 +319,45 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
         self.assertIn("yfinance.download = _download", C9_PRICE_SITE_CUSTOMIZE)
         self.assertIn("return pd.DataFrame()", C9_PRICE_SITE_CUSTOMIZE)
         self.assertIn("controlled offline HTTP request", C9_PRICE_SITE_CUSTOMIZE)
+
+        support_source = Path(subprocess_support.__file__).read_text(encoding="utf-8")
+        self.assertEqual(support_source.count("def run_repo_python("), 1)
+        self.assertEqual(support_source.count("subprocess.run("), 1)
+        self.assertNotIn("pandas", support_source)
+        self.assertNotIn("requests", support_source)
+        self.assertNotIn("yfinance", support_source)
+
+        target_modules = (
+            "tests.test_track_c4_1_scanner_cli_exit_behavior",
+            "tests.test_track_c5_1_cache_manager_cli_entrypoint_exit_behavior",
+            "tests.test_track_c6_1_benchmark_cli_runtime_exit_behavior",
+            "tests.test_track_c7_1_clean_stocks_cli_runtime_exit_behavior",
+            "tests.test_track_c8_1_stock_list_updater_cli_runtime_exit_behavior",
+            "tests.test_track_c9_1_smoke_check_cli_runtime_exit_behavior",
+        )
+        for module_name in target_modules:
+            module_source = Path(
+                importlib.import_module(module_name).__file__
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                "from tests.subprocess_test_support import run_repo_python",
+                module_source,
+            )
+            self.assertNotIn("subprocess.run(", module_source)
+
+        c8_source = Path(
+            importlib.import_module(
+                "tests.test_track_c8_1_stock_list_updater_cli_runtime_exit_behavior"
+            ).__file__
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("helper_path.iterdir()", c8_source)
+
+        c9_source = Path(
+            importlib.import_module(
+                "tests.test_track_c9_1_smoke_check_cli_runtime_exit_behavior"
+            ).__file__
+        ).read_text(encoding="utf-8")
+        self.assertGreaterEqual(c9_source.count("helper_path.iterdir()"), 2)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from tw_stock_tool.cli import main as analyze_cli
 from tw_stock_tool.cli import scan_stocks as scanner_cli
 from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.reports.report import ReportError
+from tests.subprocess_test_support import run_repo_python
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -64,19 +65,10 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
         return result, output.getvalue()
 
     def _run_process(self, *command: str) -> subprocess.CompletedProcess[str]:
-        environment = os.environ.copy()
-        package_path = str(REPOSITORY_ROOT / "src")
-        environment["PYTHONPATH"] = package_path + os.pathsep + environment.get(
-            "PYTHONPATH", ""
-        )
-        return subprocess.run(
-            [sys.executable, *command],
-            cwd=REPOSITORY_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
+        return run_repo_python(
+            *command,
+            include_repository_root=False,
+            suppress_bytecode=False,
         )
 
     def _package_module_failure(self) -> subprocess.CompletedProcess[str]:
