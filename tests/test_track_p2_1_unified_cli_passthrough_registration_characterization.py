@@ -427,9 +427,18 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertEqual(sum(route.classification == "LAZY_IMPORTED_WITH_DESCRIPTION" for route in ROUTES), 2)
 
         source = (REPOSITORY_ROOT / "src" / "tw_stock_tool" / "cli" / "twstock_cli.py").read_text(encoding="utf-8")
-        self.assertEqual(source.count(".add_parser("), 20)
-        self.assertEqual(source.count(".set_defaults("), 19)
-        self.assertEqual(len(source.splitlines()), 194)
+        self.assertEqual(source.count("def _add_passthrough_parser"), 1)
+        self.assertEqual(source.count("_add_passthrough_parser("), 18)
+        self.assertEqual(source.count(".add_parser("), 4)
+        self.assertEqual(source.count(".set_defaults("), 3)
+        self.assertEqual(source.count("stock_list_parser = subparsers.add_parser"), 1)
+        self.assertEqual(source.count("update_parser = stock_list_subparsers.add_parser"), 1)
+        self.assertEqual(source.count("smoke_parser = stock_list_subparsers.add_parser"), 1)
+        self.assertEqual(source.count("_run_stock_list_update(args.args)"), 1)
+        self.assertEqual(source.count("_run_stock_list_smoke_check(args.args)"), 1)
+        self.assertNotIn("route_table", source)
+        self.assertNotIn("ROUTE_SPECS", source)
+        self.assertNotIn("dataclass", source)
         self.assertEqual(
             sum(route.classification != "NESTED_CUSTOM_RUNNER" for route in ROUTES),
             17,
