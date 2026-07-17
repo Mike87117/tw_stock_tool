@@ -226,15 +226,14 @@ requests.get = _get
         self.assertNotIn("Traceback", stdout + stderr)
         request_mock.assert_not_called()
 
-    def test_stock_direct_handled_failure_currently_raises_system_exit_one(self) -> None:
+    def test_stock_direct_handled_failure_returns_integer_one(self) -> None:
         outcome, stdout, stderr, request_mock = self._stock_direct_failure()
 
-        self.assertEqual(outcome, ("system_exit", 1))
+        self.assertEqual(outcome, ("return", 1))
         self._assert_failure_output(stdout, stderr, "Status: FAIL")
         self.assertIn("Error: TWSE count too low", stdout)
         request_mock.assert_not_called()
 
-    @unittest.expectedFailure
     def test_stock_direct_handled_failure_should_return_integer_one(self) -> None:
         outcome, _, _, _ = self._stock_direct_failure()
         self.assertEqual(outcome, ("return", 1))
@@ -281,13 +280,12 @@ requests.get = _get
                 outcome = ("return", None)
         return outcome, main_mock
 
-    def test_stock_root_runpy_invokes_package_main_once_and_ignores_integer_status(self) -> None:
+    def test_stock_root_runpy_invokes_package_main_once_and_propagates_integer_status(self) -> None:
         outcome, main_mock = self._stock_root_runpy_outcome()
 
-        self.assertEqual(outcome, ("return", None))
+        self.assertEqual(outcome, ("system_exit", 1))
         main_mock.assert_called_once_with()
 
-    @unittest.expectedFailure
     def test_stock_root_runpy_should_propagate_integer_status(self) -> None:
         outcome, _ = self._stock_root_runpy_outcome()
         self.assertEqual(outcome, ("system_exit", 1))
@@ -312,15 +310,14 @@ requests.get = _get
                 outcome = ("return", result)
         return outcome, stdout.getvalue(), stderr.getvalue(), original_argv, request_mock
 
-    def test_stock_unified_function_failure_currently_raises_system_exit_and_restores_argv(self) -> None:
+    def test_stock_unified_function_failure_returns_integer_one_and_restores_argv(self) -> None:
         outcome, stdout, stderr, original_argv, request_mock = self._stock_unified_failure()
 
-        self.assertEqual(outcome, ("system_exit", 1))
+        self.assertEqual(outcome, ("return", 1))
         self.assertEqual(sys.argv, original_argv)
         self._assert_failure_output(stdout, stderr, "Status: FAIL")
         request_mock.assert_not_called()
 
-    @unittest.expectedFailure
     def test_stock_unified_function_failure_should_return_integer_one(self) -> None:
         outcome, _, _, _, _ = self._stock_unified_failure()
         self.assertEqual(outcome, ("return", 1))
@@ -392,15 +389,14 @@ requests.get = _get
         self.assertNotIn("Traceback", stdout + stderr)
         self.assertEqual(download_mock.call_count, 4)
 
-    def test_price_direct_handled_failure_currently_raises_system_exit_one(self) -> None:
+    def test_price_direct_handled_failure_returns_integer_one(self) -> None:
         outcome, stdout, stderr, download_mock = self._price_direct_failure()
 
-        self.assertEqual(outcome, ("system_exit", 1))
+        self.assertEqual(outcome, ("return", 1))
         self._assert_failure_output(stdout, stderr, "Price Data Smoke Check")
         self.assertIn("Error: Price data smoke check failed.", stdout)
         self.assertEqual(download_mock.call_count, 4)
 
-    @unittest.expectedFailure
     def test_price_direct_handled_failure_should_return_integer_one(self) -> None:
         outcome, _, _, _ = self._price_direct_failure()
         self.assertEqual(outcome, ("return", 1))
@@ -447,13 +443,12 @@ requests.get = _get
                 outcome = ("return", None)
         return outcome, main_mock
 
-    def test_price_root_runpy_invokes_package_main_once_and_ignores_integer_status(self) -> None:
+    def test_price_root_runpy_invokes_package_main_once_and_propagates_integer_status(self) -> None:
         outcome, main_mock = self._price_root_runpy_outcome()
 
-        self.assertEqual(outcome, ("return", None))
+        self.assertEqual(outcome, ("system_exit", 1))
         main_mock.assert_called_once_with()
 
-    @unittest.expectedFailure
     def test_price_root_runpy_should_propagate_integer_status(self) -> None:
         outcome, _ = self._price_root_runpy_outcome()
         self.assertEqual(outcome, ("system_exit", 1))
@@ -483,14 +478,13 @@ requests.get = _get
         self.assertEqual(download_mock.call_count, 4)
         return outcome, stdout.getvalue(), stderr.getvalue(), original_argv, download_mock
 
-    def test_price_unified_function_failure_currently_raises_system_exit_and_restores_argv(self) -> None:
+    def test_price_unified_function_failure_returns_integer_one_and_restores_argv(self) -> None:
         outcome, stdout, stderr, original_argv, _ = self._price_unified_failure()
 
-        self.assertEqual(outcome, ("system_exit", 1))
+        self.assertEqual(outcome, ("return", 1))
         self.assertEqual(sys.argv, original_argv)
         self._assert_failure_output(stdout, stderr, "Price Data Smoke Check")
 
-    @unittest.expectedFailure
     def test_price_unified_function_failure_should_return_integer_one(self) -> None:
         outcome, _, _, _, _ = self._price_unified_failure()
         self.assertEqual(outcome, ("return", 1))

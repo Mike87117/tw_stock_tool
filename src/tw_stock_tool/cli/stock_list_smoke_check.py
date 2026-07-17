@@ -90,7 +90,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> int | None:
     args = _parse_args()
     try:
         result = run_smoke_check(
@@ -105,8 +105,8 @@ def main() -> None:
         print("=================================")
         print(f"Status: FAIL")
         print(f"Error: {exc}")
-        raise SystemExit(1) from exc
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
