@@ -166,9 +166,8 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main(["validate", str(invalid_path)])
-            self.assertEqual(cm.exception.code, 1)
+            result = backtest_artifact_cli.main(["validate", str(invalid_path)])
+            self.assertEqual(result, 1)
         
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -179,9 +178,8 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main(["validate", str(schema_path)])
-            self.assertEqual(cm.exception.code, 1)
+            result = backtest_artifact_cli.main(["validate", str(schema_path)])
+            self.assertEqual(result, 1)
             
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -191,9 +189,8 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main(["validate", str(missing_path)])
-            self.assertEqual(cm.exception.code, 1)
+            result = backtest_artifact_cli.main(["validate", str(missing_path)])
+            self.assertEqual(result, 1)
             
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -251,14 +248,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
         err = StringIO()
         out = StringIO()
         with patch("sys.stderr", err), patch("sys.stdout", out):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main([
+            result = backtest_artifact_cli.main([
                     "convert-to-simulated-paper-trading",
                     str(self.valid_json_path),
                     "--output-json",
                     str(output_json),
                 ])
-            self.assertEqual(cm.exception.code, 1)
+            self.assertEqual(result, 1)
             
         self.assertIn("error: Simulated read-back error", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -270,14 +266,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main([
+            result = backtest_artifact_cli.main([
                     "convert-to-simulated-paper-trading",
                     str(self.valid_json_path),
                     "--output-json",
                     str(output_json),
                 ])
-            self.assertEqual(cm.exception.code, 1)
+            self.assertEqual(result, 1)
             
         self.assertIn("Use --overwrite", err.getvalue())
         self.assertEqual(output_json.read_text(encoding="utf-8"), '{"dummy": true}')
@@ -301,14 +296,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main([
+            result = backtest_artifact_cli.main([
                     "convert-to-simulated-paper-trading",
                     str(invalid_path),
                     "--output-json",
                     str(output_json),
                 ])
-            self.assertEqual(cm.exception.code, 1)
+            self.assertEqual(result, 1)
         
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -320,14 +314,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
 
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main([
+            result = backtest_artifact_cli.main([
                     "convert-to-simulated-paper-trading",
                     str(schema_path),
                     "--output-json",
                     str(output_json),
                 ])
-            self.assertEqual(cm.exception.code, 1)
+            self.assertEqual(result, 1)
 
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -338,14 +331,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main([
+            result = backtest_artifact_cli.main([
                     "convert-to-simulated-paper-trading",
                     str(missing_path),
                     "--output-json",
                     str(output_json),
                 ])
-            self.assertEqual(cm.exception.code, 1)
+            self.assertEqual(result, 1)
             
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -384,14 +376,13 @@ class TestBacktestArtifactCli(unittest.TestCase):
         
         err = StringIO()
         with patch("sys.stderr", err):
-            with self.assertRaises(SystemExit) as cm:
-                backtest_artifact_cli.main([
+            result = backtest_artifact_cli.main([
                     "convert-to-simulated-paper-trading",
                     str(invalid_path),
                     "--output-json",
                     str(output_json),
                 ])
-            self.assertEqual(cm.exception.code, 1)
+            self.assertEqual(result, 1)
             
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
