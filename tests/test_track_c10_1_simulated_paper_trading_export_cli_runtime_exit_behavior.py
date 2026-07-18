@@ -216,8 +216,7 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
             [str(missing), "--output-markdown", str(output)]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("No such file or directory", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
@@ -232,8 +231,7 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
             [str(invalid), "--output-markdown", str(output)]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Invalid JSON content", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
@@ -250,8 +248,7 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
             [str(invalid), "--output-markdown", str(output)]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Unsupported schema_version", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
@@ -267,8 +264,7 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
             [str(self.input_json), "--output-markdown", str(output)]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("File already exists", stderr)
         self.assertIn("Use --overwrite", stderr)
         self.assertNotIn("Traceback", stderr)
@@ -276,7 +272,6 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
         self.assertEqual(output.read_text(encoding="utf-8"), "keep this content")
         self.assertEqual(self._files(), {"input.json", "existing.md"})
 
-    @unittest.expectedFailure
     def test_direct_runtime_failure_future_contract_returns_integer_one(self) -> None:
         result, _, _ = self._call_direct(
             [
@@ -343,21 +338,19 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
         original_argv = sys.argv[:]
 
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            with self.assertRaises(SystemExit) as raised:
-                twstock_cli.main(
-                    [
-                        "simulated-paper-trading-export",
-                        str(self.root / "missing.json"),
-                        "--output-markdown",
-                        str(self.root / "unified_missing.md"),
-                    ]
-                )
+            result = twstock_cli.main(
+                [
+                    "simulated-paper-trading-export",
+                    str(self.root / "missing.json"),
+                    "--output-markdown",
+                    str(self.root / "unified_missing.md"),
+                ]
+            )
 
-        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertEqual(sys.argv, original_argv)
         self.assertEqual(self._files(), {"input.json"})
 
-    @unittest.expectedFailure
     def test_unified_function_runtime_failure_future_contract_returns_integer_one(self) -> None:
         original_argv = sys.argv[:]
 
@@ -412,7 +405,6 @@ class TrackC101SimulatedPaperTradingExportCliRuntimeExitCharacterizationTest(
         self.assertNotIn("Traceback", completed.stdout + completed.stderr)
         self.assertEqual(self._files(), {"input.json"})
 
-    @unittest.expectedFailure
     def test_package_guard_future_contract_propagates_integer_results(self) -> None:
         source_path = Path(simulated_paper_trading_export_cli.__file__)
         source = source_path.read_text(encoding="utf-8")
