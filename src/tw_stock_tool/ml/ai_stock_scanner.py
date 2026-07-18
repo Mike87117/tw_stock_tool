@@ -257,7 +257,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         stock_ids = collect_stock_ids(
@@ -291,7 +291,8 @@ def main() -> None:
         print("\nAI stock scanner is for research only and is not investment advice.")
     except Exception as exc:
         print(f"Error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

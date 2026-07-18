@@ -563,7 +563,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         actual_step_days = args.test_days if args.step_days is None else args.step_days
@@ -597,7 +597,8 @@ def main() -> None:
         print("\nWalk-forward results are historical validation only, not investment advice.")
     except Exception as exc:
         print(f"Error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

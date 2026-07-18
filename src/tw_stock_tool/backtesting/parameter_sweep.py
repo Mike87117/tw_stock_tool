@@ -340,7 +340,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         result = run_parameter_sweep(
@@ -364,7 +364,8 @@ def main() -> None:
             print(f"\nParameter sweep Excel exported: {excel_path}")
     except Exception as exc:
         print(f"Error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
