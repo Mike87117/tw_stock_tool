@@ -17,6 +17,7 @@ import pandas as pd
 from tw_stock_tool.cli import clean_stocks as clean_cli
 from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.data import stock_list_updater as stock_cli
+from tests.subprocess_test_support import run_repo_python
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -32,21 +33,7 @@ class StockListUpdaterCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCa
         return result, stdout.getvalue(), stderr.getvalue()
 
     def _run_process(self, *args: str) -> subprocess.CompletedProcess[str]:
-        environment = os.environ.copy()
-        python_path = [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src")]
-        if environment.get("PYTHONPATH"):
-            python_path.append(environment["PYTHONPATH"])
-        environment["PYTHONPATH"] = os.pathsep.join(python_path)
-        environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        return subprocess.run(
-            [sys.executable, *args],
-            cwd=REPOSITORY_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-        )
+        return run_repo_python(*args)
 
     def _run_offline_process(
         self, *args: str
@@ -73,24 +60,9 @@ requests.get = _fake_get
 """,
                 encoding="utf-8",
             )
-            environment = os.environ.copy()
-            python_path = [
-                str(helper_path),
-                str(REPOSITORY_ROOT),
-                str(REPOSITORY_ROOT / "src"),
-            ]
-            if environment.get("PYTHONPATH"):
-                python_path.append(environment["PYTHONPATH"])
-            environment["PYTHONPATH"] = os.pathsep.join(python_path)
-            environment["PYTHONDONTWRITEBYTECODE"] = "1"
-            completed = subprocess.run(
-                [sys.executable, *args],
-                cwd=REPOSITORY_ROOT,
-                env=environment,
-                capture_output=True,
-                text=True,
-                errors="replace",
-                check=False,
+            completed = run_repo_python(
+                *args,
+                extra_pythonpath=(helper_path,),
             )
         return completed, helper_path
 

@@ -120,9 +120,8 @@ class TestSimulatedPaperTradingExportCLI(unittest.TestCase):
         out_md.write_text("existing")
         
         with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
-            with self.assertRaises(SystemExit) as cm:
-                simulated_paper_trading_export_cli.main([str(self.input_json), "--output-markdown", str(out_md)])
-            self.assertEqual(cm.exception.code, 1)
+            result = simulated_paper_trading_export_cli.main([str(self.input_json), "--output-markdown", str(out_md)])
+            self.assertEqual(result, 1)
             err_text = mock_stderr.getvalue()
             self.assertIn("File already exists", err_text)
             self.assertIn("Use --overwrite", err_text)
@@ -144,9 +143,8 @@ class TestSimulatedPaperTradingExportCLI(unittest.TestCase):
         out_md = self.temp_dir / "bad.md"
         
         with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
-            with self.assertRaises(SystemExit) as cm:
-                simulated_paper_trading_export_cli.main([str(bad_json), "--output-markdown", str(out_md)])
-            self.assertEqual(cm.exception.code, 1)
+            result = simulated_paper_trading_export_cli.main([str(bad_json), "--output-markdown", str(out_md)])
+            self.assertEqual(result, 1)
             err_text = mock_stderr.getvalue()
             self.assertIn("Invalid JSON content", err_text)
             self.assertNotIn("Traceback", err_text)
@@ -159,9 +157,8 @@ class TestSimulatedPaperTradingExportCLI(unittest.TestCase):
         out_md = self.temp_dir / "bad2.md"
         
         with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
-            with self.assertRaises(SystemExit) as cm:
-                simulated_paper_trading_export_cli.main([str(bad_schema), "--output-markdown", str(out_md)])
-            self.assertEqual(cm.exception.code, 1)
+            result = simulated_paper_trading_export_cli.main([str(bad_schema), "--output-markdown", str(out_md)])
+            self.assertEqual(result, 1)
             err_text = mock_stderr.getvalue()
             self.assertIn("Unsupported schema_version", err_text)
             self.assertNotIn("Traceback", err_text)
@@ -171,9 +168,8 @@ class TestSimulatedPaperTradingExportCLI(unittest.TestCase):
         out_md = self.temp_dir / "missing.md"
         
         with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
-            with self.assertRaises(SystemExit) as cm:
-                simulated_paper_trading_export_cli.main([str(missing), "--output-markdown", str(out_md)])
-            self.assertEqual(cm.exception.code, 1)
+            result = simulated_paper_trading_export_cli.main([str(missing), "--output-markdown", str(out_md)])
+            self.assertEqual(result, 1)
             err_text = mock_stderr.getvalue()
             self.assertIn("No such file or directory", err_text)
             self.assertNotIn("Traceback", err_text)

@@ -17,6 +17,7 @@ import pandas as pd
 from tw_stock_tool.cli import price_data_smoke_check as price_cli
 from tw_stock_tool.cli import stock_list_smoke_check as stock_cli
 from tw_stock_tool.cli import twstock_cli
+from tests.subprocess_test_support import run_repo_python
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -78,24 +79,8 @@ class TrackC91SmokeCheckCliRuntimeExitBehaviorTest(unittest.TestCase):
         *args: str,
         helper_path: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        environment = os.environ.copy()
-        python_path = []
-        if helper_path is not None:
-            python_path.append(str(helper_path))
-        python_path.extend([str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src")])
-        if environment.get("PYTHONPATH"):
-            python_path.append(environment["PYTHONPATH"])
-        environment["PYTHONPATH"] = os.pathsep.join(python_path)
-        environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        return subprocess.run(
-            [sys.executable, *args],
-            cwd=REPOSITORY_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-        )
+        extra_pythonpath = () if helper_path is None else (helper_path,)
+        return run_repo_python(*args, extra_pythonpath=extra_pythonpath)
 
     def _sitecustomize_text(self, mode: str) -> str:
         if mode == "stock":

@@ -19,6 +19,7 @@ from tw_stock_tool.cli import scan_stocks as scanner_cli
 from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.data import cache_manager
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD
+from tests.subprocess_test_support import run_repo_python
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -41,21 +42,7 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         return result, stdout.getvalue(), stderr.getvalue()
 
     def _run_process(self, *args: str) -> subprocess.CompletedProcess[str]:
-        environment = os.environ.copy()
-        python_path = [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src")]
-        if environment.get("PYTHONPATH"):
-            python_path.append(environment["PYTHONPATH"])
-        environment["PYTHONPATH"] = os.pathsep.join(python_path)
-        environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        return subprocess.run(
-            [sys.executable, *args],
-            cwd=REPOSITORY_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-        )
+        return run_repo_python(*args)
 
     def _package_validation_failure(self) -> subprocess.CompletedProcess[str]:
         return self._run_process("-m", "tw_stock_tool.cli.benchmark")

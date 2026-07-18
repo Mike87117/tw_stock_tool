@@ -15,6 +15,7 @@ import pandas as pd
 
 from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.data import cache_manager
+from tests.subprocess_test_support import run_repo_python
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -33,20 +34,7 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         return result, output.getvalue()
 
     def _run_process(self, *args: str) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        python_path = [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src")]
-        if env.get("PYTHONPATH"):
-            python_path.append(env["PYTHONPATH"])
-        env["PYTHONPATH"] = os.pathsep.join(python_path)
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        return subprocess.run(
-            [sys.executable, *args],
-            cwd=REPOSITORY_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        return run_repo_python(*args, errors=None)
 
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return self._run_process("-c", textwrap.dedent(source))

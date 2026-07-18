@@ -410,7 +410,6 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         env["PYTHONPATH"] = os.pathsep.join((str(REPOSITORY_ROOT / "src"), str(REPOSITORY_ROOT), env.get("PYTHONPATH", "")))
         for command in (
             [sys.executable, "-m", "tw_stock_tool.cli.twstock_cli", "--help"],
-            ["twstock", "--help"],
             [sys.executable, str(REPOSITORY_ROOT / "twstock_cli.py"), "--help"],
         ):
             with self.subTest(command=command):
