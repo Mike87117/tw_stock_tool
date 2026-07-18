@@ -226,43 +226,40 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
         self.assertEqual(stdout, "")
         self.assertEqual(self._files(), {"backtest.json"})
 
-    def test_direct_missing_input_currently_raises_system_exit_one(self) -> None:
+    def test_direct_missing_input_returns_integer_one(self) -> None:
         result, stdout, stderr = self._call_direct(
             ["validate", str(self.root / "missing.json")]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("No such file or directory", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
         self.assertEqual(self._files(), {"backtest.json"})
 
-    def test_direct_invalid_json_currently_raises_system_exit_one(self) -> None:
+    def test_direct_invalid_json_returns_integer_one(self) -> None:
         invalid = self._write_invalid_json()
 
         result, stdout, stderr = self._call_direct(["validate", str(invalid)])
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Invalid JSON", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
         self.assertEqual(self._files(), {"backtest.json", "invalid.json"})
 
-    def test_direct_invalid_schema_currently_raises_system_exit_one(self) -> None:
+    def test_direct_invalid_schema_returns_integer_one(self) -> None:
         invalid = self._write_invalid_schema()
 
         result, stdout, stderr = self._call_direct(["validate", str(invalid)])
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Unsupported schema_version", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
         self.assertEqual(self._files(), {"backtest.json", "invalid_schema.json"})
 
-    def test_direct_existing_output_without_overwrite_currently_raises_system_exit_one(
+    def test_direct_existing_output_without_overwrite_returns_integer_one(
         self,
     ) -> None:
         output = self.root / "existing.json"
@@ -278,8 +275,7 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
             ]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Use --overwrite", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
@@ -309,7 +305,7 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
             "2330",
         )
 
-    def test_direct_output_directory_currently_raises_system_exit_one(self) -> None:
+    def test_direct_output_directory_returns_integer_one(self) -> None:
         output_directory = self.root / "output-directory"
         output_directory.mkdir()
 
@@ -322,14 +318,13 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
             ]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Use --overwrite", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
         self.assertEqual(self._files(), {"backtest.json"})
 
-    def test_direct_converter_failure_currently_raises_system_exit_one(self) -> None:
+    def test_direct_converter_failure_returns_integer_one(self) -> None:
         invalid = self._write_invalid_trade_artifact()
         output = self.root / "invalid-conversion.json"
 
@@ -342,8 +337,7 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
             ]
         )
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Missing required trade column", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(stdout, "")
@@ -352,8 +346,7 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
             {"backtest.json", "invalid_trades.json"},
         )
 
-    @unittest.expectedFailure
-    def test_direct_runtime_failure_future_contract_returns_integer_one(self) -> None:
+    def test_direct_runtime_failure_returns_integer_one(self) -> None:
         result, _, _ = self._call_direct(
             ["validate", str(self.root / "missing.json")]
         )
@@ -471,33 +464,31 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
         )
         self.assertEqual(self._files(), {"backtest.json", "unified-converted.json"})
 
-    def test_unified_function_missing_input_currently_raises_system_exit_one_and_restores_argv(
+    def test_unified_function_missing_input_returns_integer_one_and_restores_argv(
         self,
     ) -> None:
         original_argv = sys.argv[:]
 
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            with self.assertRaises(SystemExit) as raised:
-                twstock_cli.main(
-                    [
-                        "backtest-artifact",
-                        "validate",
-                        str(self.root / "missing.json"),
-                    ]
-                )
+            result = twstock_cli.main(
+                [
+                    "backtest-artifact",
+                    "validate",
+                    str(self.root / "missing.json"),
+                ]
+            )
 
-        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertEqual(sys.argv, original_argv)
         self.assertEqual(self._files(), {"backtest.json"})
 
-    def test_unified_function_invalid_artifact_currently_raises_system_exit_one(self) -> None:
+    def test_unified_function_invalid_artifact_returns_integer_one(self) -> None:
         invalid = self._write_invalid_json()
 
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()) as stderr:
-            with self.assertRaises(SystemExit) as raised:
-                twstock_cli.main(["backtest-artifact", "validate", str(invalid)])
+            result = twstock_cli.main(["backtest-artifact", "validate", str(invalid)])
 
-        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Invalid JSON content", stderr.getvalue())
         self.assertEqual(self._files(), {"backtest.json", "invalid.json"})
 
@@ -547,8 +538,7 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
         )
         self.assertEqual(sys.argv, original_argv)
 
-    @unittest.expectedFailure
-    def test_unified_function_runtime_failure_future_contract_returns_integer_one(self) -> None:
+    def test_unified_function_runtime_failure_returns_integer_one(self) -> None:
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             result = twstock_cli.main(
                 [
@@ -622,8 +612,7 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
             {"backtest.json", "unified-module-converted.json"},
         )
 
-    @unittest.expectedFailure
-    def test_package_guard_future_contract_uses_raise_system_exit(self) -> None:
+    def test_package_guard_propagates_integer_results(self) -> None:
         source = Path(backtest_artifact_cli.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
 
