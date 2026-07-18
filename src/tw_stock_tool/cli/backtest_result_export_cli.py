@@ -79,7 +79,7 @@ def _build_backtest_params(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int | None:
     try:
         args = _parse_args(argv)
 
@@ -126,13 +126,13 @@ def main(argv: list[str] | None = None) -> None:
 
     except FileExistsError as exc:
         print(f"error: {exc}. Use --overwrite to replace existing files.", file=sys.stderr)
-        sys.exit(1)
+        return 1
     except (FileNotFoundError, IsADirectoryError, PermissionError, ValueError, BacktestError, BacktestResultSerializationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
-        sys.exit(1)
+        return 1
     except Exception as exc:
         print(f"error: Unexpected error: {exc}", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

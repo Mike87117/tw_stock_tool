@@ -173,14 +173,13 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         
         err = StringIO()
         with redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
-                main([
+            result = main([
                     "--stock", "2330", 
                     "--strategy", "ma_cross", 
                     "--output-json", "test.json"
                 ])
                 
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("error:", err.getvalue())
         self.assertIn("Use --overwrite", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
@@ -190,14 +189,13 @@ class TestBacktestResultExportCLI(unittest.TestCase):
     def test_unknown_strategy_exits_cleanly(self, mock_analyze):
         err = StringIO()
         with redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
-                main([
+            result = main([
                     "--stock", "2330", 
                     "--strategy", "invalid_strategy_xyz123", 
                     "--output-json", "test.json"
                 ])
                 
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
         mock_analyze.assert_not_called()
@@ -215,14 +213,13 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         
         err = StringIO()
         with redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
-                main([
+            result = main([
                     "--stock", "2330", 
                     "--strategy", "ma_cross", 
                     "--output-json", "test.json"
                 ])
                 
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
 
@@ -248,14 +245,13 @@ class TestBacktestResultExportCLI(unittest.TestCase):
         out = StringIO()
         err = StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
-                main([
+            result = main([
                     "--stock", "2330", 
                     "--strategy", "ma_cross", 
                     "--output-json", "test.json"
                 ])
                 
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
         self.assertNotIn("BacktestResult artifact written", out.getvalue())

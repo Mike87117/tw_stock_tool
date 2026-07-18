@@ -293,12 +293,11 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
         self.assertIn("invalid float value", stderr)
         self.assertNotIn("Traceback", stdout + stderr)
 
-    def test_direct_unknown_strategy_is_system_exit_one_without_analysis(self) -> None:
+    def test_direct_unknown_strategy_returns_integer_one_without_analysis(self) -> None:
         with patch.object(export_cli, "analyze_stock") as analyze:
             result, stdout, stderr = self._direct(_args(self._path("unknown.json"), "not_a_strategy"))
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("Unknown strategy", stderr)
         self.assertEqual(stdout, "")
         self.assertNotIn("Traceback", stderr)
@@ -317,14 +316,13 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
                         with patch.object(export_cli, "load_backtest_result_json_file") as load:
                             returned, stdout, stderr = self._direct(_args(output))
 
-        self.assertIsInstance(returned, SystemExit)
-        self.assertEqual(returned.code, 1)
+        self.assertEqual(returned, 1)
         self.assertIn("Use --overwrite", stderr)
         self.assertEqual(stdout, "")
         self.assertNotIn("Traceback", stderr)
         load.assert_not_called()
 
-    def test_direct_known_runtime_failures_are_system_exit_one(self) -> None:
+    def test_direct_known_runtime_failures_return_integer_one(self) -> None:
         failures = (
             ("FileNotFoundError", FileNotFoundError("missing file")),
             ("IsADirectoryError", IsADirectoryError("directory path")),
@@ -337,8 +335,7 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
             with self.subTest(name=name):
                 with patch.object(export_cli, "analyze_stock", side_effect=failure) as analyze:
                     result, stdout, stderr = self._direct(_args(self._path("failure.json")))
-                self.assertIsInstance(result, SystemExit)
-                self.assertEqual(result.code, 1)
+                self.assertEqual(result, 1)
                 self.assertIn(str(failure), stderr)
                 self.assertEqual(stdout, "")
                 self.assertNotIn("Traceback", stderr)
@@ -349,14 +346,12 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
         with patch.object(export_cli, "analyze_stock", side_effect=failure):
             result, stdout, stderr = self._direct(_args(self._path("unexpected.json")))
 
-        self.assertIsInstance(result, SystemExit)
-        self.assertEqual(result.code, 1)
+        self.assertEqual(result, 1)
         self.assertIn("error: Unexpected error:", stderr)
         self.assertEqual(stdout, "")
         self.assertNotIn("Traceback", stderr)
 
-    @unittest.expectedFailure
-    def test_future_direct_runtime_failure_returns_integer_one(self) -> None:
+    def test_direct_runtime_failure_returns_integer_one(self) -> None:
         with patch.object(export_cli, "analyze_stock", side_effect=FileNotFoundError("missing file")):
             result, _, _ = self._direct(_args(self._path("future.json")))
         self.assertEqual(result, 1)
@@ -449,30 +444,28 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
         self.assertEqual(captured, [["backtest_result_export_cli.py", *child_args]])
         self.assertEqual(sys.argv, original_argv)
 
-    def test_unified_function_known_runtime_failure_propagates_system_exit_one_and_restores_argv(self) -> None:
+    def test_unified_function_known_runtime_failure_returns_integer_one_and_restores_argv(self) -> None:
         original_argv = sys.argv[:]
 
-        def fake_main() -> None:
-            raise SystemExit(1)
+        def fake_main() -> int:
+            return 1
 
         with patch.object(export_cli, "main", side_effect=fake_main):
-            with self.assertRaises(SystemExit) as raised:
-                twstock_cli.main(["backtest-result-export", "--stock", "2330"])
+            result = twstock_cli.main(["backtest-result-export", "--stock", "2330"])
 
-        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertEqual(sys.argv, original_argv)
 
-    def test_unified_function_unexpected_runtime_failure_propagates_system_exit_one_and_restores_argv(self) -> None:
+    def test_unified_function_unexpected_runtime_failure_returns_integer_one_and_restores_argv(self) -> None:
         original_argv = sys.argv[:]
 
-        def fake_main() -> None:
-            raise SystemExit(1)
+        def fake_main() -> int:
+            return 1
 
         with patch.object(export_cli, "main", side_effect=fake_main):
-            with self.assertRaises(SystemExit) as raised:
-                twstock_cli.main(["backtest-result-export", "--stock", "2330", "--output-json", "out.json"])
+            result = twstock_cli.main(["backtest-result-export", "--stock", "2330", "--output-json", "out.json"])
 
-        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(result, 1)
         self.assertEqual(sys.argv, original_argv)
 
     def test_unified_function_child_parser_failure_remains_system_exit_two(self) -> None:
@@ -482,10 +475,9 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, 2)
         self.assertEqual(sys.argv, original_argv)
 
-    @unittest.expectedFailure
-    def test_future_unified_function_runtime_failure_returns_integer_one(self) -> None:
-        def fake_main() -> None:
-            raise SystemExit(1)
+    def test_unified_function_runtime_failure_returns_integer_one(self) -> None:
+        def fake_main() -> int:
+            return 1
 
         with patch.object(export_cli, "main", side_effect=fake_main):
             result = twstock_cli.main(["backtest-result-export", "--stock", "2330"])
@@ -565,14 +557,14 @@ class BacktestResultExportRuntimeExitCharacterizationTest(unittest.TestCase):
         self._assert_no_traceback(completed)
         self.assertFalse((REPOSITORY_ROOT / "backtest_result_export_cli.py").exists())
 
-    def test_package_guard_currently_calls_main_directly(self) -> None:
+    def test_package_guard_uses_raise_system_exit_main(self) -> None:
         source = Path(export_cli.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
         self.assertTrue(tree.body)
-        self.assertIn('if __name__ == "__main__":\n    main()', source)
+        self.assertIn('if __name__ == "__main__":\n    raise SystemExit(main())', source)
+        self.assertNotIn('if __name__ == "__main__":\n    main()', source)
 
-    @unittest.expectedFailure
-    def test_future_package_guard_uses_raise_system_exit_main(self) -> None:
+    def test_package_guard_contract_is_satisfied(self) -> None:
         source = Path(export_cli.__file__).read_text(encoding="utf-8")
         self.assertIn('if __name__ == "__main__":\n    raise SystemExit(main())', source)
 
