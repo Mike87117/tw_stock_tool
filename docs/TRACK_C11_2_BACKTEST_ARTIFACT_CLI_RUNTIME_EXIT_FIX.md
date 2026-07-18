@@ -1,4 +1,4 @@
-# Track C11.2 - Backtest Artifact CLI Runtime Exit Contract Fix
+# Track C11.2 — Backtest Artifact CLI Runtime Exit Contract Fix
 
 1. Executive outcome
 
@@ -92,11 +92,11 @@ No network, broker, market-data, strategy-execution, serializer, converter, unif
 
 22. Defect closure
 
-| Defect | Result |
-| --- | --- |
-| C11.1-DEFECT-01 | CLOSED - direct handled runtime failures return 1 |
-| C11.1-DEFECT-02 | CLOSED - unified function handled runtime failures return 1 |
-| C11.1-DEFECT-03 | CLOSED - package guard propagates integer results |
+| Defect | Pre-fix behavior | Post-fix behavior | Result |
+|---|---|---|---|
+| `C11.1-DEFECT-01` | Direct handled runtime failures raised `SystemExit(1)`. | Direct handled runtime failures print clean stderr and return integer `1`. | CLOSED |
+| `C11.1-DEFECT-02` | Unified-function handled runtime failures propagated `SystemExit(1)`. | The existing unified dispatcher receives and returns integer `1`. | CLOSED |
+| `C11.1-DEFECT-03` | The package guard called `main()` directly. | The package guard uses `raise SystemExit(main())`. | CLOSED |
 
 The C11.1 historical report was not modified.
 
@@ -124,23 +124,35 @@ py -m unittest discover -s tests: 1683 tests in 99.420s, OK.
 
 28. Diff checks
 
-The final validation includes git diff --check, git diff --stat, and git diff --name-only. The changed-file list is exactly the four approved paths and the diff has no whitespace errors.
+PASS — `git diff --check` completed after all implementation and report content was finalized and found no whitespace errors.
+
+`git diff --stat` and `git diff --name-only` confirmed that only the four approved C11.2 paths changed.
 
 29. BOM checks
 
-Each changed or added text file is checked bytewise for UTF-8 BOM bytes EF BB BF. The deterministic check reports no BOM in any of the four approved paths.
+PASS — deterministic byte-level checks confirmed that all four changed or added text files are UTF-8 without BOM.
 
 30. Scope proof
 
-No unapproved path is staged or present as an untracked file. The historical C11.1 report remains byte-for-byte outside this change, and no main branch or C12 work is included.
+PASS — the C11.2 implementation commit contains exactly the four approved paths. No unapproved tracked or untracked path was included.
+
+The historical C11.1 report was not modified. No main-branch or C12 work was included.
 
 31. Working tree
 
-The working tree is expected to be clean after commit and push. The final status and untracked-file checks are part of the required handoff validation.
+PASS — after the C11.2 implementation commit and push, the working tree was clean.
 
 32. Commit and push
 
-One intentional commit will be created with message: Fix backtest artifact CLI runtime exits. It will be pushed only to origin/track-c11-2-backtest-artifact-cli-runtime-exit-fix.
+The C11.2 implementation commit was created successfully:
+
+`89f95e76f8c2f5232b40e7def3d4f3897ea13ac3` — `Fix backtest artifact CLI runtime exits`
+
+The commit was pushed successfully to:
+
+`origin/track-c11-2-backtest-artifact-cli-runtime-exit-fix`
+
+The local and remote C11.2 branches were aligned after the push.
 
 33. Merge disposition
 
