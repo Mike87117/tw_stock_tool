@@ -22,32 +22,6 @@
     "root_executable_wrapper_surfaces": 24,
     "complete_executable_surface_count": 53,
     "inventory_record_count": 70,
-    "classification_totals": {
-      "FALSE_SUCCESS_RUNTIME": 7,
-      "COMPLIANT_RETURN_CONTRACT": 13,
-      "RAISE_SYSTEM_EXIT_RUNTIME": 5,
-      "DIRECT_SYS_EXIT_RUNTIME": 1,
-      "PROCESS_ONLY_REVIEW_REQUIRED": 2,
-      "NO_RUNTIME_ERROR_BOUNDARY": 1
-    },
-    "severity_totals": {
-      "CRITICAL": 7,
-      "NONE": 13,
-      "HIGH": 6,
-      "MEDIUM": 3
-    },
-    "compatibility_risk_totals": {
-      "MEDIUM_COMPATIBILITY_RISK": 7,
-      "HIGH_COMPATIBILITY_RISK": 9,
-      "LOW_COMPATIBILITY_RISK": 13
-    },
-    "future_batch_totals": {
-      "BATCH_B_FALSE_SUCCESS_FIXES": 7,
-      "NO_FIX_REQUIRED": 13,
-      "BATCH_A_RETURN_CODE_NORMALIZATION": 6,
-      "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE": 2,
-      "DEFER_PENDING_DESIGN": 1
-    },
     "direct_production_caller_sites": 54,
     "direct_test_main_call_sites": 221,
     "test_caller_modules": 27,
@@ -56,7 +30,7 @@
     "file_writing_canonical_surfaces": 22,
     "destructive_canonical_surfaces": 12,
     "pony_tail": {
-      "mode": "@ponytail-audit read-only whole-tree",
+      "mode": "@ponytail full + @ponytail-audit read-only whole-tree",
       "standalone_command_available": false,
       "probe": "Get-Command ponytail*",
       "safe_lines_possible": 0,
@@ -77,1347 +51,125 @@
       "python_full_suite": "PASS: 1713",
       "git_diff_check": "PASS",
       "utf8_bom": "PASS",
-      "changed_scope": "PASS: exactly two approved files"
+      "changed_scope": "PASS: exactly two approved files",
+      "wrapper_linkage_consistency": "PASS",
+      "scoped_total_consistency": "PASS",
+      "documentation_consistency": "PASS",
+      "full_suite_policy": "historical PASS retained; not rerun because no production/test diff appeared"
     },
-    "non_cli_guard_policy": "102 test files with unittest.main guards are explicitly represented as NOT_APPLICABLE in non_cli_surfaces."
+    "non_cli_guard_policy": "102 test files with unittest.main guards are explicitly represented as NOT_APPLICABLE in non_cli_surfaces.",
+    "canonical_classification_totals": {
+      "COMPLIANT_RETURN_CONTRACT": 13,
+      "DIRECT_SYS_EXIT_RUNTIME": 1,
+      "RAISE_SYSTEM_EXIT_RUNTIME": 5,
+      "FALSE_SUCCESS_RUNTIME": 7,
+      "GUARD_ONLY_MISMATCH": 0,
+      "PROCESS_ONLY_REVIEW_REQUIRED": 2,
+      "NO_RUNTIME_ERROR_BOUNDARY": 1,
+      "ARGPARSE_ONLY": 0,
+      "DELEGATING_WRAPPER": 0,
+      "NOT_APPLICABLE": 0
+    },
+    "executable_surface_classification_totals": {
+      "COMPLIANT_RETURN_CONTRACT": 13,
+      "DIRECT_SYS_EXIT_RUNTIME": 1,
+      "RAISE_SYSTEM_EXIT_RUNTIME": 5,
+      "FALSE_SUCCESS_RUNTIME": 7,
+      "GUARD_ONLY_MISMATCH": 0,
+      "PROCESS_ONLY_REVIEW_REQUIRED": 2,
+      "NO_RUNTIME_ERROR_BOUNDARY": 1,
+      "ARGPARSE_ONLY": 0,
+      "DELEGATING_WRAPPER": 24,
+      "NOT_APPLICABLE": 0
+    },
+    "inventory_record_classification_totals": {
+      "COMPLIANT_RETURN_CONTRACT": 13,
+      "DIRECT_SYS_EXIT_RUNTIME": 1,
+      "RAISE_SYSTEM_EXIT_RUNTIME": 5,
+      "FALSE_SUCCESS_RUNTIME": 7,
+      "GUARD_ONLY_MISMATCH": 0,
+      "PROCESS_ONLY_REVIEW_REQUIRED": 2,
+      "NO_RUNTIME_ERROR_BOUNDARY": 1,
+      "ARGPARSE_ONLY": 0,
+      "DELEGATING_WRAPPER": 41,
+      "NOT_APPLICABLE": 0
+    },
+    "canonical_severity_totals": {
+      "CRITICAL": 7,
+      "HIGH": 6,
+      "MEDIUM": 3,
+      "LOW": 0,
+      "NONE": 13
+    },
+    "executable_surface_severity_totals": {
+      "CRITICAL": 11,
+      "HIGH": 6,
+      "MEDIUM": 6,
+      "LOW": 0,
+      "NONE": 30
+    },
+    "inventory_record_severity_totals": {
+      "CRITICAL": 11,
+      "HIGH": 6,
+      "MEDIUM": 6,
+      "LOW": 0,
+      "NONE": 47
+    },
+    "canonical_compatibility_risk_totals": {
+      "HIGH_COMPATIBILITY_RISK": 9,
+      "MEDIUM_COMPATIBILITY_RISK": 7,
+      "LOW_COMPATIBILITY_RISK": 13
+    },
+    "executable_surface_compatibility_risk_totals": {
+      "HIGH_COMPATIBILITY_RISK": 18,
+      "MEDIUM_COMPATIBILITY_RISK": 12,
+      "LOW_COMPATIBILITY_RISK": 23
+    },
+    "inventory_record_compatibility_risk_totals": {
+      "HIGH_COMPATIBILITY_RISK": 18,
+      "MEDIUM_COMPATIBILITY_RISK": 12,
+      "LOW_COMPATIBILITY_RISK": 40
+    },
+    "canonical_future_batch_totals": {
+      "BATCH_A_RETURN_CODE_NORMALIZATION": 6,
+      "BATCH_B_FALSE_SUCCESS_FIXES": 7,
+      "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE": 2,
+      "BATCH_D_WRAPPER_AND_GUARD_ALIGNMENT": 0,
+      "DEFER_PENDING_DESIGN": 1,
+      "NO_FIX_REQUIRED": 13
+    },
+    "executable_surface_future_batch_totals": {
+      "BATCH_A_RETURN_CODE_NORMALIZATION": 12,
+      "BATCH_B_FALSE_SUCCESS_FIXES": 11,
+      "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE": 4,
+      "BATCH_D_WRAPPER_AND_GUARD_ALIGNMENT": 0,
+      "DEFER_PENDING_DESIGN": 2,
+      "NO_FIX_REQUIRED": 24
+    },
+    "inventory_record_future_batch_totals": {
+      "BATCH_A_RETURN_CODE_NORMALIZATION": 12,
+      "BATCH_B_FALSE_SUCCESS_FIXES": 11,
+      "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE": 4,
+      "BATCH_D_WRAPPER_AND_GUARD_ALIGNMENT": 0,
+      "DEFER_PENDING_DESIGN": 2,
+      "NO_FIX_REQUIRED": 41
+    },
+    "totals_invariants": {
+      "canonical_classification_sum": 29,
+      "executable_surface_classification_sum": 53,
+      "inventory_record_classification_sum": 70,
+      "canonical_severity_sum": 29,
+      "executable_surface_severity_sum": 53,
+      "inventory_record_severity_sum": 70,
+      "canonical_compatibility_risk_sum": 29,
+      "executable_surface_compatibility_risk_sum": 53,
+      "inventory_record_compatibility_risk_sum": 70,
+      "canonical_future_batch_sum": 29,
+      "executable_surface_future_batch_sum": 53,
+      "inventory_record_future_batch_sum": 70
+    }
   },
   "entrypoints": [
-    {
-      "id": "WRAP-001",
-      "path": "ai_prediction_report.py",
-      "module": "tw_stock_tool.reports.ai_prediction_report",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "ai_prediction_report.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.reports.ai_prediction_report.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Not routed.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": true,
-      "production_callers": [
-        "ai_prediction_report.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "ai_prediction_report.py: root compatibility wrapper",
-        "targets: tw_stock_tool.reports.ai_prediction_report",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-002",
-      "path": "ai_stock_scanner.py",
-      "module": "tw_stock_tool.ml.ai_stock_scanner",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "ai-scan"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "ai_stock_scanner.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.ml.ai_stock_scanner.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": true,
-      "production_callers": [
-        "ai_stock_scanner.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "ai_stock_scanner.py: root compatibility wrapper",
-        "targets: tw_stock_tool.ml.ai_stock_scanner",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-003",
-      "path": "ai_walk_forward.py",
-      "module": "tw_stock_tool.ml.ai_walk_forward",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "ai_walk_forward.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int",
-      "success_callable_behavior": "Delegates to tw_stock_tool.ml.ai_walk_forward.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Not routed.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [
-        "ai_walk_forward.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "ai_walk_forward.py: root compatibility wrapper",
-        "targets: tw_stock_tool.ml.ai_walk_forward",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-004",
-      "path": "analysis.py",
-      "module": "tw_stock_tool.analysis.analysis",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "analysis.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "analysis.py: root compatibility wrapper",
-        "targets: tw_stock_tool.analysis.analysis",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-005",
-      "path": "app_services.py",
-      "module": "tw_stock_tool.gui.app_services",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "app_services.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "app_services.py: root compatibility wrapper",
-        "targets: tw_stock_tool.gui.app_services",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-006",
-      "path": "backtest.py",
-      "module": "tw_stock_tool.backtesting.backtest",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "backtest.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "backtest.py: root compatibility wrapper",
-        "targets: tw_stock_tool.backtesting.backtest",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-007",
-      "path": "backtest_report.py",
-      "module": "tw_stock_tool.cli.backtest_report",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "backtest-report"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "backtest_report.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.backtest_report.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": main()",
-      "package_process_behavior": "main()",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "backtest_report.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "backtest_report.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.backtest_report",
-        "guard: if __name__ == \"__main__\": main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-008",
-      "path": "baseline_ml_model.py",
-      "module": "tw_stock_tool.ml.baseline_ml_model",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "baseline_ml_model.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": true,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "baseline_ml_model.py: root compatibility wrapper",
-        "targets: tw_stock_tool.ml.baseline_ml_model",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-009",
-      "path": "benchmark.py",
-      "module": "tw_stock_tool.cli.benchmark",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "benchmark"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "benchmark.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int | None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.benchmark.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "benchmark.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "benchmark.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.benchmark",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-010",
-      "path": "cache_manager.py",
-      "module": "tw_stock_tool.data.cache_manager",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "cache"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "cache_manager.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int | None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.data.cache_manager.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": true,
-      "production_callers": [
-        "cache_manager.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "cache_manager.py: root compatibility wrapper",
-        "targets: tw_stock_tool.data.cache_manager",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-011",
-      "path": "cache_utils.py",
-      "module": "tw_stock_tool.data.cache_utils",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "cache_utils.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "cache_utils.py: root compatibility wrapper",
-        "targets: tw_stock_tool.data.cache_utils",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-012",
-      "path": "clean_stocks.py",
-      "module": "tw_stock_tool.cli.clean_stocks",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "stock-list clean"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "clean_stocks.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int | None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.clean_stocks.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": true,
-      "production_callers": [
-        "clean_stocks.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "clean_stocks.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.clean_stocks",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-013",
-      "path": "config.py",
-      "module": "tw_stock_tool.utils.config",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "config.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "config.py: root compatibility wrapper",
-        "targets: tw_stock_tool.utils.config",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-014",
-      "path": "console_lock.py",
-      "module": "tw_stock_tool.utils.console_lock",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "console_lock.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "console_lock.py: root compatibility wrapper",
-        "targets: tw_stock_tool.utils.console_lock",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-015",
-      "path": "daily_report.py",
-      "module": "tw_stock_tool.reports.daily_report",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "daily_report.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Delegates to tw_stock_tool.reports.daily_report.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [
-        "daily_report.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "daily_report.py: root compatibility wrapper",
-        "targets: tw_stock_tool.reports.daily_report",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-016",
-      "path": "daily_watchlist.py",
-      "module": "tw_stock_tool.cli.daily_watchlist",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "daily_watchlist.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.daily_watchlist.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Not routed.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": true,
-      "production_callers": [
-        "daily_watchlist.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "daily_watchlist.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.daily_watchlist",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-017",
-      "path": "data_loader.py",
-      "module": "tw_stock_tool.data.data_loader",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "data_loader.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "data_loader.py: root compatibility wrapper",
-        "targets: tw_stock_tool.data.data_loader",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-018",
-      "path": "doctor.py",
-      "module": "tw_stock_tool.utils.doctor",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "doctor"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "doctor.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.utils.doctor.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "doctor.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "doctor.py: root compatibility wrapper",
-        "targets: tw_stock_tool.utils.doctor",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-019",
-      "path": "gui_app.py",
-      "module": "tw_stock_tool.gui.gui_app",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "gui_app.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.gui.gui_app.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Not routed.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": true,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": true,
-      "production_callers": [
-        "gui_app.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "gui_app.py: root compatibility wrapper",
-        "targets: tw_stock_tool.gui.gui_app",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-020",
-      "path": "gui_result_formatter.py",
-      "module": "tw_stock_tool.gui.gui_result_formatter",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "gui_result_formatter.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "gui_result_formatter.py: root compatibility wrapper",
-        "targets: tw_stock_tool.gui.gui_result_formatter",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-021",
-      "path": "gui_tasks.py",
-      "module": "tw_stock_tool.gui.gui_tasks",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "gui_tasks.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "gui_tasks.py: root compatibility wrapper",
-        "targets: tw_stock_tool.gui.gui_tasks",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-022",
-      "path": "indicators.py",
-      "module": "tw_stock_tool.analysis.indicators",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "indicators.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "indicators.py: root compatibility wrapper",
-        "targets: tw_stock_tool.analysis.indicators",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-023",
-      "path": "main.py",
-      "module": "tw_stock_tool.cli.main",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "analyze"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "main.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.main.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": true,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "main.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "main.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.main",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-024",
-      "path": "ml_dataset.py",
-      "module": "tw_stock_tool.ml.ml_dataset",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "ml_dataset.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.ml.ml_dataset.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Not routed.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": true,
-      "production_callers": [
-        "ml_dataset.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "ml_dataset.py: root compatibility wrapper",
-        "targets: tw_stock_tool.ml.ml_dataset",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-025",
-      "path": "parameter_sweep.py",
-      "module": "tw_stock_tool.cli.parameter_sweep_report",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "parameter-sweep"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "parameter_sweep.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.parameter_sweep_report.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": _impl.main()",
-      "package_process_behavior": "_impl.main()",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "parameter_sweep.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "parameter_sweep.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.parameter_sweep_report",
-        "guard: if __name__ == \"__main__\": _impl.main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-026",
-      "path": "parameter_sweep_report.py",
-      "module": "tw_stock_tool.cli.parameter_sweep_report",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "parameter-sweep"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "parameter_sweep_report.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.parameter_sweep_report.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": main()",
-      "package_process_behavior": "main()",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "parameter_sweep_report.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "parameter_sweep_report.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.parameter_sweep_report",
-        "guard: if __name__ == \"__main__\": main()"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-027",
-      "path": "plotter.py",
-      "module": "tw_stock_tool.reports.plotter",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "plotter.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "plotter.py: root compatibility wrapper",
-        "targets: tw_stock_tool.reports.plotter",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-028",
-      "path": "price_data_smoke_check.py",
-      "module": "tw_stock_tool.cli.price_data_smoke_check",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "price-smoke-check"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "price_data_smoke_check.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int | None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.price_data_smoke_check.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [
-        "price_data_smoke_check.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "price_data_smoke_check.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.price_data_smoke_check",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-029",
-      "path": "report.py",
-      "module": "tw_stock_tool.reports.report",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "report.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "report.py: root compatibility wrapper",
-        "targets: tw_stock_tool.reports.report",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-030",
-      "path": "scan_stocks.py",
-      "module": "tw_stock_tool.cli.scan_stocks",
-      "surface_type": "root_wrapper",
-      "route_names": [
-        "scan"
-      ],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "scan_stocks.py"
-      ],
-      "main_signature": "delegated main()",
-      "accepts_argv": false,
-      "return_annotation": "int | None",
-      "success_callable_behavior": "Delegates to tw_stock_tool.cli.scan_stocks.main().",
-      "handled_runtime_behavior": "Inherited from delegated target.",
-      "unexpected_runtime_behavior": "Inherited from delegated target.",
-      "argparse_help_behavior": "Inherited from delegated target.",
-      "argparse_usage_behavior": "Inherited from delegated target.",
-      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
-      "package_process_behavior": "raise SystemExit(_impl.main())",
-      "unified_dispatch": "Indirect through target.",
-      "error_stream": "Inherited from delegated target.",
-      "interactive": false,
-      "live_network": true,
-      "writes_files": true,
-      "destructive_capability": false,
-      "production_callers": [
-        "scan_stocks.py: guard"
-      ],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "scan_stocks.py: root compatibility wrapper",
-        "targets: tw_stock_tool.cli.scan_stocks",
-        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-031",
-      "path": "scanner.py",
-      "module": "tw_stock_tool.analysis.scanner",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "scanner.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "scanner.py: root compatibility wrapper",
-        "targets: tw_stock_tool.analysis.scanner",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
-    {
-      "id": "WRAP-032",
-      "path": "signals.py",
-      "module": "tw_stock_tool.analysis.signals",
-      "surface_type": "root_wrapper",
-      "route_names": [],
-      "console_scripts": [],
-      "root_wrapper_paths": [
-        "signals.py"
-      ],
-      "main_signature": null,
-      "accepts_argv": false,
-      "return_annotation": null,
-      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
-      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
-      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
-      "argparse_help_behavior": null,
-      "argparse_usage_behavior": null,
-      "package_guard": null,
-      "package_process_behavior": "No executable guard.",
-      "unified_dispatch": "Not routed.",
-      "error_stream": null,
-      "interactive": false,
-      "live_network": false,
-      "writes_files": false,
-      "destructive_capability": false,
-      "production_callers": [],
-      "test_callers": [],
-      "existing_test_modules": [],
-      "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
-      "evidence": [
-        "signals.py: root compatibility wrapper",
-        "targets: tw_stock_tool.analysis.signals",
-        "guard: none"
-      ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
-    },
     {
       "id": "CLI-001",
       "path": "src/tw_stock_tool/backtesting/parameter_sweep.py",
@@ -3060,6 +1812,1664 @@
       "notes": "Network/file-writing verifier has no callable exception-to-status boundary."
     },
     {
+      "id": "WRAP-001",
+      "path": "ai_prediction_report.py",
+      "module": "tw_stock_tool.reports.ai_prediction_report",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "ai_prediction_report.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.reports.ai_prediction_report.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Not routed.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": true,
+      "production_callers": [
+        "ai_prediction_report.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "CRITICAL",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES",
+      "evidence": [
+        "ai_prediction_report.py: root compatibility wrapper",
+        "targets: tw_stock_tool.reports.ai_prediction_report",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-027"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-002",
+      "path": "ai_stock_scanner.py",
+      "module": "tw_stock_tool.ml.ai_stock_scanner",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "ai-scan"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "ai_stock_scanner.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.ml.ai_stock_scanner.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": true,
+      "production_callers": [
+        "ai_stock_scanner.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "CRITICAL",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES",
+      "evidence": [
+        "ai_stock_scanner.py: root compatibility wrapper",
+        "targets: tw_stock_tool.ml.ai_stock_scanner",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-023"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-003",
+      "path": "ai_walk_forward.py",
+      "module": "tw_stock_tool.ml.ai_walk_forward",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "ai_walk_forward.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int",
+      "success_callable_behavior": "Delegates to tw_stock_tool.ml.ai_walk_forward.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Not routed.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [
+        "ai_walk_forward.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "ai_walk_forward.py: root compatibility wrapper",
+        "targets: tw_stock_tool.ml.ai_walk_forward",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-024"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-004",
+      "path": "analysis.py",
+      "module": "tw_stock_tool.analysis.analysis",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "analysis.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "analysis.py: root compatibility wrapper",
+        "targets: tw_stock_tool.analysis.analysis",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-005",
+      "path": "app_services.py",
+      "module": "tw_stock_tool.gui.app_services",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "app_services.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "app_services.py: root compatibility wrapper",
+        "targets: tw_stock_tool.gui.app_services",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-006",
+      "path": "backtest.py",
+      "module": "tw_stock_tool.backtesting.backtest",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "backtest.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "backtest.py: root compatibility wrapper",
+        "targets: tw_stock_tool.backtesting.backtest",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-007",
+      "path": "backtest_report.py",
+      "module": "tw_stock_tool.cli.backtest_report",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "backtest-report"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "backtest_report.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.backtest_report.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": main()",
+      "package_process_behavior": "main()",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "backtest_report.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION",
+      "evidence": [
+        "backtest_report.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.backtest_report",
+        "guard: if __name__ == \"__main__\": main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-005"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-008",
+      "path": "baseline_ml_model.py",
+      "module": "tw_stock_tool.ml.baseline_ml_model",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "baseline_ml_model.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": true,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "baseline_ml_model.py: root compatibility wrapper",
+        "targets: tw_stock_tool.ml.baseline_ml_model",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-025"
+      ],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-009",
+      "path": "benchmark.py",
+      "module": "tw_stock_tool.cli.benchmark",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "benchmark"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "benchmark.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int | None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.benchmark.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "benchmark.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "benchmark.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.benchmark",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-007"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-010",
+      "path": "cache_manager.py",
+      "module": "tw_stock_tool.data.cache_manager",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "cache"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "cache_manager.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int | None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.data.cache_manager.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": true,
+      "production_callers": [
+        "cache_manager.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "cache_manager.py: root compatibility wrapper",
+        "targets: tw_stock_tool.data.cache_manager",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-020"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-011",
+      "path": "cache_utils.py",
+      "module": "tw_stock_tool.data.cache_utils",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "cache_utils.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "cache_utils.py: root compatibility wrapper",
+        "targets: tw_stock_tool.data.cache_utils",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-012",
+      "path": "clean_stocks.py",
+      "module": "tw_stock_tool.cli.clean_stocks",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "stock-list clean"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "clean_stocks.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int | None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.clean_stocks.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": true,
+      "production_callers": [
+        "clean_stocks.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "clean_stocks.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.clean_stocks",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-008"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-013",
+      "path": "config.py",
+      "module": "tw_stock_tool.utils.config",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "config.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "config.py: root compatibility wrapper",
+        "targets: tw_stock_tool.utils.config",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-014",
+      "path": "console_lock.py",
+      "module": "tw_stock_tool.utils.console_lock",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "console_lock.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "console_lock.py: root compatibility wrapper",
+        "targets: tw_stock_tool.utils.console_lock",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-015",
+      "path": "daily_report.py",
+      "module": "tw_stock_tool.reports.daily_report",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "daily_report.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Delegates to tw_stock_tool.reports.daily_report.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [
+        "daily_report.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "daily_report.py: root compatibility wrapper",
+        "targets: tw_stock_tool.reports.daily_report",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper delegates to a non-canonical package module; its callable contract is outside this CLI inventory.",
+      "compatibility_coupling": "No canonical CLI target is available for batch coupling in this audit.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-016",
+      "path": "daily_watchlist.py",
+      "module": "tw_stock_tool.cli.daily_watchlist",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "daily_watchlist.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.daily_watchlist.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Not routed.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": true,
+      "production_callers": [
+        "daily_watchlist.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "MEDIUM",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE",
+      "evidence": [
+        "daily_watchlist.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.daily_watchlist",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-010"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "PROCESS_ONLY_REVIEW_REQUIRED",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper invokes the live/interactive target at a process boundary; status behavior remains process-only and is not normalized here.",
+      "compatibility_coupling": "Live/interactive process behavior remains coupled to the delegated target and its isolated future batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-017",
+      "path": "data_loader.py",
+      "module": "tw_stock_tool.data.data_loader",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "data_loader.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "data_loader.py: root compatibility wrapper",
+        "targets: tw_stock_tool.data.data_loader",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-018",
+      "path": "doctor.py",
+      "module": "tw_stock_tool.utils.doctor",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "doctor"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "doctor.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.utils.doctor.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "doctor.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION",
+      "evidence": [
+        "doctor.py: root compatibility wrapper",
+        "targets: tw_stock_tool.utils.doctor",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-028"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-019",
+      "path": "gui_app.py",
+      "module": "tw_stock_tool.gui.gui_app",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "gui_app.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.gui.gui_app.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Not routed.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": true,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": true,
+      "production_callers": [
+        "gui_app.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "MEDIUM",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE",
+      "evidence": [
+        "gui_app.py: root compatibility wrapper",
+        "targets: tw_stock_tool.gui.gui_app",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-022"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "PROCESS_ONLY_REVIEW_REQUIRED",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper invokes the live/interactive target at a process boundary; status behavior remains process-only and is not normalized here.",
+      "compatibility_coupling": "Live/interactive process behavior remains coupled to the delegated target and its isolated future batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-020",
+      "path": "gui_result_formatter.py",
+      "module": "tw_stock_tool.gui.gui_result_formatter",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "gui_result_formatter.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "gui_result_formatter.py: root compatibility wrapper",
+        "targets: tw_stock_tool.gui.gui_result_formatter",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-021",
+      "path": "gui_tasks.py",
+      "module": "tw_stock_tool.gui.gui_tasks",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "gui_tasks.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "gui_tasks.py: root compatibility wrapper",
+        "targets: tw_stock_tool.gui.gui_tasks",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-022",
+      "path": "indicators.py",
+      "module": "tw_stock_tool.analysis.indicators",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "indicators.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "indicators.py: root compatibility wrapper",
+        "targets: tw_stock_tool.analysis.indicators",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-023",
+      "path": "main.py",
+      "module": "tw_stock_tool.cli.main",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "analyze"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "main.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.main.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": true,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "main.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "main.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.main",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-011"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-024",
+      "path": "ml_dataset.py",
+      "module": "tw_stock_tool.ml.ml_dataset",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "ml_dataset.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.ml.ml_dataset.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Not routed.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": true,
+      "production_callers": [
+        "ml_dataset.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "CRITICAL",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES",
+      "evidence": [
+        "ml_dataset.py: root compatibility wrapper",
+        "targets: tw_stock_tool.ml.ml_dataset",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-026"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-025",
+      "path": "parameter_sweep.py",
+      "module": "tw_stock_tool.cli.parameter_sweep_report",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "parameter-sweep"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "parameter_sweep.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.parameter_sweep_report.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": _impl.main()",
+      "package_process_behavior": "_impl.main()",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "parameter_sweep.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION",
+      "evidence": [
+        "parameter_sweep.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.parameter_sweep_report",
+        "guard: if __name__ == \"__main__\": _impl.main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-012"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-026",
+      "path": "parameter_sweep_report.py",
+      "module": "tw_stock_tool.cli.parameter_sweep_report",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "parameter-sweep"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "parameter_sweep_report.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.parameter_sweep_report.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": main()",
+      "package_process_behavior": "main()",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "parameter_sweep_report.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION",
+      "evidence": [
+        "parameter_sweep_report.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.parameter_sweep_report",
+        "guard: if __name__ == \"__main__\": main()"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-012"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-027",
+      "path": "plotter.py",
+      "module": "tw_stock_tool.reports.plotter",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "plotter.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "plotter.py: root compatibility wrapper",
+        "targets: tw_stock_tool.reports.plotter",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-028",
+      "path": "price_data_smoke_check.py",
+      "module": "tw_stock_tool.cli.price_data_smoke_check",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "price-smoke-check"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "price_data_smoke_check.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int | None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.price_data_smoke_check.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [
+        "price_data_smoke_check.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "price_data_smoke_check.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.price_data_smoke_check",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-013"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-029",
+      "path": "report.py",
+      "module": "tw_stock_tool.reports.report",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "report.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "report.py: root compatibility wrapper",
+        "targets: tw_stock_tool.reports.report",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-030",
+      "path": "scan_stocks.py",
+      "module": "tw_stock_tool.cli.scan_stocks",
+      "surface_type": "root_wrapper",
+      "route_names": [
+        "scan"
+      ],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "scan_stocks.py"
+      ],
+      "main_signature": "delegated main()",
+      "accepts_argv": false,
+      "return_annotation": "int | None",
+      "success_callable_behavior": "Delegates to tw_stock_tool.cli.scan_stocks.main().",
+      "handled_runtime_behavior": "Inherited from delegated target.",
+      "unexpected_runtime_behavior": "Inherited from delegated target.",
+      "argparse_help_behavior": "Inherited from delegated target.",
+      "argparse_usage_behavior": "Inherited from delegated target.",
+      "package_guard": "if __name__ == \"__main__\": raise SystemExit(_impl.main())",
+      "package_process_behavior": "raise SystemExit(_impl.main())",
+      "unified_dispatch": "Indirect through target.",
+      "error_stream": "Inherited from delegated target.",
+      "interactive": false,
+      "live_network": true,
+      "writes_files": true,
+      "destructive_capability": false,
+      "production_callers": [
+        "scan_stocks.py: guard"
+      ],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "scan_stocks.py: root compatibility wrapper",
+        "targets: tw_stock_tool.cli.scan_stocks",
+        "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-014"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
+    },
+    {
+      "id": "WRAP-031",
+      "path": "scanner.py",
+      "module": "tw_stock_tool.analysis.scanner",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "scanner.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "scanner.py: root compatibility wrapper",
+        "targets: tw_stock_tool.analysis.scanner",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
+      "id": "WRAP-032",
+      "path": "signals.py",
+      "module": "tw_stock_tool.analysis.signals",
+      "surface_type": "root_wrapper",
+      "route_names": [],
+      "console_scripts": [],
+      "root_wrapper_paths": [
+        "signals.py"
+      ],
+      "main_signature": null,
+      "accepts_argv": false,
+      "return_annotation": null,
+      "success_callable_behavior": "Import compatibility re-export; no executable guard.",
+      "handled_runtime_behavior": "Not applicable; import-only wrapper.",
+      "unexpected_runtime_behavior": "Not applicable; import-only wrapper.",
+      "argparse_help_behavior": null,
+      "argparse_usage_behavior": null,
+      "package_guard": null,
+      "package_process_behavior": "No executable guard.",
+      "unified_dispatch": "Not routed.",
+      "error_stream": null,
+      "interactive": false,
+      "live_network": false,
+      "writes_files": false,
+      "destructive_capability": false,
+      "production_callers": [],
+      "test_callers": [],
+      "existing_test_modules": [],
+      "primary_classification": "DELEGATING_WRAPPER",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED",
+      "evidence": [
+        "signals.py: root compatibility wrapper",
+        "targets: tw_stock_tool.analysis.signals",
+        "guard: none"
+      ],
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
+    },
+    {
       "id": "WRAP-033",
       "path": "stock_list_smoke_check.py",
       "module": "tw_stock_tool.cli.stock_list_smoke_check",
@@ -3094,14 +3504,25 @@
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
       "future_batch": "NO_FIX_REQUIRED",
       "evidence": [
         "stock_list_smoke_check.py: root compatibility wrapper",
         "targets: tw_stock_tool.cli.stock_list_smoke_check",
         "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-017"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     },
     {
       "id": "WRAP-034",
@@ -3138,14 +3559,25 @@
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
       "future_batch": "NO_FIX_REQUIRED",
       "evidence": [
         "stock_list_updater.py: root compatibility wrapper",
         "targets: tw_stock_tool.data.stock_list_updater",
         "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-021"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     },
     {
       "id": "WRAP-035",
@@ -3178,14 +3610,23 @@
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
       "future_batch": "NO_FIX_REQUIRED",
       "evidence": [
         "stock_selection.py: root compatibility wrapper",
         "targets: tw_stock_tool.analysis.stock_selection",
         "guard: none"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
     },
     {
       "id": "WRAP-036",
@@ -3218,14 +3659,23 @@
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
       "future_batch": "NO_FIX_REQUIRED",
       "evidence": [
         "strategies.py: root compatibility wrapper",
         "targets: tw_stock_tool.backtesting.strategies",
         "guard: none"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty."
     },
     {
       "id": "WRAP-037",
@@ -3261,15 +3711,26 @@
       "test_callers": [],
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
+      "severity": "CRITICAL",
       "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES",
       "evidence": [
         "strategy_compare.py: root compatibility wrapper",
         "targets: tw_stock_tool.backtesting.strategy_compare",
         "guard: if __name__ == \"__main__\": _impl.main()"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-002"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     },
     {
       "id": "WRAP-038",
@@ -3304,14 +3765,25 @@
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
       "future_batch": "NO_FIX_REQUIRED",
       "evidence": [
         "twstock_cli.py: root compatibility wrapper",
         "targets: tw_stock_tool.cli.twstock_cli",
         "guard: if __name__ == \"__main__\": raise SystemExit(_impl.main())"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-018"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     },
     {
       "id": "WRAP-039",
@@ -3345,15 +3817,26 @@
       "test_callers": [],
       "existing_test_modules": [],
       "primary_classification": "DELEGATING_WRAPPER",
-      "severity": "NONE",
-      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
+      "severity": "MEDIUM",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "DEFER_PENDING_DESIGN",
       "evidence": [
         "verify_batch.py: root compatibility wrapper",
         "targets: tw_stock_tool.utils.verify_batch",
         "guard: if __name__ == \"__main__\": _impl.main()"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-029"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "NO_RUNTIME_ERROR_BOUNDARY",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper delegates to the target without a normalized callable error-status boundary.",
+      "compatibility_coupling": "Wrapper process behavior follows the target's current callable boundary.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     },
     {
       "id": "WRAP-040",
@@ -3391,13 +3874,24 @@
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
       "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION",
       "evidence": [
         "walk_forward.py: root compatibility wrapper",
         "targets: tw_stock_tool.cli.walk_forward_report",
         "guard: if __name__ == \"__main__\": _impl.main()"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-019"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     },
     {
       "id": "WRAP-041",
@@ -3435,13 +3929,24 @@
       "primary_classification": "DELEGATING_WRAPPER",
       "severity": "NONE",
       "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
-      "future_batch": "NO_FIX_REQUIRED",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION",
       "evidence": [
         "walk_forward_report.py: root compatibility wrapper",
         "targets: tw_stock_tool.cli.walk_forward_report",
         "guard: if __name__ == \"__main__\": main()"
       ],
-      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence."
+      "notes": "Historical root import/script compatibility boundary; external usage is not discoverable from repository evidence.",
+      "target_cli_ids": [
+        "CLI-019"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory."
     }
   ],
   "unified_routes": [
@@ -3672,7 +4177,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-027"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "CRITICAL",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES"
     },
     {
       "path": "ai_stock_scanner.py",
@@ -3686,7 +4205,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-023"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "CRITICAL",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES"
     },
     {
       "path": "ai_walk_forward.py",
@@ -3700,7 +4233,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-024"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "analysis.py",
@@ -3708,7 +4255,19 @@
         "tw_stock_tool.analysis.analysis"
       ],
       "execution_target": "tw_stock_tool.analysis.analysis",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "app_services.py",
@@ -3716,7 +4275,19 @@
         "tw_stock_tool.gui.app_services"
       ],
       "execution_target": "tw_stock_tool.gui.app_services",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "backtest.py",
@@ -3724,7 +4295,19 @@
         "tw_stock_tool.backtesting.backtest"
       ],
       "execution_target": "tw_stock_tool.backtesting.backtest",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "backtest_report.py",
@@ -3738,7 +4321,21 @@
         "body": [
           "main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-005"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION"
     },
     {
       "path": "baseline_ml_model.py",
@@ -3746,7 +4343,21 @@
         "tw_stock_tool.ml.baseline_ml_model"
       ],
       "execution_target": "tw_stock_tool.ml.baseline_ml_model",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [
+        "CLI-025"
+      ],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "benchmark.py",
@@ -3760,7 +4371,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-007"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "cache_manager.py",
@@ -3774,7 +4399,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-020"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "cache_utils.py",
@@ -3782,7 +4421,19 @@
         "tw_stock_tool.data.cache_utils"
       ],
       "execution_target": "tw_stock_tool.data.cache_utils",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "clean_stocks.py",
@@ -3796,7 +4447,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-008"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "config.py",
@@ -3804,7 +4469,19 @@
         "tw_stock_tool.utils.config"
       ],
       "execution_target": "tw_stock_tool.utils.config",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "console_lock.py",
@@ -3812,7 +4489,19 @@
         "tw_stock_tool.utils.console_lock"
       ],
       "execution_target": "tw_stock_tool.utils.console_lock",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "daily_report.py",
@@ -3826,7 +4515,19 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper delegates to a non-canonical package module; its callable contract is outside this CLI inventory.",
+      "compatibility_coupling": "No canonical CLI target is available for batch coupling in this audit.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "daily_watchlist.py",
@@ -3840,7 +4541,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-010"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "PROCESS_ONLY_REVIEW_REQUIRED",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper invokes the live/interactive target at a process boundary; status behavior remains process-only and is not normalized here.",
+      "compatibility_coupling": "Live/interactive process behavior remains coupled to the delegated target and its isolated future batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "MEDIUM",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE"
     },
     {
       "path": "data_loader.py",
@@ -3848,7 +4563,19 @@
         "tw_stock_tool.data.data_loader"
       ],
       "execution_target": "tw_stock_tool.data.data_loader",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "doctor.py",
@@ -3862,7 +4589,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-028"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION"
     },
     {
       "path": "gui_app.py",
@@ -3876,7 +4617,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-022"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "PROCESS_ONLY_REVIEW_REQUIRED",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper invokes the live/interactive target at a process boundary; status behavior remains process-only and is not normalized here.",
+      "compatibility_coupling": "Live/interactive process behavior remains coupled to the delegated target and its isolated future batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "MEDIUM",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_C_SPECIAL_PROCESS_LIVE_INTERACTIVE"
     },
     {
       "path": "gui_result_formatter.py",
@@ -3884,7 +4639,19 @@
         "tw_stock_tool.gui.gui_result_formatter"
       ],
       "execution_target": "tw_stock_tool.gui.gui_result_formatter",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "gui_tasks.py",
@@ -3892,7 +4659,19 @@
         "tw_stock_tool.gui.gui_tasks"
       ],
       "execution_target": "tw_stock_tool.gui.gui_tasks",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "indicators.py",
@@ -3900,7 +4679,19 @@
         "tw_stock_tool.analysis.indicators"
       ],
       "execution_target": "tw_stock_tool.analysis.indicators",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "main.py",
@@ -3914,7 +4705,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-011"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "ml_dataset.py",
@@ -3928,7 +4733,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-026"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "CRITICAL",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES"
     },
     {
       "path": "parameter_sweep.py",
@@ -3942,7 +4761,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-012"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION"
     },
     {
       "path": "parameter_sweep_report.py",
@@ -3956,7 +4789,21 @@
         "body": [
           "main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-012"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION"
     },
     {
       "path": "plotter.py",
@@ -3964,7 +4811,19 @@
         "tw_stock_tool.reports.plotter"
       ],
       "execution_target": "tw_stock_tool.reports.plotter",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "price_data_smoke_check.py",
@@ -3978,7 +4837,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-013"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "report.py",
@@ -3986,7 +4859,19 @@
         "tw_stock_tool.reports.report"
       ],
       "execution_target": "tw_stock_tool.reports.report",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "scan_stocks.py",
@@ -4000,7 +4885,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-014"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "scanner.py",
@@ -4008,7 +4907,19 @@
         "tw_stock_tool.analysis.scanner"
       ],
       "execution_target": "tw_stock_tool.analysis.scanner",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "signals.py",
@@ -4016,7 +4927,19 @@
         "tw_stock_tool.analysis.signals"
       ],
       "execution_target": "tw_stock_tool.analysis.signals",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "stock_list_smoke_check.py",
@@ -4030,7 +4953,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-017"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "stock_list_updater.py",
@@ -4044,7 +4981,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-021"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "stock_selection.py",
@@ -4052,7 +5003,19 @@
         "tw_stock_tool.analysis.stock_selection"
       ],
       "execution_target": "tw_stock_tool.analysis.stock_selection",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "strategies.py",
@@ -4060,7 +5023,19 @@
         "tw_stock_tool.backtesting.strategies"
       ],
       "execution_target": "tw_stock_tool.backtesting.strategies",
-      "guard": null
+      "guard": null,
+      "target_cli_ids": [],
+      "executable_wrapper": false,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": null,
+      "guard_form": "IMPORT_ONLY_NO_GUARD",
+      "effective_current_behavior": "Import-only compatibility wrapper; no process boundary is created.",
+      "compatibility_coupling": "Import compatibility only; no process status is created by this record.",
+      "target_resolution_note": "Target module is not a canonical CLI callable surface in this audit; target_cli_ids is intentionally empty.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "strategy_compare.py",
@@ -4074,7 +5049,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-002"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "FALSE_SUCCESS_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Direct target call currently permits handled target failure to exit with process status 0; the target result is not propagated.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "CRITICAL",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_B_FALSE_SUCCESS_FIXES"
     },
     {
       "path": "twstock_cli.py",
@@ -4088,7 +5077,21 @@
         "body": [
           "raise SystemExit(_impl.main())"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-018"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": true,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "COMPLIANT_RETURN_CONTRACT",
+      "guard_form": "RAISE_SYSTEM_EXIT_RETURN",
+      "effective_current_behavior": "Wrapper raises SystemExit with the target return value; process status propagates.",
+      "compatibility_coupling": "Return value is already propagated by the executable guard.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "LOW_COMPATIBILITY_RISK",
+      "future_batch": "NO_FIX_REQUIRED"
     },
     {
       "path": "verify_batch.py",
@@ -4102,7 +5105,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-029"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": false,
+      "delegated_target_classification": "NO_RUNTIME_ERROR_BOUNDARY",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Executable wrapper delegates to the target without a normalized callable error-status boundary.",
+      "compatibility_coupling": "Wrapper process behavior follows the target's current callable boundary.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "MEDIUM",
+      "compatibility_risk": "MEDIUM_COMPATIBILITY_RISK",
+      "future_batch": "DEFER_PENDING_DESIGN"
     },
     {
       "path": "walk_forward.py",
@@ -4116,7 +5133,21 @@
         "body": [
           "_impl.main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-019"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION"
     },
     {
       "path": "walk_forward_report.py",
@@ -4130,7 +5161,21 @@
         "body": [
           "main()"
         ]
-      }
+      },
+      "target_cli_ids": [
+        "CLI-019"
+      ],
+      "executable_wrapper": true,
+      "return_value_propagated": false,
+      "wrapper_alignment_required": true,
+      "delegated_target_classification": "RAISE_SYSTEM_EXIT_RUNTIME",
+      "guard_form": "DIRECT_CALL_DISCARDS_RETURN",
+      "effective_current_behavior": "Target currently raises SystemExit(1), so current failure status propagates; future integer return would be discarded by this direct guard.",
+      "compatibility_coupling": "Atomic target and executable-wrapper change required; target return-code normalization must update this guard in the same batch.",
+      "target_resolution_note": "Target CLI ID resolves to the canonical callable inventory.",
+      "severity": "NONE",
+      "compatibility_risk": "HIGH_COMPATIBILITY_RISK",
+      "future_batch": "BATCH_A_RETURN_CODE_NORMALIZATION"
     }
   ],
   "direct_callers": [
