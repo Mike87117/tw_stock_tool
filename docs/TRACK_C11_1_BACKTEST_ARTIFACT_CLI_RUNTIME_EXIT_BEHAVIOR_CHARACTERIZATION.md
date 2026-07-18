@@ -1,4 +1,4 @@
-# Track C11.1 ? Backtest Artifact CLI Runtime Exit Behavior Characterization
+# Track C11.1 — Backtest Artifact CLI Runtime Exit Behavior Characterization
 
 ## 1. Executive outcome
 Current callable, package-module, unified-function, and unified-module behavior was characterized offline without changing production code.
@@ -130,16 +130,22 @@ The required combined suite ran 109 tests: 106 ordinary passes, 3 expected failu
 Both `py -m unittest discover -s tests` and `python -m unittest discover -s tests` ran 1,683 tests: 1,680 ordinary passes, 3 expected failures, 0 skips, 0 failures, 0 errors.
 
 ## 34. `git diff --check` result
-Passed with no trailing-whitespace errors before report staging; it is rerun after adding this report.
+PASS — `git diff --check` completed after the report was finalized and found no whitespace errors.
 
 ## 35. UTF-8 BOM result
-The two new files are written as UTF-8 without BOM; final byte checks are rerun before commit.
+PASS — both added C11.1 files are UTF-8 without BOM.
 
 ## 36. Working-tree result
-Final validation must show only the two approved new files before commit and a clean tree after commit.
+PASS — after the C11.1 commit, the working tree was clean. Only the two approved C11.1 files were included in the characterization commit.
 
 ## 37. Branch disposition
-Branch `track-c11-1-backtest-artifact-cli-runtime-exit-characterization` is ready to commit and push for review; it must not be merged in this phase.
+The C11.1 characterization commit was created and pushed successfully. The local and remote branches were aligned after the push.
+
+Branch disposition: HOLD FOR REVIEW
+
+The tests-and-documentation-only C11.1 branch must not be merged by itself. It may be stacked beneath the separately approved C11.2 production fix.
+
+C11.2 was not started during C11.1.
 
 ## 38. Exact commands used
 Baseline: `git fetch origin`; `git checkout main`; `git rev-parse HEAD`; `git rev-parse main`; `git rev-parse origin/main`; `git status --short`; `git checkout -b track-c11-1-backtest-artifact-cli-runtime-exit-characterization`.
@@ -147,3 +153,7 @@ Baseline: `git fetch origin`; `git checkout main`; `git rev-parse HEAD`; `git re
 Validation: `py -m unittest tests.test_track_c11_1_backtest_artifact_cli_runtime_exit_behavior`; `py -m unittest tests.test_track_c11_1_backtest_artifact_cli_runtime_exit_behavior tests.test_backtest_artifact_cli tests.test_twstock_cli tests.test_root_wrappers tests.test_root_cli_wrapper_exit_codes`; `py -m unittest discover -s tests`; `python -m unittest discover -s tests`; `git diff --check`; `git status --short`; `git diff --name-only`; `git ls-files --others --exclude-standard`.
 
 No merge, rebase, squash, amend, force-push, pull request, C11.2, C12, or later track was started.
+
+Track C11.1 Characterization: PASS -- DECISION RECORDED
+Branch disposition: HOLD FOR REVIEW
+C11.2 was not started.
