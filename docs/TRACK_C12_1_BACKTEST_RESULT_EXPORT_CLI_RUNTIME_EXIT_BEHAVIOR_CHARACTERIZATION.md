@@ -201,15 +201,30 @@ Both new files were checked bytewise and are UTF-8 without BOM.
 
 41. Changed-file scope result
 
-`git diff --name-only` and staged scope checks contain only the two approved new files. No production, existing-test, configuration, root-wrapper, cache, bootstrap, or temporary helper file is included.
+PASS -- the C12.1 characterization commit contains exactly these two approved files:
+
+- `tests/test_track_c12_1_backtest_result_export_cli_runtime_exit_behavior.py`
+- `docs/TRACK_C12_1_BACKTEST_RESULT_EXPORT_CLI_RUNTIME_EXIT_BEHAVIOR_CHARACTERIZATION.md`
+
+No production, existing-test, configuration, root-wrapper, cache, bootstrap, JSON artifact, or temporary helper file was included.
 
 42. Working-tree result
 
-The working tree was clean before branch creation and remained limited to the two approved new files before commit. No persistent JSON artifact or temporary helper directory remains in the repository.
+PASS -- after the C12.1 characterization commit and push, the working tree was clean.
+
+No persistent JSON artifact, bytecode file, cache directory, subprocess bootstrap, or temporary helper directory remained in the repository.
 
 43. Commit and push result
 
-One intentional characterization commit was created with message `Characterize backtest result export CLI exits` and pushed to the C12.1 branch after all validation passed. The final commit SHA is reported in the handoff.
+The C12.1 characterization commit was created successfully:
+
+`b79ae05862e4232e2b366822384191a9125301c1` -- `Characterize backtest result export CLI exits`
+
+The commit was pushed successfully to:
+
+`origin/track-c12-1-backtest-result-export-cli-runtime-exit-characterization`
+
+The local and remote C12.1 branches were aligned after the push.
 
 44. Branch disposition
 
