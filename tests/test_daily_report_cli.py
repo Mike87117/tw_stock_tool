@@ -216,3 +216,60 @@ class TestDailyReportCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class DailyReportValidationCliTest(unittest.TestCase):
+    def test_validation_parser_defaults_and_invalid_values(self) -> None:
+        args = _parse_args([])
+        self.assertEqual(args.validate_top, 0)
+        self.assertEqual(args.validation_strategy, "ma_cross")
+        self.assertEqual(args.validation_initial_capital, 100000)
+        self.assertEqual(args.validation_position_size, 1.0)
+        for option in (
+            ["--validate-top", "-1"],
+            ["--validation-initial-capital", "0"],
+            ["--validation-fee-rate", "-0.1"],
+            ["--validation-tax-rate", "nan"],
+            ["--validation-position-size", "1.1"],
+            ["--validation-strategy", "invalid"],
+        ):
+            with self.assertRaises(SystemExit) as raised:
+                _parse_args(option)
+            self.assertEqual(raised.exception.code, 2)
+
+    @patch("tw_stock_tool.cli.daily_report_cli.run_candidate_backtest_validation")
+    @patch("tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown", return_value="# Report")
+    @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data", return_value={})
+    @patch("tw_stock_tool.cli.daily_report_cli.build_data_limitations_from_ranking", return_value=[])
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_report")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_enabled_validation_forwards_options_and_report_data(
+        self,
+        mock_open,
+        mock_mkdir,
+        mock_collect,
+        mock_run_daily,
+        mock_limitations,
+        mock_build,
+        mock_render,
+        mock_validate,
+    ) -> None:
+        mock_run_daily.return_value = (pd.DataFrame(), pd.DataFrame([{"Stock": "2330"}]), pd.DataFrame(), None)
+        highlights = pd.DataFrame([{"Status": "OK"}])
+        mock_validate.return_value = (highlights, ["validation limit"])
+        with patch.object(sys, "argv", [
+            "daily_report_cli.py", "--stocks", "2330", "--validate-top", "1",
+            "--validation-strategy", "score", "--validation-initial-capital", "200000",
+            "--validation-fee-rate", "0", "--validation-tax-rate", "0.001",
+            "--validation-position-size", "0.5",
+        ]):
+            result = main()
+
+        self.assertIsNone(result)
+        self.assertEqual(mock_validate.call_args.args[0]["Stock"].tolist(), ["2330"])
+        self.assertEqual(mock_validate.call_args.kwargs["strategy"], "score")
+        self.assertEqual(mock_validate.call_args.kwargs["initial_capital"], 200000.0)
+        self.assertEqual(mock_validate.call_args.kwargs["position_size"], 0.5)
+        self.assertEqual(mock_build.call_args.kwargs["backtest_highlights"].equals(highlights), True)
+        self.assertIn("validation limit", mock_build.call_args.kwargs["data_limitations"])
+        self.assertIn("next-bar Open execution assumptions", mock_build.call_args.kwargs["risk_notes"][0])
