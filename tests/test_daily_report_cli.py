@@ -4,6 +4,8 @@ import sys
 import pandas as pd
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 from tw_stock_tool.cli.daily_report_cli import _parse_args, main
 
 class TestDailyReportCli(unittest.TestCase):
@@ -199,23 +201,21 @@ class TestDailyReportCli(unittest.TestCase):
         mock_build_limitations.return_value = []
         mock_build.return_value = {}
         mock_render.return_value = "# Report"
-        
+
         mock_open.side_effect = PermissionError("locked")
 
         test_args = ["--stocks", "2330", "--output-md"]
         captured_output = StringIO()
-        
+
         with patch.object(sys, "argv", ["daily_report_cli.py"] + test_args):
             with patch("sys.stdout", captured_output):
                 result = main()
-                    
+
         self.assertEqual(result, 1)
         output_str = captured_output.getvalue()
         self.assertIn("Error:", output_str)
         self.assertIn("locked", output_str)
 
-if __name__ == "__main__":
-    unittest.main()
 class DailyReportValidationCliTest(unittest.TestCase):
     def test_validation_parser_defaults_and_invalid_values(self) -> None:
         args = _parse_args([])
@@ -273,3 +273,58 @@ class DailyReportValidationCliTest(unittest.TestCase):
         self.assertEqual(mock_build.call_args.kwargs["backtest_highlights"].equals(highlights), True)
         self.assertIn("validation limit", mock_build.call_args.kwargs["data_limitations"])
         self.assertIn("next-bar Open execution assumptions", mock_build.call_args.kwargs["risk_notes"][0])
+
+class DailyReportValidationCliStructureTest(unittest.TestCase):
+    def _run_main(self, argv, validation_result=None, scan_limits=None):
+        from io import StringIO
+
+        with patch.object(sys, "argv", ["daily_report_cli.py", *argv]), patch.object(
+            sys, "stdout", StringIO()
+        ) as stdout, patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"]), patch(
+            "tw_stock_tool.cli.daily_report_cli.run_daily_report",
+            return_value=(pd.DataFrame(), pd.DataFrame([{"Stock": "2330"}]), pd.DataFrame(), None),
+        ), patch(
+            "tw_stock_tool.cli.daily_report_cli.build_data_limitations_from_ranking",
+            return_value=scan_limits if scan_limits is not None else [],
+        ), patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data", return_value={}) as build, patch(
+            "tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown", return_value="# Report"
+        ), patch("tw_stock_tool.cli.daily_report_cli.run_candidate_backtest_validation") as validate, patch(
+            "tw_stock_tool.cli.daily_report_cli.Path.mkdir"
+        ), patch("builtins.open", new_callable=unittest.mock.mock_open):
+            if validation_result is not None:
+                validate.return_value = validation_result
+            result = main()
+        return result, build, validate, stdout.getvalue()
+
+    def test_default_path_is_scan_only_with_empty_highlights_and_no_validation_risk(self) -> None:
+        result, build, validate, _ = self._run_main(["--stocks", "2330"])
+        self.assertIsNone(result)
+        validate.assert_not_called()
+        self.assertEqual(build.call_args.kwargs["backtest_highlights"], [])
+        self.assertEqual(build.call_args.kwargs["risk_notes"], [])
+
+    def test_enabled_empty_validation_forwards_every_option_and_preserves_limits(self) -> None:
+        empty = pd.DataFrame(columns=["Status"])
+        result, build, validate, output = self._run_main(
+            [
+                "--stocks", "2330", "--validate-top", "4", "--validation-strategy", "score",
+                "--period", "2y", "--interval", "1wk", "--auto-adjust", "--force-refresh",
+                "--validation-initial-capital", "200000", "--validation-fee-rate", "0.001",
+                "--validation-tax-rate", "0.002", "--validation-position-size", "0.5",
+            ],
+            validation_result=(empty, ["validation limit"]),
+            scan_limits=["scan limit"],
+        )
+        self.assertIsNone(result)
+        self.assertEqual(validate.call_args.args[0]["Stock"].tolist(), ["2330"])
+        self.assertEqual(validate.call_args.kwargs, {
+            "validate_top": 4, "strategy": "score", "period": "2y", "interval": "1wk",
+            "auto_adjust": True, "force_refresh": True, "initial_capital": 200000.0,
+            "fee_rate": 0.001, "tax_rate": 0.002, "position_size": 0.5,
+        })
+        self.assertEqual(build.call_args.kwargs["backtest_highlights"].columns.tolist(), ["Status"])
+        self.assertEqual(build.call_args.kwargs["data_limitations"], ["scan limit", "validation limit"])
+        self.assertIn("selected 0, success 0, failed 0", output)
+        self.assertIn("next-bar Open execution assumptions", build.call_args.kwargs["risk_notes"][0])
+if __name__ == "__main__":
+    unittest.main()
