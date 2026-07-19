@@ -221,7 +221,7 @@ python twstock_cli.py daily --auto-stock-list --stock-limit 50 --output-md
 
 ### Auto Stock List 安全使用建議
 
-`--auto-stock-list` 會先從 TWSE / TPEx 官方公開資料更新股票清單，再進行掃描。  
+`--auto-stock-list` 會先從 TWSE / TPEx 官方公開資料更新股票清單，再進行掃描。
 第一次使用時，建議先用 `--stock-limit` 限制掃描數量，避免一次掃描全市場導致執行時間過長，或遇到 yfinance rate limit。
 
 ```bash
@@ -705,6 +705,27 @@ twstock daily --stocks 2330 2317 --validate-top 3 --validation-strategy ma_cross
 ```
 
 Supported strategies are `ma_cross`, `macd`, `rsi`, and `score`. The validation controls also include `--validation-initial-capital`, `--validation-fee-rate`, `--validation-tax-rate`, and `--validation-position-size`. This is historical, research-only validation using next-bar `Open` execution assumptions; it does not provide advice, live signals, broker access, or orders. A per-candidate failure remains visible in `Backtest Highlights` and `Data Limitations` while later candidates continue. Excel output remains unchanged and does not add a validation sheet.
+
+### Optional top-candidate walk-forward validation
+
+Phase 50.2 adds opt-in historical out-of-sample validation after successful Phase 50.1 backtests. It validates only the first `--walk-forward-top` successful backtest rows, preserves their displayed order, and supports `ma_cross`, `rsi`, and `score`; `macd` remains backtest-only. The default window settings are `--walk-forward-train-days 126`, `--walk-forward-test-days 63`, an omitted `--walk-forward-step-days` (effective step `63`), and `--walk-forward-sort-by "Train Sharpe Ratio"`. These window flags represent observations/rows in the current row-based engine.
+
+Use the existing validation financial assumptions; no separate walk-forward capital, fee, tax, or position-size flags are added:
+
+```powershell
+py twstock_cli.py daily `
+  --stocks 2330 2317 2454 `
+  --period 2y `
+  --top 3 `
+  --validate-top 3 `
+  --validation-strategy ma_cross `
+  --walk-forward-top 2 `
+  --walk-forward-train-days 126 `
+  --walk-forward-test-days 63 `
+  --output-md output/daily_report.md
+```
+
+Walk Forward Highlights are scalar summaries in the Markdown Daily Research Report only. Partial and full candidate/window failures appear in that section and Data Limitations; no raw window tables, trades, equity curves, recommendations, or new Excel sheets are added. Results are historical research estimates and do not predict future performance.
 `twstock daily` CLI 用於每天快速產生 Markdown 格式的綜合研究報告。該報告包含掃描結果摘要、篩選出的觀察候選清單（Watchlist Candidates）、風險提示與資料限制等資訊。
 
 這是一個純研究分析工具。產生的報告僅供研究用途，絕不構成任何投資建議、也不提供任何買賣建議。
@@ -2059,4 +2080,3 @@ pip install -e .
 
 自動下單是長期目標，不是目前功能；在任何真實下單前，必須完成 Backtest 標準化、Parameter Sweep、Walk Forward、Paper Trading、Risk Manager、Kill Switch 與 Trade Log。
 目前專案已完成研究用的 simulated paper trading artifact/export 邊界；尚未開始 live paper trading、Broker integration、半自動下單、自動下單或 AI 自動決策。
-

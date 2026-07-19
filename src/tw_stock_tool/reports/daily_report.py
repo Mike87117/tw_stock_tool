@@ -11,6 +11,7 @@ import pandas as pd
 from tw_stock_tool.analysis.analysis import analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest_result
 from tw_stock_tool.backtesting.strategies import STRATEGIES
+from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS, run_walk_forward
 
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD, OUTPUT_DIR
 from tw_stock_tool.analysis.scanner import ScanConfig, load_stock_ids_from_file, normalize_stock_ids, scan_stocks
@@ -345,7 +346,7 @@ def build_daily_report_data(
         candidates = summary_dict.get("Candidates", 0)
         buy_count = summary_dict.get("BUY Count", 0)
         watch_count = summary_dict.get("WATCH Count", 0)
-        
+
         highlights.append(f"Report generation summary: {scanned} symbols included.")
         highlights.append(f"Notable observations: {candidates} candidates met the criteria.")
         highlights.append(f"Strategy signal counts from existing computed metrics: {buy_count} BUY labels, {watch_count} WATCH labels.")
@@ -355,12 +356,12 @@ def build_daily_report_data(
 
     data_quality_notes = []
     data_quality_notes.append(f"Data quality summary: {len(universe_list)} symbols were included in the configured universe.")
-    
+
     if norm_screening:
         data_quality_notes.append(f"Screening summary rows available: {len(norm_screening)}.")
     else:
         data_quality_notes.append("No screening summary data was provided for this report.")
-        
+
     limitations_count = len(final_data_limitations)
     data_quality_notes.append(f"Data limitations recorded: {limitations_count} item(s).")
     data_quality_notes.append("Some symbols may be absent due to upstream data availability or scan errors.")
@@ -438,7 +439,7 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
 
     for heading, data_key, renderer_type in DAILY_REPORT_SECTION_ORDER:
         lines.append(f"## {heading}\n")
-        
+
         if renderer_type == "dict":
             lines.extend(_render_dict(report_data.get(data_key, {})))
         elif renderer_type == "list":
@@ -482,6 +483,177 @@ def _round_backtest_metric(value: Any) -> float | None:
         return round(number, 2)
     return None
 
+
+
+WALK_FORWARD_HIGHLIGHT_COLUMNS = [
+    "Rank", "Stock", "Signal", "Score", "Strategy", "Status",
+    "Train Days", "Test Days", "Step Days", "Windows", "Successful Windows",
+    "Error Windows", "Positive Test Windows", "Positive Test Windows %",
+    "Avg Test Total Return %", "Avg Test CAGR %", "Avg Test Sharpe Ratio",
+    "Avg Test Max Drawdown %", "Best Test Total Return %", "Best Test Sharpe Ratio",
+    "Error",
+]
+WALK_FORWARD_STRATEGIES = ("ma_cross", "rsi", "score")
+
+
+def _walk_forward_number(value: Any) -> float | None:
+    number = pd.to_numeric(value, errors="coerce")
+    if pd.isna(number):
+        return None
+    return round(float(number), 2)
+
+
+def _walk_forward_error(value: Any) -> str:
+    return " ".join(str(value).split())
+
+
+def run_candidate_walk_forward_validation(
+    backtest_highlights: pd.DataFrame,
+    *,
+    walk_forward_top: int,
+    strategy: str,
+    period: str,
+    interval: str,
+    auto_adjust: bool,
+    force_refresh: bool,
+    train_days: int,
+    test_days: int,
+    step_days: int | None,
+    sort_by: str,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
+    position_size: float,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Validate successful backtest candidates with scalar walk-forward summaries."""
+    if strategy not in WALK_FORWARD_STRATEGIES:
+        raise ValueError(
+            f"Unsupported walk-forward strategy: {strategy}. "
+            f"Choose from {', '.join(WALK_FORWARD_STRATEGIES)}."
+        )
+    if walk_forward_top < 0:
+        raise ValueError("walk_forward_top must be non-negative.")
+    if train_days <= 0 or test_days <= 0 or (step_days is not None and step_days <= 0):
+        raise ValueError("walk-forward window values must be greater than 0.")
+    if sort_by not in SORTABLE_COLUMNS:
+        raise ValueError(f"Unsupported walk-forward sort metric: {sort_by}")
+
+    empty = pd.DataFrame(columns=WALK_FORWARD_HIGHLIGHT_COLUMNS)
+    if walk_forward_top == 0:
+        return empty, []
+
+    if backtest_highlights.empty or "Status" not in backtest_highlights.columns:
+        return empty, [
+            "Walk-forward validation skipped: no successful backtest candidates were available."
+        ]
+    eligible = backtest_highlights[
+        backtest_highlights["Status"].astype(str).str.upper() == "OK"
+    ].head(walk_forward_top)
+    if eligible.empty:
+        return empty, [
+            "Walk-forward validation skipped: no successful backtest candidates were available."
+        ]
+
+    effective_step_days = test_days if step_days is None else step_days
+    rows: list[dict[str, Any]] = []
+    limitations: list[str] = []
+    for _, candidate in eligible.iterrows():
+        stock_id = str(candidate.get("Stock", ""))
+        metadata = {
+            "Rank": candidate.get("Rank"),
+            "Stock": candidate.get("Stock"),
+            "Signal": candidate.get("Signal"),
+            "Score": candidate.get("Score"),
+            "Strategy": strategy,
+            "Train Days": train_days,
+            "Test Days": test_days,
+            "Step Days": effective_step_days,
+        }
+        try:
+            detail = run_walk_forward(
+                stock_id=stock_id,
+                period=period,
+                strategy=strategy,
+                train_days=train_days,
+                test_days=test_days,
+                step_days=effective_step_days,
+                sort_by=sort_by,
+                force_refresh=force_refresh,
+                position_size=position_size,
+                initial_capital=initial_capital,
+                fee_rate=fee_rate,
+                tax_rate=tax_rate,
+                interval=interval,
+                auto_adjust=auto_adjust,
+            )
+            if not isinstance(detail, pd.DataFrame) or detail.empty:
+                raise ValueError("no walk-forward windows were returned")
+
+            errors = detail.get("Error", pd.Series("", index=detail.index)).fillna("").astype(str)
+            errors = errors.map(_walk_forward_error)
+            successful = detail.loc[errors == ""]
+            error_count = int((errors != "").sum())
+            window_count = int(detail["Window"].nunique()) if "Window" in detail else len(detail)
+            if successful.empty:
+                status = "ERROR"
+                first_error = next((error for error in errors if error), "no successful windows")
+                limitations.append(
+                    f"Walk-forward validation for {stock_id} completed with {error_count} failed window(s): {first_error}"
+                )
+            else:
+                status = "PARTIAL" if error_count else "OK"
+                if error_count:
+                    first_error = next(error for error in errors if error)
+                    limitations.append(
+                        f"Walk-forward validation for {stock_id} completed with {error_count} failed window(s): {first_error}"
+                    )
+
+            def values(column: str) -> pd.Series:
+                return pd.to_numeric(successful.get(column, pd.Series(dtype=float)), errors="coerce").dropna()
+
+            returns = values("Test Total Return %")
+            cagr = values("Test CAGR %")
+            sharpe = values("Test Sharpe Ratio")
+            drawdown = values("Test Max Drawdown %")
+            positive = int((returns > 0).sum())
+            successful_count = len(successful)
+            rows.append({
+                **metadata,
+                "Status": status,
+                "Windows": window_count,
+                "Successful Windows": successful_count,
+                "Error Windows": error_count,
+                "Positive Test Windows": positive,
+                "Positive Test Windows %": round(positive / successful_count * 100, 2) if successful_count else None,
+                "Avg Test Total Return %": _walk_forward_number(returns.mean() if not returns.empty else None),
+                "Avg Test CAGR %": _walk_forward_number(cagr.mean() if not cagr.empty else None),
+                "Avg Test Sharpe Ratio": _walk_forward_number(sharpe.mean() if not sharpe.empty else None),
+                "Avg Test Max Drawdown %": _walk_forward_number(drawdown.mean() if not drawdown.empty else None),
+                "Best Test Total Return %": _walk_forward_number(returns.max() if not returns.empty else None),
+                "Best Test Sharpe Ratio": _walk_forward_number(sharpe.max() if not sharpe.empty else None),
+                "Error": next((error for error in errors if error), "") if status != "OK" else "",
+            })
+        except Exception as exc:
+            error = _walk_forward_error(exc)
+            rows.append({
+                **metadata,
+                "Status": "ERROR",
+                "Windows": 0,
+                "Successful Windows": 0,
+                "Error Windows": 0,
+                "Positive Test Windows": 0,
+                "Positive Test Windows %": None,
+                "Avg Test Total Return %": None,
+                "Avg Test CAGR %": None,
+                "Avg Test Sharpe Ratio": None,
+                "Avg Test Max Drawdown %": None,
+                "Best Test Total Return %": None,
+                "Best Test Sharpe Ratio": None,
+                "Error": error,
+            })
+            limitations.append(f"Walk-forward validation for {stock_id} failed: {error}")
+
+    return pd.DataFrame(rows, columns=WALK_FORWARD_HIGHLIGHT_COLUMNS), limitations
 
 def run_candidate_backtest_validation(
     candidates_df: pd.DataFrame,
