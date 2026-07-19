@@ -145,7 +145,7 @@ def _build_guard_decision_provider(
         reference_price_provider=reference_price_provider,
     )
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int | None:
     try:
         args = _parse_args(argv)
 
@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> None:
         raise
     except Exception as exc:
         print(f"Error: {exc}")
-        raise SystemExit(1) from exc
+        return 1
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

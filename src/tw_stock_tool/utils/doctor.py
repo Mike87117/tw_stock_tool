@@ -181,13 +181,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> int | None:
     args = _parse_args()
     rows = run_doctor(live=args.live)
     print_report(rows)
     if has_failures(rows):
-        raise SystemExit(1)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

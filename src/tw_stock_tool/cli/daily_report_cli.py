@@ -1,5 +1,4 @@
 import argparse
-import sys
 from pathlib import Path
 
 from tw_stock_tool.utils.config import (
@@ -47,7 +46,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", default="output")
     return parser.parse_args(argv)
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         
@@ -65,7 +64,7 @@ def main() -> None:
         
         if not stock_ids:
             print("Error: No stocks provided.")
-            sys.exit(1)
+            return 1
             
         print(f"Scanning {len(stock_ids)} stocks...")
         summary_df, candidates_df, ranking_df, _ = run_daily_report(
@@ -112,7 +111,7 @@ def main() -> None:
 
     except Exception as exc:
         print(f"Error: {exc}")
-        sys.exit(1)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

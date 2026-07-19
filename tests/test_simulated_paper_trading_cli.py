@@ -150,9 +150,8 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
     @patch("builtins.print")
     def test_blank_stock_rejected(self, mock_print):
         args = ["--stock", "   ", "--strategy", "ma_cross", "--initial-cash", "1000", "--quantity-per-trade", "10"]
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
-        self.assertEqual(cm.exception.code, 1)
+        result = simulated_paper_trading_cli.main(args)
+        self.assertEqual(result, 1)
         mock_print.assert_called_with("Error: Stock symbol cannot be blank.")
 
     def test_initial_cash_validation(self):
@@ -203,33 +202,28 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
 
         # Missing Open
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Close": [10], "entry_signal": [True], "exit_signal": [False]}))
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
-        self.assertEqual(cm.exception.code, 1)
+        result = simulated_paper_trading_cli.main(args)
+        self.assertEqual(result, 1)
 
         # Missing Close
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Open": [10], "entry_signal": [True], "exit_signal": [False]}))
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
-        self.assertEqual(cm.exception.code, 1)
+        result = simulated_paper_trading_cli.main(args)
+        self.assertEqual(result, 1)
 
         # Missing entry_signal
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Open": [10], "Close": [10], "exit_signal": [False]}))
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
-        self.assertEqual(cm.exception.code, 1)
+        result = simulated_paper_trading_cli.main(args)
+        self.assertEqual(result, 1)
 
         # Missing exit_signal
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame({"Open": [10], "Close": [10], "entry_signal": [True]}))
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
-        self.assertEqual(cm.exception.code, 1)
+        result = simulated_paper_trading_cli.main(args)
+        self.assertEqual(result, 1)
 
         # Empty
         mock_strats.__getitem__.return_value = MagicMock(return_value=pd.DataFrame())
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
-        self.assertEqual(cm.exception.code, 1)
+        result = simulated_paper_trading_cli.main(args)
+        self.assertEqual(result, 1)
 
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.STRATEGIES")
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
@@ -358,10 +352,9 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
         mock_analyze.side_effect = RuntimeError("Mocked analysis error")
         args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000"]
 
-        with self.assertRaises(SystemExit) as cm:
-            simulated_paper_trading_cli.main(args)
+        result = simulated_paper_trading_cli.main(args)
 
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         mock_print.assert_any_call("Error: Mocked analysis error")
 
     @patch("tw_stock_tool.cli.simulated_paper_trading_cli.analyze_stock")
@@ -574,9 +567,8 @@ class TestSimulatedPaperTradingCLI(unittest.TestCase):
             args = ["--stock", "2330", "--strategy", "ma_cross", "--initial-cash", "100", "--quantity-per-trade", "1", "--max-order-notional", "50000"]
 
             with patch("builtins.print") as mock_print:
-                with self.assertRaises(SystemExit) as cm:
-                    simulated_paper_trading_cli.main(args)
-                self.assertEqual(cm.exception.code, 1)
+                result = simulated_paper_trading_cli.main(args)
+                self.assertEqual(result, 1)
                 printed_errors = [call.args[0] for call in mock_print.call_args_list if "Error:" in call.args[0]]
                 self.assertTrue(any("unique" in str(e).lower() for e in printed_errors))
 
