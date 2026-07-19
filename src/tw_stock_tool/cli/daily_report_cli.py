@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 
 from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS
+from tw_stock_tool.analysis.analysis_session import AnalysisSession
 from tw_stock_tool.utils.config import (
     DEFAULT_PERIOD,
     DEFAULT_INTERVAL,
@@ -162,6 +163,14 @@ def main() -> int | None:
             print("Error: No stocks provided.")
             return 1
 
+        analysis_session = AnalysisSession(
+            period=args.period,
+            interval=args.interval,
+            auto_adjust=args.auto_adjust,
+            force_refresh=args.force_refresh,
+        )
+        analysis_provider = analysis_session.get
+
         print(f"Scanning {len(stock_ids)} stocks...")
         summary_df, candidates_df, ranking_df, _ = run_daily_report(
             stock_ids=stock_ids,
@@ -174,6 +183,7 @@ def main() -> int | None:
             auto_adjust=args.auto_adjust,
             output=args.output_excel,
             progress=True,
+            analysis_provider=analysis_provider,
         )
 
         import datetime
@@ -197,6 +207,7 @@ def main() -> int | None:
                 fee_rate=validation_fee_rate,
                 tax_rate=validation_tax_rate,
                 position_size=validation_position_size,
+                analysis_provider=analysis_provider,
             )
             data_limitations.extend(validation_limitations)
             successes = int((backtest_highlights["Status"] == "OK").sum())
@@ -229,6 +240,7 @@ def main() -> int | None:
                 fee_rate=validation_fee_rate,
                 tax_rate=validation_tax_rate,
                 position_size=validation_position_size,
+                analysis_provider=analysis_provider,
             )
             data_limitations.extend(walk_forward_limitations)
             status_counts = walk_forward_highlights["Status"].value_counts() if not walk_forward_highlights.empty else {}

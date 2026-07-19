@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 import sys
 import pandas as pd
 from pathlib import Path
@@ -130,7 +130,8 @@ class TestDailyReportCli(unittest.TestCase):
             force_refresh=False,
             auto_adjust=False,
             output=None,
-            progress=True
+            progress=True,
+            analysis_provider=ANY
         )
 
         # Verify Markdown file is written
@@ -178,7 +179,8 @@ class TestDailyReportCli(unittest.TestCase):
             force_refresh=False,
             auto_adjust=False,
             output="custom_excel.xlsx",
-            progress=True
+            progress=True,
+            analysis_provider=ANY
         )
 
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids")
@@ -322,6 +324,7 @@ class DailyReportValidationCliStructureTest(unittest.TestCase):
             "validate_top": 4, "strategy": "score", "period": "2y", "interval": "1wk",
             "auto_adjust": True, "force_refresh": True, "initial_capital": 200000.0,
             "fee_rate": 0.001, "tax_rate": 0.002, "position_size": 0.5,
+            "analysis_provider": ANY,
         })
         self.assertEqual(build.call_args.kwargs["backtest_highlights"].columns.tolist(), ["Status"])
         self.assertEqual(build.call_args.kwargs["data_limitations"], ["scan limit", "validation limit"])
@@ -389,6 +392,7 @@ class DailyReportWalkForwardCliTest(unittest.TestCase):
             "auto_adjust": True, "force_refresh": True, "train_days": 10, "test_days": 5,
             "step_days": 3, "sort_by": "Train CAGR %", "initial_capital": 200000.0,
             "fee_rate": 0.001, "tax_rate": 0.002, "position_size": 0.5,
+            "analysis_provider": ANY,
         })
         self.assertTrue(build.call_args.kwargs["walk_forward_highlights"].equals(wf))
         self.assertEqual(build.call_args.kwargs["data_limitations"], ["scan limit", "backtest limit", "wf limit"])

@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from tw_stock_tool.analysis.analysis import analyze_stock
+from tw_stock_tool.analysis.analysis import StockAnalysis, analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest
 from tw_stock_tool.utils.config import (
     DEFAULT_AUTO_ADJUST,
@@ -414,6 +414,7 @@ def run_walk_forward(
     score_sell: tuple[int, ...] | None = None,
     interval: str = DEFAULT_INTERVAL,
     auto_adjust: bool = DEFAULT_AUTO_ADJUST,
+    analysis: StockAnalysis | None = None,
 ) -> pd.DataFrame:
     actual_step_days = test_days if step_days is None else step_days
     _validate_inputs(
@@ -429,13 +430,14 @@ def run_walk_forward(
         max_hold_days=max_hold_days,
     )
 
-    analysis = analyze_stock(
-        stock_id=stock_id.strip(),
-        period=period,
-        interval=interval,
-        auto_adjust=auto_adjust,
-        force_refresh=force_refresh,
-    )
+    if analysis is None:
+        analysis = analyze_stock(
+            stock_id=stock_id.strip(),
+            period=period,
+            interval=interval,
+            auto_adjust=auto_adjust,
+            force_refresh=force_refresh,
+        )
     windows = split_windows(analysis.signal_df, train_days, test_days, actual_step_days)
 
     rows: list[dict[str, Any]] = []
