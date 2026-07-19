@@ -182,9 +182,8 @@ class TestDailyReportCli(unittest.TestCase):
     def test_no_stocks_exits(self, mock_collect):
         mock_collect.return_value = []
         with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks"]):
-            with self.assertRaises(SystemExit) as cm:
-                main()
-        self.assertEqual(cm.exception.code, 1)
+            result = main()
+        self.assertEqual(result, 1)
 
     @patch("tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown")
     @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data")
@@ -208,10 +207,9 @@ class TestDailyReportCli(unittest.TestCase):
         
         with patch.object(sys, "argv", ["daily_report_cli.py"] + test_args):
             with patch("sys.stdout", captured_output):
-                with self.assertRaises(SystemExit) as cm:
-                    main()
+                result = main()
                     
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         output_str = captured_output.getvalue()
         self.assertIn("Error:", output_str)
         self.assertIn("locked", output_str)

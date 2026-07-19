@@ -180,10 +180,9 @@ class TestBacktestReportCLI(unittest.TestCase):
         )
         mock_analyze.side_effect = Exception("Network Error")
 
-        with self.assertRaises(SystemExit) as cm:
-            main()
+        result = main()
 
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
 
     @patch("tw_stock_tool.cli.backtest_report.analyze_stock")
     @patch("tw_stock_tool.cli.backtest_report.run_backtest")
@@ -214,10 +213,9 @@ class TestBacktestReportCLI(unittest.TestCase):
             max_hold_days=None
         )
 
-        with self.assertRaises(SystemExit) as cm:
-            main()
+        result = main()
 
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         mock_analyze.assert_not_called()
         mock_run.assert_not_called()
         mock_export_md.assert_not_called()

@@ -7,6 +7,6 @@ _impl = _import_module("tw_stock_tool.cli.walk_forward_report")
 _backtesting = _import_module("tw_stock_tool.backtesting.walk_forward")
 
 if __name__ == "__main__":
-    _impl.main()
+    raise SystemExit(_impl.main())
 else:
     _sys.modules[__name__] = _backtesting

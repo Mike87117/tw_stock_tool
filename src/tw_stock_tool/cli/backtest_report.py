@@ -100,7 +100,7 @@ def _build_backtest_params(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
 
@@ -167,7 +167,7 @@ def main() -> None:
 
     except Exception as exc:
         print(f"Error: {exc}")
-        raise SystemExit(1) from exc
+        return 1
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

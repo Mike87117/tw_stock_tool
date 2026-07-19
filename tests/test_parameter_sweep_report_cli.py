@@ -206,10 +206,9 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         # Mock run_parameter_sweep to raise ValueError as the real engine would do
         mock_run_sweep.side_effect = ValueError("unsupported strategy: invalid_strategy.")
         
-        with self.assertRaises(SystemExit) as cm:
-            main()
+        result = main()
             
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         mock_export_md.assert_not_called()
         mock_export_excel.assert_not_called()
 
@@ -220,10 +219,9 @@ class ParameterSweepReportCLITest(unittest.TestCase):
     def test_sweep_exception_raises_system_exit(self, mock_export_excel, mock_export_md, mock_run_sweep):
         mock_run_sweep.side_effect = Exception("Network Error")
         
-        with self.assertRaises(SystemExit) as cm:
-            main()
+        result = main()
             
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         mock_export_md.assert_not_called()
         mock_export_excel.assert_not_called()
 
@@ -252,10 +250,9 @@ class ParameterSweepReportCLITest(unittest.TestCase):
 
         captured_output = io.StringIO()
         with mock.patch("sys.stdout", captured_output):
-            with self.assertRaises(SystemExit) as cm:
-                main()
+            result = main()
 
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         output_str = captured_output.getvalue()
         self.assertIn("Error:", output_str)
         self.assertIn("locked", output_str)
@@ -269,10 +266,9 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         import io
         captured_output = io.StringIO()
         with mock.patch("sys.stdout", captured_output):
-            with self.assertRaises(SystemExit) as cm:
-                main()
+            result = main()
 
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         output_str = captured_output.getvalue()
         self.assertIn("Error:", output_str)
         self.assertIn("access denied", output_str)
@@ -287,10 +283,9 @@ class ParameterSweepReportCLITest(unittest.TestCase):
         import io
         captured_output = io.StringIO()
         with mock.patch("sys.stdout", captured_output):
-            with self.assertRaises(SystemExit) as cm:
-                main()
+            result = main()
 
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(result, 1)
         output_str = captured_output.getvalue()
         self.assertIn("Error:", output_str)
         self.assertIn("file locked", output_str)
