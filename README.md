@@ -696,7 +696,15 @@ Excel sheets：
 Clean file 只輸出有效股票的 `Normalized Stock`，例如純數字輸入會保留為 `2330`、`8069`；若原始輸入已明確帶 `.TW` / `.TWO`，則會保留完整市場別。
 
 ## Daily Report
+### Optional top-candidate backtest validation
 
+Daily Report keeps its existing scan-only behavior by default. Add `--validate-top N` to backtest the first N candidates in the displayed deterministic candidate order and include scalar results in the Markdown `Backtest Highlights` section:
+
+```bash
+twstock daily --stocks 2330 2317 --validate-top 3 --validation-strategy ma_cross
+```
+
+Supported strategies are `ma_cross`, `macd`, `rsi`, and `score`. The validation controls also include `--validation-initial-capital`, `--validation-fee-rate`, `--validation-tax-rate`, and `--validation-position-size`. This is historical, research-only validation using next-bar `Open` execution assumptions; it does not provide advice, live signals, broker access, or orders. A per-candidate failure remains visible in `Backtest Highlights` and `Data Limitations` while later candidates continue. Excel output remains unchanged and does not add a validation sheet.
 `twstock daily` CLI 用於每天快速產生 Markdown 格式的綜合研究報告。該報告包含掃描結果摘要、篩選出的觀察候選清單（Watchlist Candidates）、風險提示與資料限制等資訊。
 
 這是一個純研究分析工具。產生的報告僅供研究用途，絕不構成任何投資建議、也不提供任何買賣建議。

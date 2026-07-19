@@ -8,6 +8,10 @@ from typing import Iterable, Any
 
 import pandas as pd
 
+from tw_stock_tool.analysis.analysis import analyze_stock
+from tw_stock_tool.backtesting.backtest import run_backtest_result
+from tw_stock_tool.backtesting.strategies import STRATEGIES
+
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD, OUTPUT_DIR
 from tw_stock_tool.analysis.scanner import ScanConfig, load_stock_ids_from_file, normalize_stock_ids, scan_stocks
 from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
@@ -16,6 +20,12 @@ from tw_stock_tool.analysis.stock_selection import apply_stock_selection
 DEFAULT_SIGNALS = ("BUY", "WATCH")
 DEFAULT_MIN_SCORE = 4.0
 DEFAULT_TOP = 20
+VALIDATION_STRATEGIES = ("ma_cross", "macd", "rsi", "score")
+BACKTEST_HIGHLIGHT_COLUMNS = [
+    "Rank", "Stock", "Signal", "Score", "Strategy", "Status",
+    "Start Date", "End Date", "Total Return %", "Buy and Hold Return %",
+    "Trade Count", "Win Rate %", "Max Drawdown %", "Sharpe Ratio", "Error",
+]
 CANDIDATE_COLUMNS = [
     "Rank",
     "Stock",
@@ -444,3 +454,118 @@ def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
             lines.extend(_render_list_of_strings(risk_notes))
 
     return "\n".join(lines)
+
+
+def _backtest_result_value(result: Any, attribute: str, legacy_key: str) -> Any:
+    if isinstance(result, dict):
+        return result.get(legacy_key)
+    return getattr(result, attribute, None)
+
+
+def _format_backtest_date(value: Any) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    try:
+        return pd.Timestamp(value).strftime("%Y-%m-%d")
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _round_backtest_metric(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not pd.isna(number):
+        return round(number, 2)
+    return None
+
+
+def run_candidate_backtest_validation(
+    candidates_df: pd.DataFrame,
+    *,
+    validate_top: int,
+    strategy: str,
+    period: str,
+    interval: str,
+    auto_adjust: bool,
+    force_refresh: bool,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
+    position_size: float,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Backtest the first ranked candidates for optional research validation."""
+    if strategy not in VALIDATION_STRATEGIES:
+        raise ValueError(
+            f"Unsupported validation strategy: {strategy}. "
+            f"Choose from {', '.join(VALIDATION_STRATEGIES)}."
+        )
+    if validate_top <= 0 or candidates_df.empty:
+        return pd.DataFrame(columns=BACKTEST_HIGHLIGHT_COLUMNS), []
+
+    strategy_func = STRATEGIES.get(f"{strategy}_strategy")
+    if strategy_func is None:
+        raise ValueError(f"Unsupported validation strategy: {strategy}")
+
+    rows: list[dict[str, Any]] = []
+    limitations: list[str] = []
+    for _, candidate in candidates_df.head(validate_top).iterrows():
+        stock_id = str(candidate.get("Stock", ""))
+        row = {
+            "Rank": candidate.get("Rank"),
+            "Stock": candidate.get("Stock"),
+            "Signal": candidate.get("Signal"),
+            "Score": candidate.get("Score"),
+            "Strategy": strategy,
+            "Status": "ERROR",
+            "Start Date": None,
+            "End Date": None,
+            "Total Return %": None,
+            "Buy and Hold Return %": None,
+            "Trade Count": None,
+            "Win Rate %": None,
+            "Max Drawdown %": None,
+            "Sharpe Ratio": None,
+            "Error": "",
+        }
+        try:
+            analysis = analyze_stock(
+                stock_id=stock_id,
+                period=period,
+                interval=interval,
+                auto_adjust=auto_adjust,
+                force_refresh=force_refresh,
+            )
+            source_df = analysis.signal_df if strategy == "score" else analysis.indicator_df
+            strategy_df = strategy_func(source_df).dropna(subset=["Close", "Signal"])
+            result = run_backtest_result(
+                strategy_df,
+                initial_capital=initial_capital,
+                fee_rate=fee_rate,
+                tax_rate=tax_rate,
+                position_size=position_size,
+                interval=interval,
+            )
+            row.update(
+                {
+                    "Status": "OK",
+                    "Start Date": _format_backtest_date(_backtest_result_value(result, "start_date", "Start Date")),
+                    "End Date": _format_backtest_date(_backtest_result_value(result, "end_date", "End Date")),
+                    "Total Return %": _round_backtest_metric(_backtest_result_value(result, "total_return_pct", "Total Return %")),
+                    "Buy and Hold Return %": _round_backtest_metric(_backtest_result_value(result, "buy_hold_return_pct", "Buy and Hold Return %")),
+                    "Trade Count": _backtest_result_value(result, "trade_count", "Trade Count"),
+                    "Win Rate %": _round_backtest_metric(_backtest_result_value(result, "win_rate_pct", "Win Rate %")),
+                    "Max Drawdown %": _round_backtest_metric(_backtest_result_value(result, "max_drawdown_pct", "Max Drawdown %")),
+                    "Sharpe Ratio": _round_backtest_metric(_backtest_result_value(result, "sharpe_ratio", "Sharpe Ratio")),
+                }
+            )
+        except Exception as exc:
+            error = " ".join(str(exc).split())
+            row["Error"] = error
+            limitations.append(f"Backtest validation for {stock_id} failed: {error}")
+        rows.append(row)
+
+    return pd.DataFrame(rows, columns=BACKTEST_HIGHLIGHT_COLUMNS), limitations

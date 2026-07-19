@@ -394,6 +394,7 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 
 **Phase 49 status:** The offline simulated-paper-trading Trade Log is complete for the current runtime boundary. `SimulatedTradeLog.records` is the canonical append-only audit trail and the existing `orders`, `fills`, and `rejections` collections remain available for compatibility. Typed events record candidate creation, actual guard evaluation, pending `next_bar_open` acceptance, rejection, fill, invalid-open skip, and portfolio-validation failure. A missing guard is represented as `risk_allowed=None`; no risk decision is fabricated. Error messages and normalized error codes are retained. Simulated-paper-trading JSON schema v3 adds `audit_log`, while v1 and v2 remain readable. Markdown includes a Trade Log section and CSV export includes a dedicated `_trade_log.csv` artifact. This remains historical, deterministic, research-only simulated functionality; no broker or live-trading capability was added.
 
+**Phase 50.1 status:** Daily Report optionally validates the first ranked candidates with historical, research-only backtests. The default scan path remains unchanged; Markdown receives scalar `Backtest Highlights`, isolated failures, and the historical execution-risk note, while Excel sheets remain unchanged.
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。

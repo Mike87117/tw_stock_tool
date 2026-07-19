@@ -1,10 +1,14 @@
 import tempfile
+import sys
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 from openpyxl import load_workbook
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from tw_stock_tool.reports import daily_report
 
@@ -218,5 +222,271 @@ class DailyReportTest(unittest.TestCase):
 
 
 
+class CandidateBacktestValidationTest(unittest.TestCase):
+    def _candidates(self) -> pd.DataFrame:
+        return pd.DataFrame([
+            {"Rank": 2, "Stock": "2454", "Signal": "BUY", "Score": 6.2},
+            {"Rank": 1, "Stock": "2330", "Signal": "WATCH", "Score": 5.8},
+            {"Rank": 3, "Stock": "2317", "Signal": "BUY", "Score": 5.1},
+        ])
+
+    def _analysis(self) -> SimpleNamespace:
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0, 11.0],
+                "Close": [10.0, 12.0],
+                "Signal": ["HOLD", "BUY"],
+            },
+            index=pd.date_range("2026-01-01", periods=2),
+        )
+        return SimpleNamespace(indicator_df=frame, signal_df=frame)
+
+    def _result(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            start_date=pd.Timestamp("2026-01-01"),
+            end_date=pd.Timestamp("2026-01-02"),
+            total_return_pct=12.345,
+            buy_hold_return_pct=20.125,
+            trade_count=2,
+            win_rate_pct=50.555,
+            max_drawdown_pct=-3.333,
+            sharpe_ratio=1.234,
+        )
+
+    def test_validation_is_opt_in_and_preserves_candidate_order(self) -> None:
+        with patch.object(daily_report, "analyze_stock") as analyze, patch.object(
+            daily_report, "run_backtest_result", return_value=self._result()
+        ) as run_backtest, patch.dict(
+            daily_report.STRATEGIES, {"ma_cross_strategy": lambda frame: frame}, clear=False
+        ):
+            analyze.side_effect = [self._analysis(), self._analysis()]
+            highlights, limitations = daily_report.run_candidate_backtest_validation(
+                self._candidates(),
+                validate_top=2,
+                strategy="ma_cross",
+                period="2y",
+                interval="1wk",
+                auto_adjust=True,
+                force_refresh=True,
+                initial_capital=200000,
+                fee_rate=0.001,
+                tax_rate=0.002,
+                position_size=0.5,
+            )
+
+        self.assertEqual(highlights["Stock"].tolist(), ["2454", "2330"])
+        self.assertEqual(highlights["Status"].tolist(), ["OK", "OK"])
+        self.assertEqual(highlights["Total Return %"].tolist(), [12.35, 12.35])
+        self.assertEqual(highlights.columns.tolist(), daily_report.BACKTEST_HIGHLIGHT_COLUMNS)
+        self.assertEqual(limitations, [])
+        self.assertEqual(analyze.call_args_list[0].kwargs["interval"], "1wk")
+        self.assertEqual(run_backtest.call_args.kwargs["position_size"], 0.5)
+        self.assertEqual(run_backtest.call_args.kwargs["interval"], "1wk")
+
+    def test_validation_failure_isolated_and_zero_is_noop(self) -> None:
+        with patch.object(daily_report, "analyze_stock") as analyze, patch.object(
+            daily_report, "run_backtest_result", return_value=self._result()
+        ) as run_backtest, patch.dict(
+            daily_report.STRATEGIES, {"score_strategy": lambda frame: frame}, clear=False
+        ):
+            empty, limits = daily_report.run_candidate_backtest_validation(
+                self._candidates(),
+                validate_top=0,
+                strategy="score",
+                period="1y",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=False,
+                initial_capital=100000,
+                fee_rate=0.001425,
+                tax_rate=0.003,
+                position_size=1.0,
+            )
+            self.assertTrue(empty.empty)
+            self.assertEqual(limits, [])
+            analyze.assert_not_called()
+            run_backtest.assert_not_called()
+
+            analyze.reset_mock()
+            analyze.side_effect = [ValueError("first\nerror"), self._analysis()]
+            highlights, limits = daily_report.run_candidate_backtest_validation(
+                self._candidates(),
+                validate_top=2,
+                strategy="score",
+                period="1y",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=False,
+                initial_capital=100000,
+                fee_rate=0.001425,
+                tax_rate=0.003,
+                position_size=1.0,
+            )
+
+        self.assertEqual(highlights["Status"].tolist(), ["ERROR", "OK"])
+        self.assertTrue(pd.isna(highlights.iloc[0]["Total Return %"]))
+        self.assertEqual(limits, ["Backtest validation for 2454 failed: first error"])
+
+    def test_markdown_renders_scalar_backtest_highlights(self) -> None:
+        report = daily_report.build_daily_report_data(
+            report_date="2026-07-19",
+            stock_universe=["2330"],
+            screening_results=pd.DataFrame([{"Stocks Scanned": 1, "Candidates": 1, "BUY Count": 1, "WATCH Count": 0}]),
+            backtest_highlights=pd.DataFrame([{
+                "Rank": 1, "Stock": "2330", "Signal": "BUY", "Score": 6.0,
+                "Strategy": "ma_cross", "Status": "OK", "Start Date": "2026-01-01",
+                "End Date": "2026-07-19", "Total Return %": 12.35,
+                "Buy and Hold Return %": 20.13, "Trade Count": 2, "Win Rate %": 50.0,
+                "Max Drawdown %": -3.33, "Sharpe Ratio": 1.23, "Error": "",
+            }]),
+        )
+        markdown = daily_report.render_daily_report_markdown(report)
+        self.assertIn("## Backtest Highlights", markdown)
+        self.assertIn("12.35", markdown)
+        self.assertNotIn("Trades", markdown)
+        self.assertNotIn("Equity Curve", markdown)
+
+class CandidateValidationBoundaryTest(unittest.TestCase):
+    def _candidates(self, count: int = 3) -> pd.DataFrame:
+        rows = [
+            {"Rank": 2, "Stock": "2454", "Signal": "BUY", "Score": 6.2},
+            {"Rank": 1, "Stock": "2330", "Signal": "WATCH", "Score": 5.8},
+            {"Rank": 3, "Stock": "2317", "Signal": "BUY", "Score": 5.1},
+        ]
+        return pd.DataFrame(rows[:count])
+
+    def _frame(self, marker: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "Open": [10.0, 11.0],
+                "Close": [10.0, 12.0],
+                "Signal": ["HOLD", "BUY"],
+                "Marker": [marker, marker],
+            },
+            index=pd.date_range("2026-01-01", periods=2),
+        )
+
+    def _analysis(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            indicator_df=self._frame("indicator"),
+            signal_df=self._frame("signal"),
+        )
+
+    def _result(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            start_date=pd.Timestamp("2026-01-01"),
+            end_date=pd.Timestamp("2026-01-02"),
+            total_return_pct=12.345,
+            buy_hold_return_pct=20.125,
+            trade_count=2,
+            win_rate_pct=50.555,
+            max_drawdown_pct=-3.333,
+            sharpe_ratio=1.234,
+        )
+
+    def _run(self, strategy: str, candidates: pd.DataFrame | None = None):
+        analysis = self._analysis()
+        received = []
+
+        def strategy_func(frame):
+            received.append(frame)
+            return frame
+
+        with patch.object(daily_report, "analyze_stock", return_value=analysis) as analyze, patch.object(
+            daily_report, "run_backtest_result", return_value=self._result()
+        ) as run_backtest, patch.dict(
+            daily_report.STRATEGIES,
+            {f"{strategy}_strategy": strategy_func},
+            clear=False,
+        ):
+            highlights, limitations = daily_report.run_candidate_backtest_validation(
+                candidates if candidates is not None else self._candidates(1),
+                validate_top=1,
+                strategy=strategy,
+                period="2y",
+                interval="1wk",
+                auto_adjust=True,
+                force_refresh=True,
+                initial_capital=200000,
+                fee_rate=0.001,
+                tax_rate=0.002,
+                position_size=0.5,
+            )
+        return analysis, received, analyze, run_backtest, highlights, limitations
+
+    def test_score_uses_signal_and_non_score_strategies_use_indicator(self) -> None:
+        analysis, received, analyze, run_backtest, _, _ = self._run("score")
+        self.assertIs(received[0], analysis.signal_df)
+        self.assertEqual(analyze.call_args.kwargs, {
+            "stock_id": "2454", "period": "2y", "interval": "1wk",
+            "auto_adjust": True, "force_refresh": True,
+        })
+        self.assertEqual(run_backtest.call_args.kwargs, {
+            "initial_capital": 200000, "fee_rate": 0.001,
+            "tax_rate": 0.002, "position_size": 0.5, "interval": "1wk",
+        })
+
+        for strategy in ("ma_cross", "rsi"):
+            analysis, received, _, _, _, _ = self._run(strategy)
+            self.assertIs(received[0], analysis.indicator_df)
+
+    def test_fewer_candidates_empty_schema_and_unsupported_strategy(self) -> None:
+        analysis = self._analysis()
+        with patch.object(daily_report, "analyze_stock", return_value=analysis) as analyze, patch.object(
+            daily_report, "run_backtest_result", return_value=self._result()
+        ) as run_backtest, patch.dict(
+            daily_report.STRATEGIES, {"ma_cross_strategy": lambda frame: frame}, clear=False
+        ):
+            highlights, limitations = daily_report.run_candidate_backtest_validation(
+                self._candidates(2), validate_top=5, strategy="ma_cross", period="1y",
+                interval="1d", auto_adjust=False, force_refresh=False,
+                initial_capital=100000, fee_rate=0.001425, tax_rate=0.003, position_size=1.0,
+            )
+            self.assertEqual(highlights["Stock"].tolist(), ["2454", "2330"])
+            self.assertEqual(len(highlights), 2)
+            self.assertEqual(limitations, [])
+            self.assertEqual(analyze.call_count, 2)
+            self.assertEqual(run_backtest.call_count, 2)
+
+            analyze.reset_mock()
+            run_backtest.reset_mock()
+            empty, empty_limits = daily_report.run_candidate_backtest_validation(
+                pd.DataFrame(columns=["Rank", "Stock", "Signal", "Score"]),
+                validate_top=5, strategy="ma_cross", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, initial_capital=100000,
+                fee_rate=0.001425, tax_rate=0.003, position_size=1.0,
+            )
+            self.assertEqual(empty.columns.tolist(), daily_report.BACKTEST_HIGHLIGHT_COLUMNS)
+            self.assertTrue(empty.empty)
+            self.assertEqual(empty_limits, [])
+            analyze.assert_not_called()
+            run_backtest.assert_not_called()
+
+        with self.assertRaisesRegex(ValueError, "Unsupported validation strategy"):
+            daily_report.run_candidate_backtest_validation(
+                self._candidates(1), validate_top=1, strategy="invalid", period="1y",
+                interval="1d", auto_adjust=False, force_refresh=False, initial_capital=100000,
+                fee_rate=0.001425, tax_rate=0.003, position_size=1.0,
+            )
+
+    def test_failure_continues_and_success_has_only_scalar_highlights(self) -> None:
+        analysis = self._analysis()
+        with patch.object(daily_report, "analyze_stock", side_effect=[ValueError("line one\nline two"), analysis]), patch.object(
+            daily_report, "run_backtest_result", return_value=self._result()
+        ), patch.dict(
+            daily_report.STRATEGIES, {"score_strategy": lambda frame: frame}, clear=False
+        ):
+            highlights, limitations = daily_report.run_candidate_backtest_validation(
+                self._candidates(2), validate_top=2, strategy="score", period="1y",
+                interval="1d", auto_adjust=False, force_refresh=False, initial_capital=100000,
+                fee_rate=0.001425, tax_rate=0.003, position_size=1.0,
+            )
+
+        self.assertEqual(highlights["Stock"].tolist(), ["2454", "2330"])
+        self.assertEqual(highlights["Status"].tolist(), ["ERROR", "OK"])
+        self.assertEqual(limitations, ["Backtest validation for 2454 failed: line one line two"])
+        for value in highlights.iloc[1].tolist():
+            self.assertNotIsInstance(value, (pd.DataFrame, pd.Series))
+        self.assertEqual(highlights.columns.tolist(), daily_report.BACKTEST_HIGHLIGHT_COLUMNS)
 if __name__ == "__main__":
     unittest.main()
