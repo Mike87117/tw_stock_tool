@@ -135,7 +135,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         dataset = build_ml_dataset(
@@ -152,7 +152,8 @@ def main() -> None:
         print("\nThis dataset is for research only and does not train any AI model.")
     except Exception as exc:
         print(f"Error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

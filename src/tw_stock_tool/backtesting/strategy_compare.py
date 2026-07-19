@@ -119,7 +119,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def main() -> None:
+def main() -> int | None:
     try:
         args = _parse_args()
         result = compare_strategies(
@@ -151,9 +151,11 @@ def main() -> None:
             print(f"\nStrategy comparison exported: {path}")
     except (ValueError, ReportError) as exc:
         print(f"Error: {exc}")
+        return 1
     except Exception as exc:
         print(f"Unexpected error: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
