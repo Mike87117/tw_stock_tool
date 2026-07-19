@@ -145,6 +145,30 @@ PACKAGE_FILES = {
     "ml_dataset": "src/tw_stock_tool/ml/ml_dataset.py",
     "ai_prediction_report": "src/tw_stock_tool/reports/ai_prediction_report.py",
 }
+WRAPPER_FILES = frozenset({
+    "ai_prediction_report.py",
+    "ai_stock_scanner.py",
+    "ml_dataset.py",
+    "strategy_compare.py",
+})
+
+EXCLUDED_FILES = frozenset({
+    "src/tw_stock_tool/cli/twstock_cli.py",
+    "src/tw_stock_tool/cli/backtest_report.py",
+    "src/tw_stock_tool/cli/daily_report_cli.py",
+    "src/tw_stock_tool/cli/parameter_sweep_report.py",
+    "src/tw_stock_tool/cli/simulated_paper_trading_cli.py",
+    "src/tw_stock_tool/cli/walk_forward_report.py",
+    "src/tw_stock_tool/utils/doctor.py",
+    "parameter_sweep.py",
+    "parameter_sweep_report.py",
+    "walk_forward.py",
+    "walk_forward_report.py",
+    "doctor.py",
+    "baseline_ml_model.py",
+    "docs/CLI_RUNTIME_CONTRACT_INVENTORY.json",
+    "docs/TRACK_C13_REPOSITORY_WIDE_CLI_RUNTIME_CONTRACT_AUDIT.md",
+})
 
 
 def _parse(module: object, argv: list[str]) -> argparse.Namespace:
@@ -403,28 +427,31 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
                     completed = _run_subprocess("-c", script)
                     self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
 
-    def test_scope_excludes_batch_a_batch_c_dispatcher_and_c13_files(self) -> None:
-        allowed = set(PACKAGE_FILES.values()) | {
-            "ai_prediction_report.py", "ai_stock_scanner.py", "ml_dataset.py", "strategy_compare.py",
-            "tests/test_track_c14_batch_b_false_success_runtime_contract.py",
-            "docs/TRACK_C14_BATCH_B_FALSE_SUCCESS_RUNTIME_FIX.md",
-        }
-        changed = set(subprocess.check_output(["git", "diff", "--name-only", "629fc5dacffc9fa18920d00b7237b0f7b878254e"], cwd=REPOSITORY_ROOT, text=True).splitlines())
-        self.assertTrue(changed <= allowed, changed - allowed)
-        for excluded in (
-            "src/tw_stock_tool/cli/twstock_cli.py",
-            "src/tw_stock_tool/cli/backtest_report.py",
-            "src/tw_stock_tool/cli/daily_report_cli.py",
-            "src/tw_stock_tool/cli/parameter_sweep_report.py",
-            "src/tw_stock_tool/cli/simulated_paper_trading_cli.py",
-            "src/tw_stock_tool/cli/walk_forward_report.py",
-            "src/tw_stock_tool/utils/doctor.py",
-            "parameter_sweep.py", "parameter_sweep_report.py", "walk_forward.py", "walk_forward_report.py",
-            "doctor.py", "baseline_ml_model.py",
-            "docs/CLI_RUNTIME_CONTRACT_INVENTORY.json",
-            "docs/TRACK_C13_REPOSITORY_WIDE_CLI_RUNTIME_CONTRACT_AUDIT.md",
-        ):
-            self.assertNotIn(excluded, changed)
+    def test_batch_b_target_inventory_is_exact_and_excludes_other_batches(self) -> None:
+        package_targets = frozenset(PACKAGE_FILES.values())
+        self.assertEqual(
+            package_targets,
+            frozenset({
+                "src/tw_stock_tool/backtesting/parameter_sweep.py",
+                "src/tw_stock_tool/backtesting/strategy_compare.py",
+                "src/tw_stock_tool/backtesting/walk_forward.py",
+                "src/tw_stock_tool/ml/ai_stock_scanner.py",
+                "src/tw_stock_tool/ml/baseline_ml_model.py",
+                "src/tw_stock_tool/ml/ml_dataset.py",
+                "src/tw_stock_tool/reports/ai_prediction_report.py",
+            }),
+        )
+        self.assertEqual(
+            WRAPPER_FILES,
+            frozenset({
+                "ai_prediction_report.py",
+                "ai_stock_scanner.py",
+                "ml_dataset.py",
+                "strategy_compare.py",
+            }),
+        )
+        self.assertFalse(package_targets & EXCLUDED_FILES)
+        self.assertFalse(WRAPPER_FILES & EXCLUDED_FILES)
 
 
 if __name__ == "__main__":

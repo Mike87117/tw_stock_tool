@@ -72,7 +72,17 @@ class DataLoaderTest(unittest.TestCase):
             with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
                 with patch.object(data_loader.yf, "download", return_value=pd.DataFrame()):
                     with patch.object(data_loader.requests, "get", return_value=FakeResponse()):
-                        df, symbol = data_loader.download_tw_stock("2330", period="1mo")
+                        with patch.object(
+                            data_loader,
+                            "_period_start",
+                            return_value=pd.Timestamp("2026-06-01"),
+                        ):
+                            with patch.object(
+                                data_loader,
+                                "_month_starts",
+                                return_value=[pd.Timestamp("2026-06-01")],
+                            ):
+                                df, symbol = data_loader.download_tw_stock("2330", period="1mo")
 
         self.assertEqual(symbol, "2330.TW")
         self.assertEqual(float(df.iloc[0]["Close"]), 11.0)
