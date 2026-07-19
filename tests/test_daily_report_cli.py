@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from tw_stock_tool.cli import daily_report_cli
 from tw_stock_tool.cli.daily_report_cli import _parse_args, main
 
 class TestDailyReportCli(unittest.TestCase):
@@ -326,5 +327,86 @@ class DailyReportValidationCliStructureTest(unittest.TestCase):
         self.assertEqual(build.call_args.kwargs["data_limitations"], ["scan limit", "validation limit"])
         self.assertIn("selected 0, success 0, failed 0", output)
         self.assertIn("next-bar Open execution assumptions", build.call_args.kwargs["risk_notes"][0])
+
+class DailyReportWalkForwardCliTest(unittest.TestCase):
+    def test_walk_forward_defaults_and_custom_options(self) -> None:
+        defaults = _parse_args([])
+        self.assertEqual(defaults.walk_forward_top, 0)
+        self.assertEqual(defaults.walk_forward_train_days, 126)
+        self.assertEqual(defaults.walk_forward_test_days, 63)
+        self.assertIsNone(defaults.walk_forward_step_days)
+        self.assertEqual(defaults.walk_forward_sort_by, "Train Sharpe Ratio")
+
+        args = _parse_args([
+            "--validate-top", "3", "--walk-forward-top", "2",
+            "--walk-forward-train-days", "10", "--walk-forward-test-days", "5",
+            "--walk-forward-step-days", "3", "--walk-forward-sort-by", "Train CAGR %",
+        ])
+        self.assertEqual(args.walk_forward_top, 2)
+        self.assertEqual(args.walk_forward_train_days, 10)
+        self.assertEqual(args.walk_forward_test_days, 5)
+        self.assertEqual(args.walk_forward_step_days, 3)
+        self.assertEqual(args.walk_forward_sort_by, "Train CAGR %")
+
+    def test_walk_forward_parser_rejects_invalid_global_configuration(self) -> None:
+        invalid = [
+            ["--walk-forward-top", "-1"],
+            ["--walk-forward-train-days", "0"],
+            ["--walk-forward-test-days", "0"],
+            ["--walk-forward-step-days", "0"],
+            ["--walk-forward-sort-by", "Test Sharpe Ratio"],
+            ["--walk-forward-top", "1"],
+            ["--validate-top", "1", "--walk-forward-top", "2"],
+            ["--validate-top", "1", "--walk-forward-top", "1", "--validation-strategy", "macd"],
+        ]
+        for argv in invalid:
+            with self.subTest(argv=argv), self.assertRaises(SystemExit) as raised:
+                _parse_args(argv)
+            self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(_parse_args(["--validate-top", "1", "--validation-strategy", "macd"]).validation_strategy, "macd")
+
+    def test_walk_forward_enabled_forwards_options_and_report_data(self) -> None:
+        wf = pd.DataFrame([{"Stock": "2330", "Status": "PARTIAL", "Windows": 2}])
+        with patch.object(
+            daily_report_cli, "run_candidate_walk_forward_validation", return_value=(wf, ["wf limit"])
+        ) as run_wf:
+            result, build, validate, output = DailyReportValidationCliStructureTest()._run_main(
+                [
+                    "--stocks", "2330", "--validate-top", "2", "--walk-forward-top", "1",
+                    "--validation-strategy", "score", "--period", "2y", "--interval", "1wk",
+                    "--auto-adjust", "--force-refresh", "--walk-forward-train-days", "10",
+                    "--walk-forward-test-days", "5", "--walk-forward-step-days", "3",
+                    "--walk-forward-sort-by", "Train CAGR %", "--validation-initial-capital", "200000",
+                    "--validation-fee-rate", "0.001", "--validation-tax-rate", "0.002",
+                    "--validation-position-size", "0.5",
+                ],
+                validation_result=(pd.DataFrame([{"Status": "OK"}]), ["backtest limit"]),
+                scan_limits=["scan limit"],
+            )
+        self.assertIsNone(result)
+        self.assertEqual(run_wf.call_args.kwargs, {
+            "walk_forward_top": 1, "strategy": "score", "period": "2y", "interval": "1wk",
+            "auto_adjust": True, "force_refresh": True, "train_days": 10, "test_days": 5,
+            "step_days": 3, "sort_by": "Train CAGR %", "initial_capital": 200000.0,
+            "fee_rate": 0.001, "tax_rate": 0.002, "position_size": 0.5,
+        })
+        self.assertTrue(build.call_args.kwargs["walk_forward_highlights"].equals(wf))
+        self.assertEqual(build.call_args.kwargs["data_limitations"], ["scan limit", "backtest limit", "wf limit"])
+        self.assertIn("out-of-sample", " ".join(build.call_args.kwargs["risk_notes"]))
+        self.assertIn("selected 1, OK 0, PARTIAL 1, ERROR 0", output)
+
+    def test_empty_walk_forward_reports_zero_counts(self) -> None:
+        empty = pd.DataFrame(columns=["Status"])
+        with patch.object(
+            daily_report_cli, "run_candidate_walk_forward_validation", return_value=(empty, ["skip limit"])
+        ):
+            result, build, _, output = DailyReportValidationCliStructureTest()._run_main(
+                ["--stocks", "2330", "--validate-top", "1", "--walk-forward-top", "1"],
+                validation_result=(pd.DataFrame([{"Status": "ERROR"}]), []),
+            )
+        self.assertIsNone(result)
+        self.assertEqual(build.call_args.kwargs["walk_forward_highlights"].columns.tolist(), ["Status"])
+        self.assertIn("selected 0, OK 0, PARTIAL 0, ERROR 0", output)
+
 if __name__ == "__main__":
     unittest.main()

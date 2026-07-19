@@ -488,5 +488,137 @@ class CandidateValidationBoundaryTest(unittest.TestCase):
         for value in highlights.iloc[1].tolist():
             self.assertNotIsInstance(value, (pd.DataFrame, pd.Series))
         self.assertEqual(highlights.columns.tolist(), daily_report.BACKTEST_HIGHLIGHT_COLUMNS)
+
+class CandidateWalkForwardValidationTest(unittest.TestCase):
+    def _backtests(self) -> pd.DataFrame:
+        return pd.DataFrame([
+            {"Rank": 2, "Stock": "2454", "Signal": "BUY", "Score": 6.2, "Status": "OK"},
+            {"Rank": 1, "Stock": "2330", "Signal": "WATCH", "Score": 5.8, "Status": "ERROR"},
+            {"Rank": 3, "Stock": "2317", "Signal": "BUY", "Score": 5.1, "Status": "OK"},
+        ])
+
+    def _detail(self, error: str = "") -> pd.DataFrame:
+        return pd.DataFrame([
+            {
+                "Window": 1, "Test Total Return %": 10.123, "Test CAGR %": 8.5,
+                "Test Sharpe Ratio": 1.234, "Test Max Drawdown %": -3.456, "Error": error,
+            }
+        ])
+
+    def _run(self, detail: pd.DataFrame, **overrides):
+        args = {
+            "backtest_highlights": self._backtests(), "walk_forward_top": 2,
+            "strategy": "score", "period": "2y", "interval": "1wk", "auto_adjust": True,
+            "force_refresh": True, "train_days": 126, "test_days": 63, "step_days": None,
+            "sort_by": "Train Sharpe Ratio", "initial_capital": 200000.0,
+            "fee_rate": 0.001, "tax_rate": 0.002, "position_size": 0.5,
+        }
+        args.update(overrides)
+        with patch.object(daily_report, "run_walk_forward", return_value=detail) as engine:
+            result = daily_report.run_candidate_walk_forward_validation(**args)
+        return result, engine
+
+    def test_zero_is_noop_and_no_successful_backtests_skip(self) -> None:
+        with patch.object(daily_report, "run_walk_forward") as engine:
+            empty, limits = daily_report.run_candidate_walk_forward_validation(
+                self._backtests(), walk_forward_top=0, strategy="score", period="1y",
+                interval="1d", auto_adjust=False, force_refresh=False, train_days=126,
+                test_days=63, step_days=None, sort_by="Train Sharpe Ratio",
+                initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        engine.assert_not_called()
+        self.assertEqual(empty.columns.tolist(), daily_report.WALK_FORWARD_HIGHLIGHT_COLUMNS)
+        self.assertEqual(limits, [])
+
+        none = self._backtests().assign(Status="ERROR")
+        with patch.object(daily_report, "run_walk_forward") as engine:
+            empty, limits = daily_report.run_candidate_walk_forward_validation(
+                none, walk_forward_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, train_days=126, test_days=63,
+                step_days=None, sort_by="Train Sharpe Ratio", initial_capital=100000,
+                fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        engine.assert_not_called()
+        self.assertTrue(empty.empty)
+        self.assertEqual(limits, ["Walk-forward validation skipped: no successful backtest candidates were available."])
+
+    def test_order_limit_and_forwarding(self) -> None:
+        details = self._detail()
+        details = pd.concat([details, details.assign(Window=2, **{"Test Total Return %": 2.0})], ignore_index=True)
+        (highlights, _), engine = self._run(details, walk_forward_top=1, step_days=None)
+        self.assertEqual(highlights["Stock"].tolist(), ["2454"])
+        self.assertEqual(highlights.loc[0, "Step Days"], 63)
+        self.assertEqual(engine.call_args.kwargs, {
+            "stock_id": "2454", "period": "2y", "strategy": "score", "train_days": 126,
+            "test_days": 63, "step_days": 63, "sort_by": "Train Sharpe Ratio",
+            "force_refresh": True, "position_size": 0.5, "initial_capital": 200000.0,
+            "fee_rate": 0.001, "tax_rate": 0.002, "interval": "1wk", "auto_adjust": True,
+        })
+
+    def test_status_metrics_and_scalar_schema(self) -> None:
+        detail = pd.DataFrame([
+            {"Window": 1, "Test Total Return %": 10, "Test CAGR %": 8, "Test Sharpe Ratio": 1.2, "Test Max Drawdown %": -2, "Error": ""},
+            {"Window": 2, "Test Total Return %": -2, "Test CAGR %": 1, "Test Sharpe Ratio": 0.5, "Test Max Drawdown %": -4, "Error": ""},
+            {"Window": 3, "Test Total Return %": None, "Test CAGR %": None, "Test Sharpe Ratio": None, "Test Max Drawdown %": None, "Error": "line one\nline two"},
+        ])
+        (highlights, limits), _ = self._run(detail, walk_forward_top=1)
+        row = highlights.iloc[0]
+        self.assertEqual(row["Status"], "PARTIAL")
+        self.assertEqual(row["Windows"], 3)
+        self.assertEqual(row["Successful Windows"], 2)
+        self.assertEqual(row["Error Windows"], 1)
+        self.assertEqual(row["Positive Test Windows"], 1)
+        self.assertEqual(row["Positive Test Windows %"], 50.0)
+        self.assertEqual(row["Avg Test Total Return %"], 4.0)
+        self.assertEqual(row["Best Test Sharpe Ratio"], 1.2)
+        self.assertEqual(limits, ["Walk-forward validation for 2454 completed with 1 failed window(s): line one line two"])
+        self.assertEqual(highlights.columns.tolist(), daily_report.WALK_FORWARD_HIGHLIGHT_COLUMNS)
+        self.assertFalse(any(isinstance(value, (pd.DataFrame, pd.Series)) for value in row.tolist()))
+
+        (ok, _), _ = self._run(self._detail())
+        self.assertEqual(ok.loc[0, "Status"], "OK")
+        (failed, limits), _ = self._run(self._detail("bad"), walk_forward_top=1)
+        self.assertEqual(failed.loc[0, "Status"], "ERROR")
+        self.assertEqual(failed.loc[0, "Avg Test Total Return %"], None)
+        self.assertEqual(len(limits), 1)
+
+    def test_candidate_failure_does_not_abort_later_candidate(self) -> None:
+        details = self._detail()
+        with patch.object(daily_report, "run_walk_forward", side_effect=[ValueError("first\nerror"), details]):
+            highlights, limits = daily_report.run_candidate_walk_forward_validation(
+                self._backtests(), walk_forward_top=2, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, train_days=10, test_days=5, step_days=5,
+                sort_by="Train Sharpe Ratio", initial_capital=100000, fee_rate=0.001,
+                tax_rate=0.003, position_size=1.0,
+            )
+        self.assertEqual(highlights["Status"].tolist(), ["ERROR", "OK"])
+        self.assertEqual(limits, ["Walk-forward validation for 2454 failed: first error"])
+
+    def test_unsupported_strategy_is_clear(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported walk-forward strategy"):
+            daily_report.run_candidate_walk_forward_validation(
+                self._backtests(), walk_forward_top=1, strategy="macd", period="1y",
+                interval="1d", auto_adjust=False, force_refresh=False, train_days=10,
+                test_days=5, step_days=5, sort_by="Train Sharpe Ratio", initial_capital=100000,
+                fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+
+    def test_markdown_renders_walk_forward_scalars(self) -> None:
+        report = daily_report.build_daily_report_data(
+            stock_universe=["2454"],
+            walk_forward_highlights=pd.DataFrame([{
+                "Rank": 1, "Stock": "2454", "Signal": "BUY", "Score": 6.2,
+                "Strategy": "score", "Status": "OK", "Windows": 2,
+                "Avg Test Total Return %": 4.0, "Best Test Sharpe Ratio": 1.2,
+            }]),
+        )
+        markdown = daily_report.render_daily_report_markdown(report)
+        self.assertIn("## Walk Forward Highlights", markdown)
+        self.assertIn("2454", markdown)
+        self.assertIn("OK", markdown)
+        self.assertIn("4.0", markdown)
+        self.assertNotIn("Equity Curve", markdown)
+        self.assertNotIn("Trades", markdown)
+
 if __name__ == "__main__":
     unittest.main()

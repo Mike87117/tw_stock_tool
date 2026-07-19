@@ -1,6 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import patch
 
 import pandas as pd
@@ -199,8 +202,8 @@ class WalkForwardTest(unittest.TestCase):
         self.assertEqual(result["Parameters"], "buy_score=4, sell_score=-2")
         self.assertEqual(test_calls, [params_a])
 
-    @mock.patch("src.tw_stock_tool.backtesting.walk_forward.analyze_stock")
-    @mock.patch("src.tw_stock_tool.backtesting.walk_forward._run_strategy_backtest")
+    @mock.patch.object(walk_forward, "analyze_stock")
+    @mock.patch.object(walk_forward, "_run_strategy_backtest")
     def test_walk_forward_custom_ranges(
         self, mock_run_backtest: mock.MagicMock, mock_analyze: mock.MagicMock
     ) -> None:
@@ -240,9 +243,9 @@ class WalkForwardTest(unittest.TestCase):
         for param in df["Parameters"]:
             self.assertTrue("short_window=2" in param or "short_window=3" in param)
 
-    @mock.patch("src.tw_stock_tool.backtesting.walk_forward.analyze_stock")
+    @mock.patch.object(walk_forward, "analyze_stock")
     @mock.patch.object(walk_forward, "run_backtest")
-    @mock.patch("src.tw_stock_tool.backtesting.walk_forward._build_strategy_df")
+    @mock.patch.object(walk_forward, "_build_strategy_df")
     def test_run_walk_forward_engine_params_passthrough(
         self, mock_build_strategy: mock.MagicMock, mock_run_backtest: mock.MagicMock, mock_analyze: mock.MagicMock
     ) -> None:
@@ -366,6 +369,45 @@ class WalkForwardTest(unittest.TestCase):
                 test_days=10,
             )
 
+
+
+    @mock.patch.object(walk_forward, "analyze_stock")
+    @mock.patch.object(walk_forward, "run_backtest")
+    @mock.patch.object(walk_forward, "_build_strategy_df")
+    def test_interval_and_auto_adjust_propagate_to_analysis_and_backtests(
+        self, mock_build_strategy: mock.MagicMock, mock_run_backtest: mock.MagicMock, mock_analyze: mock.MagicMock
+    ) -> None:
+        mock_analyze.return_value.signal_df = self._sample_df(rows=120)
+        mock_build_strategy.return_value = pd.DataFrame({"Close": [1], "Signal": [1]})
+        mock_run_backtest.return_value = {
+            "Total Return %": 1.0, "CAGR %": 1.0, "Trade Count": 1,
+            "Win Rate %": 50.0, "Max Drawdown %": -1.0, "Profit Factor": 1.0,
+            "Sharpe Ratio": 1.0, "Sortino Ratio": 1.0,
+        }
+
+        walk_forward.run_walk_forward(
+            "2330", period="2y", strategy="score", train_days=50, test_days=20,
+            interval="1wk", auto_adjust=True, force_refresh=True,
+        )
+
+        self.assertEqual(mock_analyze.call_args.kwargs, {
+            "stock_id": "2330", "period": "2y", "interval": "1wk",
+            "auto_adjust": True, "force_refresh": True,
+        })
+        self.assertTrue(mock_run_backtest.call_args_list)
+        self.assertTrue(all(call.kwargs["interval"] == "1wk" for call in mock_run_backtest.call_args_list))
+
+    @mock.patch.object(walk_forward, "analyze_stock")
+    @mock.patch.object(walk_forward, "run_backtest")
+    def test_omitted_interval_and_auto_adjust_keep_defaults(
+        self, mock_run_backtest: mock.MagicMock, mock_analyze: mock.MagicMock
+    ) -> None:
+        mock_analyze.return_value.signal_df = self._sample_df(rows=80)
+        mock_run_backtest.return_value = self._fake_backtest(self._sample_df(2))
+        walk_forward.run_walk_forward("2330", strategy="score", train_days=20, test_days=10)
+        self.assertEqual(mock_analyze.call_args.kwargs["interval"], "1d")
+        self.assertFalse(mock_analyze.call_args.kwargs["auto_adjust"])
+        self.assertTrue(all(call.kwargs["interval"] == "1d" for call in mock_run_backtest.call_args_list))
 
 if __name__ == "__main__":
     unittest.main()

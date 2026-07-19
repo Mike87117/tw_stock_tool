@@ -10,7 +10,15 @@ import pandas as pd
 
 from tw_stock_tool.analysis.analysis import analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest
-from tw_stock_tool.utils.config import DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, OUTPUT_DIR, TAX_RATE
+from tw_stock_tool.utils.config import (
+    DEFAULT_AUTO_ADJUST,
+    DEFAULT_INTERVAL,
+    DEFAULT_PERIOD,
+    FEE_RATE,
+    INITIAL_CAPITAL,
+    OUTPUT_DIR,
+    TAX_RATE,
+)
 from tw_stock_tool.backtesting.parameter_sweep import (
     VALID_STRATEGIES,
     _parameters_text,
@@ -205,6 +213,7 @@ def _run_strategy_backtest(
     initial_capital: float,
     fee_rate: float,
     tax_rate: float,
+    interval: str = DEFAULT_INTERVAL,
 ) -> dict[str, Any]:
     strategy_df = _build_strategy_df(strategy, df, params)
     strategy_df = strategy_df.dropna(subset=["Close", "Signal"])
@@ -217,6 +226,7 @@ def _run_strategy_backtest(
         take_profit_pct=take_profit_pct,
         max_hold_days=max_hold_days,
         position_size=position_size,
+        interval=interval,
     )
 
 
@@ -312,6 +322,7 @@ def _evaluate_window_strategy(
     rsi_sell_above: tuple[int, ...] | None = None,
     score_buy: tuple[int, ...] | None = None,
     score_sell: tuple[int, ...] | None = None,
+    interval: str = DEFAULT_INTERVAL,
 ) -> dict[str, Any]:
     best_params: dict[str, int] | None = None
     best_train_result: dict[str, Any] | None = None
@@ -341,6 +352,7 @@ def _evaluate_window_strategy(
                 initial_capital,
                 fee_rate,
                 tax_rate,
+                interval,
             )
             metric_value = _sort_metric(train_result, sort_by)
             if metric_value > best_value:
@@ -365,6 +377,7 @@ def _evaluate_window_strategy(
         initial_capital,
         fee_rate,
         tax_rate,
+        interval,
     )
     return _result_row(
         window_number,
@@ -399,6 +412,8 @@ def run_walk_forward(
     rsi_sell_above: tuple[int, ...] | None = None,
     score_buy: tuple[int, ...] | None = None,
     score_sell: tuple[int, ...] | None = None,
+    interval: str = DEFAULT_INTERVAL,
+    auto_adjust: bool = DEFAULT_AUTO_ADJUST,
 ) -> pd.DataFrame:
     actual_step_days = test_days if step_days is None else step_days
     _validate_inputs(
@@ -417,6 +432,8 @@ def run_walk_forward(
     analysis = analyze_stock(
         stock_id=stock_id.strip(),
         period=period,
+        interval=interval,
+        auto_adjust=auto_adjust,
         force_refresh=force_refresh,
     )
     windows = split_windows(analysis.signal_df, train_days, test_days, actual_step_days)
@@ -445,6 +462,7 @@ def run_walk_forward(
                         rsi_sell_above=rsi_sell_above,
                         score_buy=score_buy,
                         score_sell=score_sell,
+                        interval=interval,
                     )
                 )
             except Exception as exc:
