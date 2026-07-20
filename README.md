@@ -726,6 +726,23 @@ py twstock_cli.py daily `
 ```
 
 Walk Forward Highlights are scalar summaries in the Markdown Daily Research Report only. Partial and full candidate/window failures appear in that section and Data Limitations; no raw window tables, trades, equity curves, recommendations, or new Excel sheets are added. Results are historical research estimates and do not predict future performance.
+### Optional daily parameter sweep highlights
+
+Phase 50.4 adds an opt-in in-sample parameter sweep after successful candidate backtests and before walk-forward validation:
+
+```powershell
+py twstock_cli.py daily `
+  --stocks 2330 2317 2454 `
+  --period 2y `
+  --validate-top 3 `
+  --validation-strategy ma_cross `
+  --parameter-sweep-top 2 `
+  --parameter-sweep-sort-by "Sharpe Ratio" `
+  --walk-forward-top 2 `
+  --output-md output/daily_report.md
+```
+
+`--parameter-sweep-top` defaults to `0` (disabled). It uses the existing validation capital, fee, tax, and position-size assumptions; no separate sweep grid or trading-control flags are added. Only successful `Backtest Highlights` rows are eligible, and the displayed scalar best combination is not passed into walk-forward validation or used to reorder candidates. Sweep results are historical in-sample research summaries and may reflect overfitting; Excel output remains unchanged.
 `twstock daily` CLI 用於每天快速產生 Markdown 格式的綜合研究報告。該報告包含掃描結果摘要、篩選出的觀察候選清單（Watchlist Candidates）、風險提示與資料限制等資訊。
 
 這是一個純研究分析工具。產生的報告僅供研究用途，絕不構成任何投資建議、也不提供任何買賣建議。

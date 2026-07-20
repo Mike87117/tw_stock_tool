@@ -323,10 +323,12 @@ class TrackC33ParameterSweepCorrectnessTest(unittest.TestCase):
         )
         self.assertEqual(sweep.iloc[0]["Sharpe Ratio"], daily["Sharpe Ratio"])
         self.assertEqual(sweep.iloc[0]["Sortino Ratio"], daily["Sortino Ratio"])
-        self.assertNotIn(
+        self.assertIn(
             "interval",
             inspect.signature(parameter_sweep.run_parameter_sweep).parameters,
         )
+        self.assertIn("auto_adjust", inspect.signature(parameter_sweep.run_parameter_sweep).parameters)
+        self.assertIn("analysis", inspect.signature(parameter_sweep.run_parameter_sweep).parameters)
 
     def test_report_builder_selects_numeric_sharpe_not_first_or_error_row(self) -> None:
         with patch.object(
@@ -395,7 +397,7 @@ class TrackC33ParameterSweepCorrectnessTest(unittest.TestCase):
         self.assertEqual(engine_kwargs["stop_loss_pct"], 5.0)
         self.assertEqual(engine_kwargs["take_profit_pct"], 10.0)
         self.assertEqual(engine_kwargs["max_hold_days"], 20)
-        self.assertNotIn("interval", engine_kwargs)
+        self.assertEqual(engine_kwargs["interval"], "1d")
         self.assertEqual(result.iloc[0]["Parameters"], "buy_score=2, sell_score=-2")
         self.assertEqual(result.iloc[0]["Error"], "")
 

@@ -5,9 +5,17 @@ from typing import Any
 
 import pandas as pd
 
-from tw_stock_tool.analysis.analysis import analyze_stock
+from tw_stock_tool.analysis.analysis import StockAnalysis, analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest
-from tw_stock_tool.utils.config import DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, OUTPUT_DIR, TAX_RATE
+from tw_stock_tool.utils.config import (
+    DEFAULT_AUTO_ADJUST,
+    DEFAULT_INTERVAL,
+    DEFAULT_PERIOD,
+    FEE_RATE,
+    INITIAL_CAPITAL,
+    OUTPUT_DIR,
+    TAX_RATE,
+)
 from tw_stock_tool.backtesting.strategies import ma_cross_strategy, rsi_strategy, score_strategy
 
 SWEEP_COLUMNS = [
@@ -191,6 +199,9 @@ def run_parameter_sweep(
     rsi_sell_above: tuple[int, ...] | None = None,
     score_buy: tuple[int, ...] | None = None,
     score_sell: tuple[int, ...] | None = None,
+    interval: str = DEFAULT_INTERVAL,
+    auto_adjust: bool = DEFAULT_AUTO_ADJUST,
+    analysis: StockAnalysis | None = None,
 ) -> pd.DataFrame:
     _validate_inputs(
         stock_id=stock_id,
@@ -201,7 +212,14 @@ def run_parameter_sweep(
         max_hold_days=max_hold_days,
     )
 
-    analysis = analyze_stock(stock_id=stock_id.strip(), period=period, force_refresh=force_refresh)
+    if analysis is None:
+        analysis = analyze_stock(
+            stock_id=stock_id.strip(),
+            period=period,
+            interval=interval,
+            auto_adjust=auto_adjust,
+            force_refresh=force_refresh,
+        )
     rows: list[dict[str, Any]] = []
 
     parameter_sets = _selected_parameter_sets(
@@ -227,6 +245,7 @@ def run_parameter_sweep(
                 take_profit_pct=take_profit_pct,
                 max_hold_days=max_hold_days,
                 position_size=position_size,
+                interval=interval,
             )
             rows.append(
                 {

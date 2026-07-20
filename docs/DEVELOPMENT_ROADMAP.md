@@ -397,6 +397,10 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 **Phase 50.1 status:** Daily Report optionally validates the first ranked candidates with historical, research-only backtests. The default scan path remains unchanged; Markdown receives scalar `Backtest Highlights`, isolated failures, and the historical execution-risk note, while Excel sheets remain unchanged.
 
 **Phase 50.2 status:** Daily Report walk-forward validation is opt-in and runs only on successful Phase 50.1 backtest candidates in displayed order. It supports `ma_cross`, `rsi`, and `score`; MACD remains backtest-only. Defaults are 126 train observations, 63 test observations, a test-length effective step when omitted, and `Train Sharpe Ratio` sorting. Scalar `Walk Forward Highlights`, partial/full failure limitations, and the historical out-of-sample risk note appear in Markdown; Excel output remains unchanged.
+
+**Phase 50.3 status:** `AnalysisSession` is the shared per-run analysis boundary for Daily Research execution. Scanner, candidate backtest validation, and walk-forward validation accept the same provider/precomputed `StockAnalysis`, so one stock analysis is reused across the pipeline while preserving `period`, `interval`, `auto_adjust`, and `force_refresh`. Failures are cached and isolated; no live, broker, or recommendation behavior was added.
+
+**Phase 50.4 status:** Daily Report parameter sweep highlights are complete as an opt-in in-sample stage after successful backtests and before walk-forward validation. `--parameter-sweep-top` defaults to `0`, uses the existing validation financial assumptions, accepts the existing sweep sortable metrics, and reuses the Phase 50.3 `AnalysisSession`. Only successful Backtest Highlights rows are eligible; scalar best-combination summaries are shown in Markdown, do not change candidate ranking, and are not passed into walk-forward validation. Excel output remains unchanged.
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
