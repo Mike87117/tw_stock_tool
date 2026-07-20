@@ -170,3 +170,158 @@ class DailyParameterSweepCliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class DailyParameterSweepReviewerTest(unittest.TestCase):
+    def test_missing_error_column_is_candidate_error_and_continues(self) -> None:
+        candidates = _backtests().iloc[[1, 2]].reset_index(drop=True)
+        missing_error = pd.DataFrame([{"Sharpe Ratio": 1.0}])
+        with patch.object(daily_report, "run_parameter_sweep", side_effect=[missing_error, _detail()]):
+            highlights, limits = daily_report.run_candidate_parameter_sweep_validation(
+                candidates, parameter_sweep_top=2, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, sort_by="Sharpe Ratio",
+                initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        self.assertEqual(highlights["Status"].tolist(), ["ERROR", "PARTIAL"])
+        self.assertIn("missing required Error column", highlights.iloc[0]["Error"])
+        self.assertIn("missing required Error column", limits[0])
+
+    def test_empty_result_is_candidate_error(self) -> None:
+        with patch.object(daily_report, "run_parameter_sweep", return_value=pd.DataFrame()):
+            highlights, limits = daily_report.run_candidate_parameter_sweep_validation(
+                _backtests(), parameter_sweep_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, sort_by="Sharpe Ratio",
+                initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        self.assertEqual(highlights.iloc[0]["Status"], "ERROR")
+        self.assertIn("no parameter sweep combinations were returned", limits[0])
+
+    def test_all_combinations_failed_is_error(self) -> None:
+        failed = pd.DataFrame(
+            [{"Strategy": "score", "Parameters": "a", "Error": "first"},
+             {"Strategy": "score", "Parameters": "b", "Error": "second"}],
+            columns=["Strategy", "Parameters", "Error"],
+        )
+        with patch.object(daily_report, "run_parameter_sweep", return_value=failed):
+            highlights, limits = daily_report.run_candidate_parameter_sweep_validation(
+                _backtests(), parameter_sweep_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, sort_by="Sharpe Ratio",
+                initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        row = highlights.iloc[0]
+        self.assertEqual(row["Status"], "ERROR")
+        self.assertEqual(row["Parameter Combinations"], 2)
+        self.assertEqual(row["Successful Combinations"], 0)
+        self.assertEqual(row["Error Combinations"], 2)
+        self.assertIn("2 failed combination(s): first", limits[0])
+
+    def test_scalar_highlight_contains_no_nested_values(self) -> None:
+        with patch.object(daily_report, "run_parameter_sweep", return_value=_detail()):
+            highlights, _ = daily_report.run_candidate_parameter_sweep_validation(
+                _backtests(), parameter_sweep_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, sort_by="Sharpe Ratio",
+                initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        for value in highlights.iloc[0].tolist():
+            self.assertNotIsInstance(value, (pd.DataFrame, pd.Series, dict, list))
+
+    def test_invalid_sort_metric_fails_before_provider_or_engine(self) -> None:
+        provider = Mock()
+        with patch.object(daily_report, "run_parameter_sweep") as engine:
+            with self.assertRaisesRegex(ValueError, "Unsupported parameter sweep sort metric"):
+                daily_report.run_candidate_parameter_sweep_validation(
+                    _backtests(), parameter_sweep_top=1, strategy="score", period="1y", interval="1d",
+                    auto_adjust=False, force_refresh=False, sort_by="Not a metric",
+                    initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+                    analysis_provider=provider,
+                )
+        provider.assert_not_called()
+        engine.assert_not_called()
+
+    def test_sweep_failure_does_not_change_walk_forward_eligibility(self) -> None:
+        from tw_stock_tool.reports.daily_report import run_candidate_walk_forward_validation
+        candidates = _backtests().iloc[[1, 2]].reset_index(drop=True)
+        with patch.object(daily_report, "run_parameter_sweep", side_effect=ValueError("sweep failed")):
+            sweep, _ = daily_report.run_candidate_parameter_sweep_validation(
+                candidates, parameter_sweep_top=2, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, sort_by="Sharpe Ratio",
+                initial_capital=100000, fee_rate=0.001, tax_rate=0.003, position_size=1.0,
+            )
+        self.assertTrue((sweep["Status"] == "ERROR").all())
+        wf_detail = pd.DataFrame([{
+            "Window": 1, "Test Total Return %": 1.0, "Test CAGR %": 1.0,
+            "Test Sharpe Ratio": 1.0, "Test Max Drawdown %": -1.0, "Error": "",
+        }])
+        with patch.object(daily_report, "run_walk_forward", return_value=wf_detail) as wf:
+            highlights, _ = run_candidate_walk_forward_validation(
+                candidates, walk_forward_top=2, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=False, train_days=2, test_days=1, step_days=1,
+                sort_by="Train Sharpe Ratio", initial_capital=100000, fee_rate=0.001,
+                tax_rate=0.003, position_size=1.0,
+            )
+        self.assertEqual(wf.call_count, 2)
+        self.assertEqual(wf.call_args_list[0].kwargs["stock_id"], "2330")
+        self.assertEqual(wf.call_args_list[1].kwargs["stock_id"], "2317")
+        self.assertEqual(highlights["Stock"].tolist(), ["2330", "2317"])
+
+    def test_scanner_backtest_sweep_walk_forward_share_cached_provider(self) -> None:
+        from tw_stock_tool.analysis.analysis_session import AnalysisSession
+        from tw_stock_tool.analysis.scanner import ScanConfig, scan_one_stock
+        from tw_stock_tool.reports.daily_report import (
+            run_candidate_backtest_validation,
+            run_candidate_walk_forward_validation,
+        )
+        source = _analysis("2330")
+        signal_df = source.signal_df.copy()
+        for key, value in {
+            "MA5": 100.0, "MA20": 100.0, "MA60": 100.0, "RSI": 50.0,
+            "MACD": 1.0, "MACD_Signal": 0.5, "K": 50.0, "D": 45.0,
+            "BB_Upper": 110.0, "BB_Middle": 100.0, "BB_Lower": 90.0,
+            "ATR": 1.0, "OBV": 1000.0, "Volume_Ratio": 1.2,
+        }.items():
+            signal_df[key] = value
+        analysis = StockAnalysis(
+            stock_id=source.stock_id, symbol=source.symbol, raw_df=source.raw_df,
+            indicator_df=source.indicator_df, signal_df=signal_df,
+            latest=signal_df.iloc[-1], summary={"Analysis": "test"},
+        )
+        analyzer = Mock(return_value=analysis)
+        session = AnalysisSession(
+            period="1y", interval="1d", auto_adjust=False, force_refresh=True, analyzer=analyzer
+        )
+        provider = session.get
+        scan_row = scan_one_stock("2330", ScanConfig(force_refresh=True, analysis_provider=provider))
+        self.assertEqual(scan_row["Status"], "OK")
+        candidates = pd.DataFrame([{"Rank": 1, "Stock": "2330", "Signal": "BUY", "Score": 5.0}])
+        result = {
+            "start_date": "2024-01-01", "end_date": "2024-01-02", "Total Return %": 1.0,
+            "Buy and Hold Return %": 1.0, "Trade Count": 1, "Win Rate %": 100.0,
+            "Max Drawdown %": -1.0, "Sharpe Ratio": 1.0,
+        }
+        with patch.object(daily_report, "run_backtest_result", return_value=result):
+            backtests, _ = run_candidate_backtest_validation(
+                candidates, validate_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=True, initial_capital=100000, fee_rate=0.001,
+                tax_rate=0.003, position_size=1.0, analysis_provider=provider,
+            )
+        with patch.object(daily_report, "run_parameter_sweep", return_value=_detail()) as sweep:
+            daily_report.run_candidate_parameter_sweep_validation(
+                backtests, parameter_sweep_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=True, sort_by="Sharpe Ratio", initial_capital=100000,
+                fee_rate=0.001, tax_rate=0.003, position_size=1.0, analysis_provider=provider,
+            )
+        wf_detail = pd.DataFrame([{
+            "Window": 1, "Test Total Return %": 1.0, "Test CAGR %": 1.0,
+            "Test Sharpe Ratio": 1.0, "Test Max Drawdown %": -1.0, "Error": "",
+        }])
+        with patch.object(daily_report, "run_walk_forward", return_value=wf_detail) as wf:
+            run_candidate_walk_forward_validation(
+                backtests, walk_forward_top=1, strategy="score", period="1y", interval="1d",
+                auto_adjust=False, force_refresh=True, train_days=2, test_days=1, step_days=1,
+                sort_by="Train Sharpe Ratio", initial_capital=100000, fee_rate=0.001,
+                tax_rate=0.003, position_size=1.0, analysis_provider=provider,
+            )
+        self.assertIs(sweep.call_args.kwargs["analysis"], analysis)
+        self.assertIs(wf.call_args.kwargs["analysis"], analysis)
+        analyzer.assert_called_once_with(
+            stock_id="2330", period="1y", interval="1d", auto_adjust=False, force_refresh=True,
+        )

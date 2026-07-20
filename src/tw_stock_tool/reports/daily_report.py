@@ -604,6 +604,8 @@ def run_candidate_parameter_sweep_validation(
             )
             if not isinstance(detail, pd.DataFrame) or detail.empty:
                 raise ValueError("no parameter sweep combinations were returned")
+            if "Error" not in detail.columns:
+                raise ValueError("parameter sweep result is missing required Error column")
 
             errors = detail.get("Error", pd.Series("", index=detail.index)).fillna("").astype(str)
             errors = errors.map(_parameter_sweep_error)
