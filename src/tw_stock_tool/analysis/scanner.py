@@ -27,6 +27,7 @@ class ScanConfig:
     sort_by: str = "Score"
     top: int | None = None
     errors_only: bool = False
+    analysis_provider: Callable[[str], StockAnalysis] | None = None
 
 
 SUPPORTED_SORT_COLUMNS = {"Score", "Volume_Ratio", "RSI", "Close", "ATR"}
@@ -88,13 +89,16 @@ def _analysis_to_row(analysis: StockAnalysis) -> dict[str, object]:
 
 def scan_one_stock(stock_id: str, config: ScanConfig) -> dict[str, object]:
     try:
-        analysis = analyze_stock(
-            stock_id=stock_id,
-            period=config.period,
-            interval=config.interval,
-            auto_adjust=config.auto_adjust,
-            force_refresh=config.force_refresh,
-        )
+        if config.analysis_provider is None:
+            analysis = analyze_stock(
+                stock_id=stock_id,
+                period=config.period,
+                interval=config.interval,
+                auto_adjust=config.auto_adjust,
+                force_refresh=config.force_refresh,
+            )
+        else:
+            analysis = config.analysis_provider(stock_id)
         return _analysis_to_row(analysis)
     except Exception as exc:
         return {

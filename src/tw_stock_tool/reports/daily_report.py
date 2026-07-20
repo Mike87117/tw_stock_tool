@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from collections.abc import Callable
 from typing import Iterable, Any
 
 import pandas as pd
 
-from tw_stock_tool.analysis.analysis import analyze_stock
+from tw_stock_tool.analysis.analysis import StockAnalysis, analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest_result
 from tw_stock_tool.backtesting.strategies import STRATEGIES
 from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS, run_walk_forward
@@ -200,6 +201,7 @@ def run_daily_report(
     auto_adjust: bool = DEFAULT_AUTO_ADJUST,
     output: str | None = None,
     progress: bool = True,
+    analysis_provider: Callable[[str], StockAnalysis] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path | None]:
     """Scan stocks, filter candidates, build summary, and optionally export Excel."""
     config = ScanConfig(
@@ -208,6 +210,7 @@ def run_daily_report(
         auto_adjust=auto_adjust,
         force_refresh=force_refresh,
         sort_by="Score",
+        analysis_provider=analysis_provider,
     )
 
     def _progress(current: int, total: int, stock_id: str, status: str) -> None:
@@ -524,6 +527,7 @@ def run_candidate_walk_forward_validation(
     fee_rate: float,
     tax_rate: float,
     position_size: float,
+    analysis_provider: Callable[[str], StockAnalysis] | None = None,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Validate successful backtest candidates with scalar walk-forward summaries."""
     if strategy not in WALK_FORWARD_STRATEGIES:
@@ -570,7 +574,7 @@ def run_candidate_walk_forward_validation(
             "Step Days": effective_step_days,
         }
         try:
-            detail = run_walk_forward(
+            walk_forward_kwargs = dict(
                 stock_id=stock_id,
                 period=period,
                 strategy=strategy,
@@ -586,6 +590,9 @@ def run_candidate_walk_forward_validation(
                 interval=interval,
                 auto_adjust=auto_adjust,
             )
+            if analysis_provider is not None:
+                walk_forward_kwargs["analysis"] = analysis_provider(stock_id)
+            detail = run_walk_forward(**walk_forward_kwargs)
             if not isinstance(detail, pd.DataFrame) or detail.empty:
                 raise ValueError("no walk-forward windows were returned")
 
@@ -668,6 +675,7 @@ def run_candidate_backtest_validation(
     fee_rate: float,
     tax_rate: float,
     position_size: float,
+    analysis_provider: Callable[[str], StockAnalysis] | None = None,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Backtest the first ranked candidates for optional research validation."""
     if strategy not in VALIDATION_STRATEGIES:
@@ -704,13 +712,16 @@ def run_candidate_backtest_validation(
             "Error": "",
         }
         try:
-            analysis = analyze_stock(
-                stock_id=stock_id,
-                period=period,
-                interval=interval,
-                auto_adjust=auto_adjust,
-                force_refresh=force_refresh,
-            )
+            if analysis_provider is None:
+                analysis = analyze_stock(
+                    stock_id=stock_id,
+                    period=period,
+                    interval=interval,
+                    auto_adjust=auto_adjust,
+                    force_refresh=force_refresh,
+                )
+            else:
+                analysis = analysis_provider(stock_id)
             source_df = analysis.signal_df if strategy == "score" else analysis.indicator_df
             strategy_df = strategy_func(source_df).dropna(subset=["Close", "Signal"])
             result = run_backtest_result(
