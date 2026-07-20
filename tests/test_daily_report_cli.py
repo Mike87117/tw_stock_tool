@@ -33,7 +33,7 @@ class TestDailyReportCli(unittest.TestCase):
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
     def test_main_calls_pipeline_and_writes_default_markdown(self, mock_open, mock_mkdir, mock_collect, mock_run):
         mock_run.return_value = Mock(markdown="# Report")
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330"]):
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-md"]):
             result = main()
         self.assertIsNone(result)
         mock_collect.assert_called_once()
