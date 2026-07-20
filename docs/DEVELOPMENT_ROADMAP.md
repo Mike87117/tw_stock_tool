@@ -401,6 +401,9 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 **Phase 50.3 status:** `AnalysisSession` is the shared per-run analysis boundary for Daily Research execution. Scanner, candidate backtest validation, and walk-forward validation accept the same provider/precomputed `StockAnalysis`, so one stock analysis is reused across the pipeline while preserving `period`, `interval`, `auto_adjust`, and `force_refresh`. Failures are cached and isolated; no live, broker, or recommendation behavior was added.
 
 **Phase 50.4 status:** Daily Report parameter sweep highlights are complete as an opt-in in-sample stage after successful backtests and before walk-forward validation. `--parameter-sweep-top` defaults to `0`, uses the existing validation financial assumptions, accepts the existing sweep sortable metrics, and reuses the Phase 50.3 `AnalysisSession`. Only successful Backtest Highlights rows are eligible; scalar best-combination summaries are shown in Markdown, do not change candidate ranking, and are not passed into walk-forward validation. Excel output remains unchanged.
+
+**Phase 50.5 status:** The Daily Research pipeline orchestration boundary is complete. Scan, backtest, parameter sweep, walk-forward, report building, and Markdown rendering now run through one reusable core runner with one shared `AnalysisSession` provider per execution. The CLI remains an adapter for argument parsing, stock selection, Markdown file writing, terminal messages, and exit-code handling. No new CLI flags, output formats, broker/live-trading behavior, or Phase 50.6 scope were added.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。

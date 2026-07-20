@@ -168,33 +168,19 @@ class Phase503ProviderReviewerGateTest(unittest.TestCase):
 
 
 class DailyCliProviderReviewerGateTest(unittest.TestCase):
-    def test_cli_passes_the_same_bound_provider_to_all_stages(self) -> None:
-        session = Mock()
-        ranking = pd.DataFrame()
-        candidates = pd.DataFrame([{"Stock": "2330"}])
-        backtests = pd.DataFrame([{"Status": "OK"}])
-        walk_forwards = pd.DataFrame()
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--validate-top", "1", "--walk-forward-top", "1"]), patch.object(
-            daily_report_cli, "AnalysisSession", return_value=session
-        ) as session_class, patch.object(
-            daily_report_cli, "run_daily_report", return_value=(ranking, candidates, ranking, None)
-        ) as scan, patch.object(
-            daily_report_cli, "run_candidate_backtest_validation", return_value=(backtests, [])
-        ) as backtest, patch.object(
-            daily_report_cli, "run_candidate_walk_forward_validation", return_value=(walk_forwards, [])
-        ) as walk_forward_validation, patch.object(
-            daily_report_cli, "build_data_limitations_from_ranking", return_value=[]
-        ), patch.object(daily_report_cli, "build_daily_report_data", return_value={}), patch.object(
-            daily_report_cli, "render_daily_report_markdown", return_value="# report"
+    def test_cli_delegates_provider_ownership_to_the_pipeline_runner(self) -> None:
+        result = Mock(markdown="# report")
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--validate-top", "1"]), patch.object(
+            daily_report_cli, "run_daily_research_pipeline", return_value=result
+        ) as pipeline, patch.object(
+            daily_report_cli, "collect_stock_ids", return_value=["2330"]
         ), patch.object(Path, "mkdir"), patch("builtins.open", mock_open()):
             daily_report_cli.main()
 
-        session_class.assert_called_once()
-        provider = session.get
-        self.assertIs(scan.call_args.kwargs["analysis_provider"], provider)
-        self.assertIs(backtest.call_args.kwargs["analysis_provider"], provider)
-        self.assertIs(walk_forward_validation.call_args.kwargs["analysis_provider"], provider)
-
+        pipeline.assert_called_once()
+        self.assertEqual(pipeline.call_args.args[0], ["2330"])
+        self.assertEqual(pipeline.call_args.args[1].validate_top, 1)
+        self.assertTrue(callable(pipeline.call_args.kwargs["status_callback"]))
 
 if __name__ == "__main__":
     unittest.main()
