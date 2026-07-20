@@ -2,7 +2,8 @@ import argparse
 import math
 from pathlib import Path
 
-from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS
+from tw_stock_tool.backtesting.parameter_sweep import SORTABLE_COLUMNS as PARAMETER_SWEEP_SORTABLE_COLUMNS
+from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS as WALK_FORWARD_SORTABLE_COLUMNS
 from tw_stock_tool.analysis.analysis_session import AnalysisSession
 from tw_stock_tool.utils.config import (
     DEFAULT_PERIOD,
@@ -19,6 +20,7 @@ from tw_stock_tool.reports.daily_report import (
     collect_stock_ids,
     build_data_limitations_from_ranking,
     run_candidate_backtest_validation,
+    run_candidate_parameter_sweep_validation,
     run_candidate_walk_forward_validation,
 )
 
@@ -42,13 +44,13 @@ def _validated_float(
     return number
 
 
-def _nonnegative_int(value: str) -> int:
+def _nonnegative_int(value: str, name: str = "validate_top") -> int:
     try:
         number = int(value)
     except (TypeError, ValueError) as exc:
-        raise argparse.ArgumentTypeError("validate_top must be a non-negative integer.") from exc
+        raise argparse.ArgumentTypeError(f"{name} must be a non-negative integer.") from exc
     if number < 0:
-        raise argparse.ArgumentTypeError("validate_top must be at least 0.")
+        raise argparse.ArgumentTypeError(f"{name} must be at least 0.")
     return number
 
 
@@ -108,13 +110,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--validation-fee-rate", type=_nonnegative_float("validation_fee_rate"), default=0.001425)
     parser.add_argument("--validation-tax-rate", type=_nonnegative_float("validation_tax_rate"), default=0.003)
     parser.add_argument("--validation-position-size", type=_position_size, default=1.0)
+    parser.add_argument("--parameter-sweep-top", type=lambda value: _nonnegative_int(value, "parameter_sweep_top"), default=0)
+    parser.add_argument(
+        "--parameter-sweep-sort-by",
+        choices=sorted(PARAMETER_SWEEP_SORTABLE_COLUMNS),
+        default="Sharpe Ratio",
+    )
     parser.add_argument("--walk-forward-top", type=_nonnegative_int, default=0)
     parser.add_argument("--walk-forward-train-days", type=_positive_int("walk_forward_train_days"), default=126)
     parser.add_argument("--walk-forward-test-days", type=_positive_int("walk_forward_test_days"), default=63)
     parser.add_argument("--walk-forward-step-days", type=_positive_int("walk_forward_step_days"))
     parser.add_argument(
         "--walk-forward-sort-by",
-        choices=sorted(SORTABLE_COLUMNS),
+        choices=sorted(WALK_FORWARD_SORTABLE_COLUMNS),
         default="Train Sharpe Ratio",
     )
 
@@ -123,6 +131,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-excel", nargs="?", const="", default=None)
     parser.add_argument("--output-dir", default="output")
     args = parser.parse_args(argv)
+    if args.parameter_sweep_top > 0:
+        if args.validate_top <= 0:
+            parser.error("--parameter-sweep-top requires --validate-top greater than 0.")
+        if args.parameter_sweep_top > args.validate_top:
+            parser.error("--parameter-sweep-top cannot exceed --validate-top.")
+        if args.validation_strategy == "macd":
+            parser.error("MACD is supported for backtest-only validation, not parameter sweep validation.")
     if args.walk_forward_top > 0:
         if args.validate_top <= 0:
             parser.error("--walk-forward-top requires --validate-top greater than 0.")
@@ -141,6 +156,8 @@ def main() -> int | None:
         validation_fee_rate = getattr(args, "validation_fee_rate", 0.001425)
         validation_tax_rate = getattr(args, "validation_tax_rate", 0.003)
         validation_position_size = getattr(args, "validation_position_size", 1.0)
+        parameter_sweep_top = getattr(args, "parameter_sweep_top", 0)
+        parameter_sweep_sort_by = getattr(args, "parameter_sweep_sort_by", "Sharpe Ratio")
         walk_forward_top = getattr(args, "walk_forward_top", 0)
         walk_forward_train_days = getattr(args, "walk_forward_train_days", 126)
         walk_forward_test_days = getattr(args, "walk_forward_test_days", 63)
@@ -191,6 +208,7 @@ def main() -> int | None:
         backtest_highlights = []
         risk_notes = []
         walk_forward_highlights = []
+        parameter_sweep_highlights = []
         if validate_top > 0:
             print(
                 f"Validating top {validate_top} candidates with {validation_strategy}..."
@@ -219,6 +237,39 @@ def main() -> int | None:
             risk_notes.append(
                 "Candidate backtests use historical data and next-bar Open execution assumptions; "
                 "historical results do not predict future performance."
+            )
+        if parameter_sweep_top > 0:
+            print(
+                f"Sweeping parameters for up to {parameter_sweep_top} successful backtest candidate(s)..."
+            )
+            parameter_sweep_highlights, parameter_sweep_limitations = run_candidate_parameter_sweep_validation(
+                backtest_highlights,
+                parameter_sweep_top=parameter_sweep_top,
+                strategy=validation_strategy,
+                period=args.period,
+                interval=args.interval,
+                auto_adjust=args.auto_adjust,
+                force_refresh=args.force_refresh,
+                sort_by=parameter_sweep_sort_by,
+                initial_capital=validation_initial_capital,
+                fee_rate=validation_fee_rate,
+                tax_rate=validation_tax_rate,
+                position_size=validation_position_size,
+                analysis_provider=analysis_provider,
+            )
+            data_limitations.extend(parameter_sweep_limitations)
+            status_counts = parameter_sweep_highlights["Status"].value_counts() if not parameter_sweep_highlights.empty else {}
+            print(
+                "Parameter sweep completed: "
+                f"selected {len(parameter_sweep_highlights)}, "
+                f"OK {status_counts.get('OK', 0)}, "
+                f"PARTIAL {status_counts.get('PARTIAL', 0)}, "
+                f"ERROR {status_counts.get('ERROR', 0)}."
+            )
+            risk_notes.append(
+                "Parameter sweep results are historical in-sample search summaries across multiple parameter combinations. "
+                "The displayed best result may reflect overfitting, does not change candidate ranking, is not passed into "
+                "walk-forward validation, and does not predict future performance."
             )
         if walk_forward_top > 0:
             print(
@@ -263,7 +314,7 @@ def main() -> int | None:
             screening_results=summary_df,
             watchlist_candidates=candidates_df,
             backtest_highlights=backtest_highlights,
-            parameter_sweep_highlights=[],
+            parameter_sweep_highlights=parameter_sweep_highlights,
             walk_forward_highlights=walk_forward_highlights,
             risk_notes=risk_notes,
             data_limitations=data_limitations,

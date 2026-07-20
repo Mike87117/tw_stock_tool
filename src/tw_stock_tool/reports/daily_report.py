@@ -11,6 +11,7 @@ import pandas as pd
 
 from tw_stock_tool.analysis.analysis import StockAnalysis, analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest_result
+from tw_stock_tool.backtesting.parameter_sweep import SORTABLE_COLUMNS as PARAMETER_SWEEP_SORTABLE_COLUMNS, run_parameter_sweep
 from tw_stock_tool.backtesting.strategies import STRATEGIES
 from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS, run_walk_forward
 
@@ -488,6 +489,13 @@ def _round_backtest_metric(value: Any) -> float | None:
 
 
 
+PARAMETER_SWEEP_HIGHLIGHT_COLUMNS = [
+    "Rank", "Stock", "Signal", "Score", "Strategy", "Status", "Sort By",
+    "Parameter Combinations", "Successful Combinations", "Error Combinations",
+    "Best Parameters", "Total Return %", "Buy and Hold Return %", "CAGR %",
+    "Trade Count", "Win Rate %", "Max Drawdown %", "Profit Factor",
+    "Sharpe Ratio", "Sortino Ratio", "Error",
+]
 WALK_FORWARD_HIGHLIGHT_COLUMNS = [
     "Rank", "Stock", "Signal", "Score", "Strategy", "Status",
     "Train Days", "Test Days", "Step Days", "Windows", "Successful Windows",
@@ -509,6 +517,160 @@ def _walk_forward_number(value: Any) -> float | None:
 def _walk_forward_error(value: Any) -> str:
     return " ".join(str(value).split())
 
+
+def _parameter_sweep_number(value: Any) -> float | int | None:
+    number = pd.to_numeric(value, errors="coerce")
+    if pd.isna(number):
+        return None
+    numeric = float(number)
+    return int(numeric) if numeric.is_integer() else round(numeric, 2)
+
+
+def _parameter_sweep_error(value: Any) -> str:
+    return " ".join(str(value).split())
+
+
+def run_candidate_parameter_sweep_validation(
+    backtest_highlights: pd.DataFrame,
+    *,
+    parameter_sweep_top: int,
+    strategy: str,
+    period: str,
+    interval: str,
+    auto_adjust: bool,
+    force_refresh: bool,
+    sort_by: str,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
+    position_size: float,
+    analysis_provider: Callable[[str], StockAnalysis] | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Summarize an optional in-sample parameter sweep for successful backtests."""
+    if strategy not in WALK_FORWARD_STRATEGIES:
+        raise ValueError(
+            f"Unsupported parameter sweep strategy: {strategy}. "
+            f"Choose from {', '.join(WALK_FORWARD_STRATEGIES)}."
+        )
+    if parameter_sweep_top < 0:
+        raise ValueError("parameter_sweep_top must be non-negative.")
+    if sort_by not in PARAMETER_SWEEP_SORTABLE_COLUMNS:
+        raise ValueError(f"Unsupported parameter sweep sort metric: {sort_by}")
+
+    empty = pd.DataFrame(columns=PARAMETER_SWEEP_HIGHLIGHT_COLUMNS)
+    if parameter_sweep_top == 0:
+        return empty, []
+    if backtest_highlights.empty or "Status" not in backtest_highlights.columns:
+        return empty, [
+            "Parameter sweep skipped: no successful backtest candidates were available."
+        ]
+
+    eligible = backtest_highlights[
+        backtest_highlights["Status"].astype(str).str.upper() == "OK"
+    ].head(parameter_sweep_top)
+    if eligible.empty:
+        return empty, [
+            "Parameter sweep skipped: no successful backtest candidates were available."
+        ]
+
+    rows: list[dict[str, Any]] = []
+    limitations: list[str] = []
+    for _, candidate in eligible.iterrows():
+        stock_id = str(candidate.get("Stock", ""))
+        metadata = {
+            "Rank": candidate.get("Rank"),
+            "Stock": candidate.get("Stock"),
+            "Signal": candidate.get("Signal"),
+            "Score": candidate.get("Score"),
+            "Strategy": strategy,
+            "Sort By": sort_by,
+        }
+        try:
+            analysis = analysis_provider(stock_id) if analysis_provider else None
+            detail = run_parameter_sweep(
+                stock_id=stock_id,
+                period=period,
+                strategy=strategy,
+                sort_by=sort_by,
+                top=0,
+                force_refresh=force_refresh,
+                initial_capital=initial_capital,
+                fee_rate=fee_rate,
+                tax_rate=tax_rate,
+                position_size=position_size,
+                interval=interval,
+                auto_adjust=auto_adjust,
+                analysis=analysis,
+            )
+            if not isinstance(detail, pd.DataFrame) or detail.empty:
+                raise ValueError("no parameter sweep combinations were returned")
+
+            errors = detail.get("Error", pd.Series("", index=detail.index)).fillna("").astype(str)
+            errors = errors.map(_parameter_sweep_error)
+            successful = detail.loc[errors == ""].copy()
+            error_count = int((errors != "").sum())
+            combination_count = len(detail)
+            first_error = next((error for error in errors if error), "")
+            if successful.empty:
+                status = "ERROR"
+                limitations.append(
+                    f"Parameter sweep for {stock_id} completed with {error_count} failed combination(s): {first_error}"
+                )
+                best = {}
+            else:
+                status = "PARTIAL" if error_count else "OK"
+                if error_count:
+                    limitations.append(
+                        f"Parameter sweep for {stock_id} completed with {error_count} failed combination(s): {first_error}"
+                    )
+                successful["_SortValue"] = pd.to_numeric(
+                    successful.get(sort_by), errors="coerce"
+                ).fillna(float("-inf"))
+                best = successful.sort_values(
+                    by="_SortValue", ascending=False, kind="mergesort"
+                ).iloc[0].to_dict()
+
+            rows.append({
+                **metadata,
+                "Status": status,
+                "Parameter Combinations": combination_count,
+                "Successful Combinations": len(successful),
+                "Error Combinations": error_count,
+                "Best Parameters": best.get("Parameters"),
+                "Total Return %": _parameter_sweep_number(best.get("Total Return %")),
+                "Buy and Hold Return %": _parameter_sweep_number(best.get("Buy and Hold Return %")),
+                "CAGR %": _parameter_sweep_number(best.get("CAGR %")),
+                "Trade Count": _parameter_sweep_number(best.get("Trade Count")),
+                "Win Rate %": _parameter_sweep_number(best.get("Win Rate %")),
+                "Max Drawdown %": _parameter_sweep_number(best.get("Max Drawdown %")),
+                "Profit Factor": _parameter_sweep_number(best.get("Profit Factor")),
+                "Sharpe Ratio": _parameter_sweep_number(best.get("Sharpe Ratio")),
+                "Sortino Ratio": _parameter_sweep_number(best.get("Sortino Ratio")),
+                "Error": first_error if status != "OK" else "",
+            })
+        except Exception as exc:
+            error = _parameter_sweep_error(exc)
+            rows.append({
+                **metadata,
+                "Status": "ERROR",
+                "Parameter Combinations": 0,
+                "Successful Combinations": 0,
+                "Error Combinations": 0,
+                "Best Parameters": None,
+                "Total Return %": None,
+                "Buy and Hold Return %": None,
+                "CAGR %": None,
+                "Trade Count": None,
+                "Win Rate %": None,
+                "Max Drawdown %": None,
+                "Profit Factor": None,
+                "Sharpe Ratio": None,
+                "Sortino Ratio": None,
+                "Error": error,
+            })
+            limitations.append(f"Parameter sweep for {stock_id} failed: {error}")
+
+    return pd.DataFrame(rows, columns=PARAMETER_SWEEP_HIGHLIGHT_COLUMNS), limitations
 
 def run_candidate_walk_forward_validation(
     backtest_highlights: pd.DataFrame,
