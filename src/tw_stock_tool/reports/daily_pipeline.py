@@ -92,7 +92,6 @@ class DailyPipelineResult:
     walk_forward_highlights: pd.DataFrame
     risk_notes: list[str]
     data_limitations: list[str]
-    run_configuration: dict[str, Any]
     report_data: dict[str, Any]
     markdown: str
 
@@ -165,20 +164,20 @@ def build_daily_pipeline_run_configuration(
         "Interval": config.interval,
         "Signals": ", ".join(config.signals),
         "Minimum Score": config.min_score,
-        "Candidate Top": config.top if config.top is not None else "All",
-        "Auto Adjust": "Yes" if config.auto_adjust else "No",
-        "Force Refresh": "Yes" if config.force_refresh else "No",
-        "Backtest Enabled": "Yes" if config.validate_top > 0 else "No",
+        "Candidate Top": config.top,
+        "Auto Adjust": config.auto_adjust,
+        "Force Refresh": config.force_refresh,
+        "Backtest Enabled": config.validate_top > 0,
         "Backtest Top": config.validate_top,
         "Validation Strategy": config.validation_strategy,
         "Initial Capital": config.validation_initial_capital,
         "Fee Rate": config.validation_fee_rate,
         "Tax Rate": config.validation_tax_rate,
         "Position Size": config.validation_position_size,
-        "Parameter Sweep Enabled": "Yes" if config.parameter_sweep_top > 0 else "No",
+        "Parameter Sweep Enabled": config.parameter_sweep_top > 0,
         "Parameter Sweep Top": config.parameter_sweep_top,
         "Parameter Sweep Sort By": config.parameter_sweep_sort_by,
-        "Walk Forward Enabled": "Yes" if config.walk_forward_top > 0 else "No",
+        "Walk Forward Enabled": config.walk_forward_top > 0,
         "Walk Forward Top": config.walk_forward_top,
         "Train Days": config.walk_forward_train_days,
         "Test Days": config.walk_forward_test_days,
@@ -347,7 +346,6 @@ def run_daily_research_pipeline(
         walk_forward_highlights=walk_forward_highlights,
         risk_notes=risk_notes,
         data_limitations=data_limitations,
-        run_configuration=run_configuration,
         report_data=report_data,
         markdown=markdown,
     )

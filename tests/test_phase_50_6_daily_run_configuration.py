@@ -16,18 +16,37 @@ class RunConfigurationSnapshotTest(unittest.TestCase):
             daily_pipeline.DailyPipelineConfig()
         )
 
-        self.assertEqual(list(snapshot), [
-            "Period", "Interval", "Signals", "Minimum Score", "Candidate Top",
-            "Auto Adjust", "Force Refresh", "Backtest Enabled", "Backtest Top",
-            "Validation Strategy", "Initial Capital", "Fee Rate", "Tax Rate",
-            "Position Size", "Parameter Sweep Enabled", "Parameter Sweep Top",
-            "Parameter Sweep Sort By", "Walk Forward Enabled", "Walk Forward Top",
-            "Train Days", "Test Days", "Effective Step Days", "Walk Forward Sort By",
-        ])
+        expected = {
+            "Period": "1y",
+            "Interval": "1d",
+            "Signals": "BUY, WATCH",
+            "Minimum Score": 4.0,
+            "Candidate Top": 20,
+            "Auto Adjust": False,
+            "Force Refresh": False,
+            "Backtest Enabled": False,
+            "Backtest Top": 0,
+            "Validation Strategy": "ma_cross",
+            "Initial Capital": 100000,
+            "Fee Rate": 0.001425,
+            "Tax Rate": 0.003,
+            "Position Size": 1.0,
+            "Parameter Sweep Enabled": False,
+            "Parameter Sweep Top": 0,
+            "Parameter Sweep Sort By": "Sharpe Ratio",
+            "Walk Forward Enabled": False,
+            "Walk Forward Top": 0,
+            "Train Days": 126,
+            "Test Days": 63,
+            "Effective Step Days": 63,
+            "Walk Forward Sort By": "Train Sharpe Ratio",
+        }
+        self.assertEqual(snapshot, expected)
+        self.assertEqual(list(snapshot), list(expected))
         self.assertEqual(snapshot["Signals"], "BUY, WATCH")
         self.assertEqual(snapshot["Candidate Top"], 20)
-        self.assertEqual(snapshot["Auto Adjust"], "No")
-        self.assertEqual(snapshot["Backtest Enabled"], "No")
+        self.assertIs(snapshot["Auto Adjust"], False)
+        self.assertIs(snapshot["Backtest Enabled"], False)
         self.assertEqual(snapshot["Effective Step Days"], 63)
         for value in snapshot.values():
             self.assertNotIsInstance(value, (pd.DataFrame, pd.Series, dict, list))
@@ -44,13 +63,28 @@ class RunConfigurationSnapshotTest(unittest.TestCase):
             walk_forward_step_days=10, walk_forward_sort_by="Train CAGR %",
         )
         snapshot = daily_pipeline.build_daily_pipeline_run_configuration(config)
-        self.assertEqual(snapshot["Candidate Top"], "All")
+        expected = {
+            "Period": "2y", "Interval": "1wk", "Signals": "BUY",
+            "Minimum Score": 4.0, "Candidate Top": None,
+            "Auto Adjust": True, "Force Refresh": True,
+            "Backtest Enabled": True, "Backtest Top": 4,
+            "Validation Strategy": "score", "Initial Capital": 200000,
+            "Fee Rate": 0.001, "Tax Rate": 0.002, "Position Size": 0.5,
+            "Parameter Sweep Enabled": True, "Parameter Sweep Top": 3,
+            "Parameter Sweep Sort By": "CAGR %",
+            "Walk Forward Enabled": True, "Walk Forward Top": 2,
+            "Train Days": 100, "Test Days": 20, "Effective Step Days": 10,
+            "Walk Forward Sort By": "Train CAGR %",
+        }
+        self.assertEqual(snapshot, expected)
+        self.assertEqual(list(snapshot), list(expected))
+        self.assertIsNone(snapshot["Candidate Top"])
         self.assertEqual(snapshot["Signals"], "BUY")
-        self.assertEqual(snapshot["Auto Adjust"], "Yes")
-        self.assertEqual(snapshot["Force Refresh"], "Yes")
-        self.assertEqual(snapshot["Backtest Enabled"], "Yes")
-        self.assertEqual(snapshot["Parameter Sweep Enabled"], "Yes")
-        self.assertEqual(snapshot["Walk Forward Enabled"], "Yes")
+        self.assertIs(snapshot["Auto Adjust"], True)
+        self.assertIs(snapshot["Force Refresh"], True)
+        self.assertIs(snapshot["Backtest Enabled"], True)
+        self.assertIs(snapshot["Parameter Sweep Enabled"], True)
+        self.assertIs(snapshot["Walk Forward Enabled"], True)
         self.assertEqual(snapshot["Effective Step Days"], 10)
 
     def test_snapshot_validation_is_pure(self):
@@ -73,14 +107,18 @@ class RunConfigurationReportTest(unittest.TestCase):
         report = daily_report.build_daily_report_data(
             run_configuration={
                 "Period": "2y", "Interval": "1wk", "Signals": "BUY, WATCH",
-                "Backtest Enabled": "Yes", "Effective Step Days": 10,
+                "Backtest Enabled": True, "Parameter Sweep Enabled": True,
+                "Walk Forward Enabled": True, "Effective Step Days": 10,
             }
         )
         markdown = daily_report.render_daily_report_markdown(report)
         self.assertLess(markdown.index("## Report Metadata"), markdown.index("## Run Configuration"))
         self.assertLess(markdown.index("## Run Configuration"), markdown.index("## Report Highlights"))
         self.assertIn("- **Period**: 2y", markdown)
-        self.assertIn("- **Backtest Enabled**: Yes", markdown)
+        self.assertIn("- **Backtest Enabled**: True", markdown)
+        self.assertIn("- **Parameter Sweep Enabled**: True", markdown)
+        self.assertIn("- **Walk Forward Enabled**: True", markdown)
+        self.assertEqual(markdown.count("## Run Configuration"), 1)
 
 
 class RunConfigurationPipelineTest(unittest.TestCase):
@@ -91,13 +129,17 @@ class RunConfigurationPipelineTest(unittest.TestCase):
         ranking = pd.DataFrame([{"Stock": "2330", "Status": "OK"}])
         captured = {}
         with patch.object(daily_pipeline, "run_daily_report", return_value=(summary, candidates, ranking, None)), \
-             patch.object(daily_pipeline, "build_daily_report_data", side_effect=lambda **kwargs: captured.update(kwargs) or {}), \
+             patch.object(daily_pipeline, "build_daily_report_data", side_effect=lambda **kwargs: captured.update(kwargs) or {"Run Configuration": dict(kwargs["run_configuration"])}), \
              patch.object(daily_pipeline, "render_daily_report_markdown", return_value="# report"):
             result = daily_pipeline.run_daily_research_pipeline(["2330"], config)
 
-        self.assertEqual(captured["run_configuration"], result.run_configuration)
-        self.assertEqual(result.report_data, {})
-        self.assertEqual(result.run_configuration["Effective Step Days"], 63)
+        self.assertEqual(captured["run_configuration"], result.report_data["Run Configuration"])
+        self.assertEqual(result.report_data["Run Configuration"], captured["run_configuration"])
+        self.assertEqual(list(daily_pipeline.DailyPipelineResult.__dataclass_fields__), [
+            "summary_df", "candidates_df", "ranking_df", "backtest_highlights",
+            "parameter_sweep_highlights", "walk_forward_highlights", "risk_notes",
+            "data_limitations", "report_data", "markdown",
+        ])
 
 
 if __name__ == "__main__":
