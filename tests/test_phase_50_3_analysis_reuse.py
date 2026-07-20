@@ -1,7 +1,6 @@
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pandas as pd
