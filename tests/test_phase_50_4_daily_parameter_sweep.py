@@ -142,30 +142,28 @@ class DailyParameterSweepCliTest(unittest.TestCase):
                 daily_report_cli._parse_args(option)
             self.assertEqual(raised.exception.code, 2)
 
-    @patch("tw_stock_tool.cli.daily_report_cli.render_daily_report_markdown", return_value="# Report")
-    @patch("tw_stock_tool.cli.daily_report_cli.build_daily_report_data", return_value={})
-    @patch("tw_stock_tool.cli.daily_report_cli.build_data_limitations_from_ranking", return_value=[])
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_report", return_value=(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None))
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
     @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_execution_order_report_and_provider(
-        self, mock_open, mock_mkdir, collect, run_daily, limitations, build, render,
-    ) -> None:
-        events: list[str] = []
-        backtests = pd.DataFrame([{"Stock": "2330", "Status": "OK"}])
-        sweep = pd.DataFrame([{"Status": "OK"}])
-        with patch.object(daily_report_cli, "run_candidate_backtest_validation", side_effect=lambda *a, **k: (events.append("backtest") or (backtests, []))), patch.object(
-            daily_report_cli, "run_candidate_parameter_sweep_validation", side_effect=lambda *a, **k: (events.append("sweep") or (sweep, [])),
-        ) as sweep_runner, patch.object(
-            daily_report_cli, "run_candidate_walk_forward_validation", side_effect=lambda *a, **k: (events.append("walk-forward") or (pd.DataFrame(), [])),
+    def test_execution_order_report_and_provider(self, mock_open, mock_mkdir, collect, run_pipeline) -> None:
+        run_pipeline.return_value = Mock(markdown="# Report")
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "daily_report_cli.py",
+                "--stocks", "2330",
+                "--validate-top", "1",
+                "--parameter-sweep-top", "1",
+                "--walk-forward-top", "1",
+            ],
         ):
-            with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--validate-top", "1", "--parameter-sweep-top", "1", "--walk-forward-top", "1"]):
-                self.assertIsNone(daily_report_cli.main())
-        self.assertEqual(events, ["backtest", "sweep", "walk-forward"])
-        self.assertTrue(build.call_args.kwargs["parameter_sweep_highlights"].equals(sweep))
-        self.assertTrue(any("does not change candidate ranking" in note for note in build.call_args.kwargs["risk_notes"]))
-        self.assertIsNotNone(sweep_runner.call_args.kwargs["analysis_provider"])
+            self.assertIsNone(daily_report_cli.main())
+        config = run_pipeline.call_args.args[1]
+        self.assertEqual(config.parameter_sweep_top, 1)
+        self.assertEqual(config.walk_forward_top, 1)
+        self.assertTrue(callable(run_pipeline.call_args.kwargs["status_callback"]))
 
 
 if __name__ == "__main__":

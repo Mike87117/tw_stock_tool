@@ -143,12 +143,8 @@ def patch_success(stack, case):
         stack.enter_context(patch.object(module, "analyze_stock", return_value=SimpleNamespace(indicator_df=frame())))
         stack.enter_context(patch.object(module, "run_backtest", return_value={"Total Return %": 1, "Win Rate %": 1, "Trade Count": 1}))
     elif name == "daily_report_cli":
-        empty = pd.DataFrame()
         stack.enter_context(patch.object(module, "collect_stock_ids", return_value=["2330"]))
-        stack.enter_context(patch.object(module, "run_daily_report", return_value=(empty, empty, empty, None)))
-        stack.enter_context(patch.object(module, "build_data_limitations_from_ranking", return_value=[]))
-        stack.enter_context(patch.object(module, "build_daily_report_data", return_value={}))
-        stack.enter_context(patch.object(module, "render_daily_report_markdown", return_value="# report"))
+        stack.enter_context(patch.object(module, "run_daily_research_pipeline", return_value=SimpleNamespace(markdown="# report")))
         stack.enter_context(patch.object(Path, "mkdir"))
         stack.enter_context(patch("builtins.open", mock_open()))
     elif name == "parameter_sweep_report":
@@ -206,10 +202,7 @@ def process_script(case, success, unified=False):
         elif name == "daily_report_cli":
             lines += [
                 "module.collect_stock_ids = lambda *a, **k: ['2330']",
-                "module.run_daily_report = lambda **k: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None)",
-                "module.build_data_limitations_from_ranking = lambda *a: []",
-                "module.build_daily_report_data = lambda **k: {}",
-                "module.render_daily_report_markdown = lambda *a: '# report'",
+                "module.run_daily_research_pipeline = lambda *a, **k: SimpleNamespace(markdown='# report')",
             ]
         elif name == "parameter_sweep_report":
             lines += [
