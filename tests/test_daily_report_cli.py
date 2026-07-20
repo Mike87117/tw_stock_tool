@@ -1,5 +1,6 @@
 import sys
 import unittest
+from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -58,6 +59,30 @@ class TestDailyReportCli(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(mock_run.call_args.args[1].output_excel, "daily.xlsx")
         mock_open.assert_called_once_with(Path("custom/report.md"), "w", encoding="utf-8")
+
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_main_uses_custom_output_directory(self, mock_open, mock_mkdir, mock_collect, mock_run):
+        mock_run.return_value = Mock(markdown="# Report")
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-dir", "reports"]):
+            self.assertIsNone(main())
+        mock_open.assert_called_once_with(Path("reports/daily_report.md"), "w", encoding="utf-8")
+        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline", return_value=Mock(markdown="# Report"))
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("builtins.open", side_effect=PermissionError("locked"))
+    def test_markdown_write_failure_returns_one(self, mock_open, mock_collect, mock_run):
+        output = StringIO()
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330"]), patch.object(
+            sys, "stdout", output
+        ):
+            result = main()
+        self.assertEqual(result, 1)
+        self.assertIn("Error:", output.getvalue())
+        self.assertIn("locked", output.getvalue())
 
     @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=[])

@@ -70,6 +70,17 @@ class DailyPipelineConfig:
     progress: bool = True
     report_date: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.signals is None or isinstance(self.signals, (str, bytes)):
+            raise ValueError("signals must be an iterable of non-empty strings.")
+        try:
+            normalized = tuple(self.signals)
+        except TypeError as exc:
+            raise ValueError("signals must be an iterable of non-empty strings.") from exc
+        if any(not isinstance(signal, str) or not signal.strip() for signal in normalized):
+            raise ValueError("signals must be an iterable of non-empty strings.")
+        object.__setattr__(self, "signals", normalized)
+
 
 @dataclass
 class DailyPipelineResult:
@@ -270,7 +281,11 @@ def run_daily_research_pipeline(
             "Walk-forward results are historical out-of-sample research estimates. Parameters are selected on training windows and evaluated on later test windows; results do not predict future performance. Window fields represent observations (rows) in the current engine."
         )
 
-    report_date = config.report_date or datetime.now().strftime("%Y-%m-%d")
+    report_date = (
+        config.report_date
+        if config.report_date is not None
+        else datetime.now().strftime("%Y-%m-%d")
+    )
     report_data = build_daily_report_data(
         report_date=report_date,
         stock_universe=normalized_stock_ids,

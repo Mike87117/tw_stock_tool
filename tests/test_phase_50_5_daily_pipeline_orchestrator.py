@@ -19,6 +19,18 @@ class DailyPipelineConfigTest(unittest.TestCase):
         with self.assertRaises(Exception):
             config.signals += ("SELL",)
 
+    def test_list_input_is_copied_and_normalized(self):
+        signals = ["BUY", "WATCH"]
+        config = daily_pipeline.DailyPipelineConfig(signals=signals)
+        signals.append("SELL")
+        self.assertEqual(config.signals, ("BUY", "WATCH"))
+
+    def test_invalid_signal_values_are_rejected(self):
+        for signals in (None, "BUY", [""], [1], ["BUY", " "]):
+            with self.subTest(signals=signals):
+                with self.assertRaisesRegex(ValueError, "signals must be an iterable"):
+                    daily_pipeline.DailyPipelineConfig(signals=signals)
+
     def test_dependencies_and_finite_values_are_rejected(self):
         invalid = [
             daily_pipeline.DailyPipelineConfig(parameter_sweep_top=1),
@@ -110,6 +122,33 @@ class DailyPipelineRunnerTest(unittest.TestCase):
         self.assertTrue(any("Parameter sweep completed" in message for message in events))
         self.assertTrue(any("Walk-forward validation completed" in message for message in events))
 
+    def test_report_date_empty_string_is_preserved(self):
+        captured = {}
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(self.summary, self.candidates, self.ranking, None),
+        ), patch.object(
+            daily_pipeline, "build_daily_report_data", side_effect=lambda **kwargs: captured.update(kwargs) or {}
+        ), patch.object(daily_pipeline, "render_daily_report_markdown", return_value="# report"):
+            daily_pipeline.run_daily_research_pipeline(["2330"], daily_pipeline.DailyPipelineConfig(report_date=""))
+        self.assertEqual(captured["report_date"], "")
+
+    def test_report_date_none_uses_current_date(self):
+        captured = {}
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(self.summary, self.candidates, self.ranking, None),
+        ), patch.object(
+            daily_pipeline, "build_daily_report_data", side_effect=lambda **kwargs: captured.update(kwargs) or {}
+        ), patch.object(daily_pipeline, "render_daily_report_markdown", return_value="# report"), patch.object(
+            daily_pipeline, "datetime"
+        ) as clock:
+            clock.now.return_value.strftime.return_value = "2026-07-20"
+            daily_pipeline.run_daily_research_pipeline(["2330"], daily_pipeline.DailyPipelineConfig())
+        self.assertEqual(captured["report_date"], "2026-07-20")
+
     def test_disabled_stages_have_required_empty_schemas_and_callback_none_is_quiet(self):
         with patch.object(
             daily_pipeline,
@@ -128,6 +167,29 @@ class DailyPipelineRunnerTest(unittest.TestCase):
     def test_fatal_stage_errors_propagate(self):
         with patch.object(daily_pipeline, "run_daily_report", side_effect=RuntimeError("scan failed")):
             with self.assertRaisesRegex(RuntimeError, "scan failed"):
+                daily_pipeline.run_daily_research_pipeline(["2330"], daily_pipeline.DailyPipelineConfig())
+
+    def test_report_builder_error_propagates_and_skips_renderer(self):
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(self.summary, self.candidates, self.ranking, None),
+        ), patch.object(daily_pipeline, "build_daily_report_data", side_effect=RuntimeError("build failed")), patch.object(
+            daily_pipeline, "render_daily_report_markdown"
+        ) as render:
+            with self.assertRaisesRegex(RuntimeError, "build failed"):
+                daily_pipeline.run_daily_research_pipeline(["2330"], daily_pipeline.DailyPipelineConfig())
+        render.assert_not_called()
+
+    def test_renderer_error_propagates(self):
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(self.summary, self.candidates, self.ranking, None),
+        ), patch.object(daily_pipeline, "build_daily_report_data", return_value={}), patch.object(
+            daily_pipeline, "render_daily_report_markdown", side_effect=RuntimeError("render failed")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "render failed"):
                 daily_pipeline.run_daily_research_pipeline(["2330"], daily_pipeline.DailyPipelineConfig())
 
     def test_empty_stock_iterable_is_rejected_before_provider(self):
