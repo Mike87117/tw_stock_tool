@@ -92,6 +92,7 @@ class DailyPipelineResult:
     walk_forward_highlights: pd.DataFrame
     risk_notes: list[str]
     data_limitations: list[str]
+    run_configuration: dict[str, Any]
     report_data: dict[str, Any]
     markdown: str
 
@@ -152,6 +153,42 @@ def validate_daily_pipeline_config(config: DailyPipelineConfig) -> None:
             raise ValueError("MACD is supported for backtest-only validation, not walk-forward validation.")
         if config.walk_forward_sort_by not in WALK_FORWARD_SORTABLE_COLUMNS:
             raise ValueError(f"Unsupported walk-forward sort metric: {config.walk_forward_sort_by}")
+
+
+def build_daily_pipeline_run_configuration(
+    config: DailyPipelineConfig,
+) -> dict[str, Any]:
+    """Build the deterministic scalar configuration snapshot for the report."""
+    validate_daily_pipeline_config(config)
+    return {
+        "Period": config.period,
+        "Interval": config.interval,
+        "Signals": ", ".join(config.signals),
+        "Minimum Score": config.min_score,
+        "Candidate Top": config.top if config.top is not None else "All",
+        "Auto Adjust": "Yes" if config.auto_adjust else "No",
+        "Force Refresh": "Yes" if config.force_refresh else "No",
+        "Backtest Enabled": "Yes" if config.validate_top > 0 else "No",
+        "Backtest Top": config.validate_top,
+        "Validation Strategy": config.validation_strategy,
+        "Initial Capital": config.validation_initial_capital,
+        "Fee Rate": config.validation_fee_rate,
+        "Tax Rate": config.validation_tax_rate,
+        "Position Size": config.validation_position_size,
+        "Parameter Sweep Enabled": "Yes" if config.parameter_sweep_top > 0 else "No",
+        "Parameter Sweep Top": config.parameter_sweep_top,
+        "Parameter Sweep Sort By": config.parameter_sweep_sort_by,
+        "Walk Forward Enabled": "Yes" if config.walk_forward_top > 0 else "No",
+        "Walk Forward Top": config.walk_forward_top,
+        "Train Days": config.walk_forward_train_days,
+        "Test Days": config.walk_forward_test_days,
+        "Effective Step Days": (
+            config.walk_forward_step_days
+            if config.walk_forward_step_days is not None
+            else config.walk_forward_test_days
+        ),
+        "Walk Forward Sort By": config.walk_forward_sort_by,
+    }
 
 
 def _empty(columns: list[str]) -> pd.DataFrame:
@@ -281,6 +318,8 @@ def run_daily_research_pipeline(
             "Walk-forward results are historical out-of-sample research estimates. Parameters are selected on training windows and evaluated on later test windows; results do not predict future performance. Window fields represent observations (rows) in the current engine."
         )
 
+    run_configuration = build_daily_pipeline_run_configuration(config)
+
     report_date = (
         config.report_date
         if config.report_date is not None
@@ -289,6 +328,7 @@ def run_daily_research_pipeline(
     report_data = build_daily_report_data(
         report_date=report_date,
         stock_universe=normalized_stock_ids,
+        run_configuration=run_configuration,
         screening_results=summary_df,
         watchlist_candidates=candidates_df,
         backtest_highlights=backtest_highlights,
@@ -307,6 +347,7 @@ def run_daily_research_pipeline(
         walk_forward_highlights=walk_forward_highlights,
         risk_notes=risk_notes,
         data_limitations=data_limitations,
+        run_configuration=run_configuration,
         report_data=report_data,
         markdown=markdown,
     )
