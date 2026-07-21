@@ -408,6 +408,8 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 
 **Phase 50.7 status:** The Daily Research pipeline now exposes a deterministic scalar Pipeline Run Summary built from the exact scan, candidate, backtest, parameter sweep, and walk-forward stage outputs. Status values are normalized and fail closed, report data and Markdown preserve the summary section order, and the existing 10-field DailyPipelineResult boundary remains unchanged. No new CLI flags, output formats, ranking or validation behavior, broker/live-trading behavior, or Phase 50.8 scope were added.
 
+**Phase 50.8 status:** Daily Research report data now has a pure schema v1 serialization/deserialization boundary with deterministic UTF-8 JSON, canonical section and metadata ordering, and pandas/numpy/missing-value normalization. The boundary performs no file I/O and adds no CLI, Markdown, Excel, trading, recommendation, or Phase 50.9 behavior.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
