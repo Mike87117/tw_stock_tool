@@ -406,6 +406,8 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 
 **Phase 50.6 status:** Daily Markdown now includes a deterministic Run Configuration snapshot built directly from DailyPipelineConfig. The snapshot records scan, backtest, parameter sweep, and walk-forward settings, preserves raw scalar configuration values, including Candidate Top=None and boolean enabled flags, and uses the configured or test-length effective step days. The snapshot is built after validation stages and passed through the existing report builder; no new CLI flags, output formats, ranking or validation behavior, broker/live-trading behavior, or Phase 50.7 scope were added.
 
+**Phase 50.7 status:** The Daily Research pipeline now exposes a deterministic scalar Pipeline Run Summary built from the exact scan, candidate, backtest, parameter sweep, and walk-forward stage outputs. Status values are normalized and fail closed, report data and Markdown preserve the summary section order, and the existing 10-field DailyPipelineResult boundary remains unchanged. No new CLI flags, output formats, ranking or validation behavior, broker/live-trading behavior, or Phase 50.8 scope were added.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
