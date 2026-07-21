@@ -86,9 +86,9 @@ def _validate_exact_keys(
     path: str,
 ) -> None:
     keys = list(value)
-    non_string = next((key for key in keys if not isinstance(key, str)), None)
-    if non_string is not None:
-        _fail(path, f"dictionary key {non_string!r} must be a string")
+    for key in keys:
+        if not isinstance(key, str):
+            _fail(path, f"dictionary key {key!r} must be a string")
     expected_set = set(expected)
     actual_set = set(keys)
     missing = [key for key in expected if key not in actual_set]

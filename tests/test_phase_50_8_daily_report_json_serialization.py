@@ -1,6 +1,7 @@
 import copy
 import json
 import sys
+import subprocess
 import unittest
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -191,18 +192,77 @@ class DailyReportSerializationTests(unittest.TestCase):
                 deserialize_daily_report_data(changed)
 
     def test_dependency_boundary_is_explicit(self):
-        source = Path(__file__).resolve().parents[1] / "src/tw_stock_tool/reports/daily_report_serialization.py"
-        text = source.read_text(encoding="utf-8")
-        for forbidden in (
-            "daily_pipeline", "daily_report", "AnalysisSession", "analyze_stock", "scanner",
-            "tw_stock_tool.data", "yfinance", "cli", "broker", "paper trading",
-        ):
-            if forbidden == "daily_report":
-                continue
-            self.assertNotIn(f"import {forbidden}", text)
-            self.assertNotIn(f"from {forbidden}", text)
+        code = """
+import sys
+from tw_stock_tool.reports.daily_report_serialization import (
+    DailyReportSerializationError,
+    serialize_daily_report_data,
+    deserialize_daily_report_data,
+    export_daily_report_json,
+    load_daily_report_json,
+)
+forbidden = (
+    "yfinance",
+    "tw_stock_tool.data",
+    "tw_stock_tool.analysis",
+    "tw_stock_tool.cli",
+    "tw_stock_tool.broker",
+    "tw_stock_tool.paper_trading",
+    "tw_stock_tool.reports.daily_pipeline",
+    "tw_stock_tool.reports.daily_report",
+)
+loaded = sorted(sys.modules)
+found = [
+    module for module in loaded
+    if any(module == prefix or module.startswith(prefix + ".") for prefix in forbidden)
+]
+if found:
+    print("forbidden modules: " + ", ".join(found))
+    raise SystemExit(1)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+
+    def test_non_string_structural_keys_fail_closed(self):
+        report = _report()
+        report[None] = []
+        with self.assertRaisesRegex(DailyReportSerializationError, r"\$\.report.*None.*string"):
+            serialize_daily_report_data(report)
+
+        artifact = _artifact()
+        artifact[None] = None
+        with self.assertRaisesRegex(DailyReportSerializationError, r"\$.*None.*string"):
+            deserialize_daily_report_data(artifact)
+
+        artifact = _artifact()
+        artifact["metadata"] = {None: "bad", "source": "daily_report", "semantics": "offline_research_artifact"}
+        with self.assertRaisesRegex(DailyReportSerializationError, r"\$\.metadata.*None.*string"):
+            deserialize_daily_report_data(artifact)
+
+        artifact = _artifact()
+        artifact["report"] = {None: [], **artifact["report"]}
+        with self.assertRaisesRegex(DailyReportSerializationError, r"\$\.report.*None.*string"):
+            deserialize_daily_report_data(artifact)
+
+        report = _report()
+        report["Report Metadata"] = {"nested": {None: "bad"}}
+        with self.assertRaisesRegex(DailyReportSerializationError, r"\$\.report\.Report Metadata\.nested.*None.*string"):
+            serialize_daily_report_data(report)
+
+    def test_report_sections_are_canonicalized_on_serialize_and_deserialize(self):
+        report = _report()
+        shuffled = {section: report[section] for section in reversed(REPORT_SECTION_ORDER)}
+        artifact = serialize_daily_report_data(shuffled)
+        self.assertEqual(list(artifact["report"]), list(REPORT_SECTION_ORDER))
+        artifact["report"] = {section: artifact["report"][section] for section in reversed(REPORT_SECTION_ORDER)}
+        self.assertEqual(list(deserialize_daily_report_data(artifact)), list(REPORT_SECTION_ORDER))
 
     def test_empty_pipeline_summary_markdown_section_is_explicit(self):
         markdown = render_daily_report_markdown(_report())
