@@ -101,11 +101,23 @@ class DailyPipelineRunnerTest(unittest.TestCase):
             self.assertEqual(kwargs["report_date"], "2025-01-02")
             return {"Report Metadata": {"Date": "2025-01-02"}}
 
+        pipeline_summary = {"Stocks Requested": 1, "Scan OK": 1}
+
+        def summarize(*args):
+            order.append("run-summary")
+            self.assertIs(args[1], self.ranking)
+            self.assertIs(args[2], self.candidates)
+            self.assertIs(args[3], self.backtest)
+            self.assertIs(args[4], self.sweep)
+            self.assertIs(args[5], self.walk_forward)
+            return pipeline_summary
+
         with patch.object(daily_pipeline, "run_daily_report", side_effect=scan), \
              patch.object(daily_pipeline, "run_candidate_backtest_validation", side_effect=backtest), \
              patch.object(daily_pipeline, "run_candidate_parameter_sweep_validation", side_effect=sweep), \
              patch.object(daily_pipeline, "run_candidate_walk_forward_validation", side_effect=walk_forward), \
              patch.object(daily_pipeline, "build_daily_pipeline_run_configuration", side_effect=lambda config: order.append("configuration") or {"Period": config.period}), \
+             patch.object(daily_pipeline, "build_daily_pipeline_run_summary", side_effect=summarize) as summary_builder, \
              patch.object(daily_pipeline, "build_daily_report_data", side_effect=build), \
              patch.object(daily_pipeline, "render_daily_report_markdown", side_effect=lambda data: order.append("render") or "# report"):
             result = daily_pipeline.run_daily_research_pipeline(
@@ -114,7 +126,8 @@ class DailyPipelineRunnerTest(unittest.TestCase):
                 status_callback=events.append,
             )
 
-        self.assertEqual(order, ["scan", "backtest", "sweep", "walk-forward", "configuration", "build", "render"])
+        self.assertEqual(order, ["scan", "backtest", "sweep", "walk-forward", "configuration", "run-summary", "build", "render"])
+        summary_builder.assert_called_once()
         self.assertEqual(result.markdown, "# report")
         self.assertIs(result.parameter_sweep_highlights, self.sweep)
         self.assertIs(result.walk_forward_highlights, self.walk_forward)
@@ -258,6 +271,61 @@ class DailyPipelineRunnerTest(unittest.TestCase):
                 self.assertEqual(analyzer.call_count, 1)
                 self.assertEqual(analyzer.call_args.kwargs["force_refresh"], force_refresh)
 
+
+    def test_summary_is_forwarded_without_reconstruction(self):
+        captured = {}
+        pipeline_summary = {"Stocks Requested": 1, "Scan OK": 1}
+
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(self.summary, self.candidates, self.ranking, None),
+        ), patch.object(
+            daily_pipeline,
+            "build_daily_pipeline_run_configuration",
+            return_value={},
+        ), patch.object(
+            daily_pipeline,
+            "build_daily_pipeline_run_summary",
+            return_value=pipeline_summary,
+        ) as summary_builder, patch.object(
+            daily_pipeline,
+            "build_daily_report_data",
+            side_effect=lambda **kwargs: captured.update(kwargs) or {},
+        ), patch.object(
+            daily_pipeline,
+            "render_daily_report_markdown",
+            return_value="# report",
+        ):
+            result = daily_pipeline.run_daily_research_pipeline(["2330"], self.config)
+
+        summary_builder.assert_called_once_with(
+            ["2330"],
+            self.ranking,
+            self.candidates,
+            result.backtest_highlights,
+            result.parameter_sweep_highlights,
+            result.walk_forward_highlights,
+        )
+        self.assertIs(captured["pipeline_run_summary"], pipeline_summary)
+
+    def test_summary_failure_skips_report_build_and_render(self):
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(self.summary, self.candidates, self.ranking, None),
+        ), patch.object(
+            daily_pipeline,
+            "build_daily_pipeline_run_summary",
+            side_effect=RuntimeError("summary failed"),
+        ), patch.object(daily_pipeline, "build_daily_report_data") as build, patch.object(
+            daily_pipeline, "render_daily_report_markdown"
+        ) as render:
+            with self.assertRaisesRegex(RuntimeError, "summary failed"):
+                daily_pipeline.run_daily_research_pipeline(["2330"], self.config)
+
+        build.assert_not_called()
+        render.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
