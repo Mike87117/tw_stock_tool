@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 import math
 from numbers import Real
 from typing import Any
@@ -30,6 +30,7 @@ from tw_stock_tool.reports.daily_report import (
     run_candidate_walk_forward_validation,
     run_daily_report,
 )
+from tw_stock_tool.analysis.scanner import normalize_stock_ids
 from tw_stock_tool.utils.config import (
     DEFAULT_AUTO_ADJUST,
     DEFAULT_INTERVAL,
@@ -194,6 +195,60 @@ def _empty(columns: list[str]) -> pd.DataFrame:
     return pd.DataFrame(columns=columns)
 
 
+def _normalize_pipeline_status(value: Any) -> str:
+    try:
+        if bool(pd.isna(value)):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip().upper()
+
+
+def _stage_status_counts(stage: pd.DataFrame | None) -> tuple[int, int, int]:
+    if stage is None:
+        return 0, 0, 0
+    selected = int(len(stage))
+    if "Status" not in stage.columns:
+        return selected, 0, 0
+    statuses = stage["Status"].map(_normalize_pipeline_status)
+    return selected, int((statuses == "OK").sum()), int((statuses == "PARTIAL").sum())
+
+
+def build_daily_pipeline_run_summary(
+    stock_ids: Sequence[str],
+    ranking_df: pd.DataFrame,
+    candidates_df: pd.DataFrame,
+    backtest_highlights: pd.DataFrame,
+    parameter_sweep_highlights: pd.DataFrame,
+    walk_forward_highlights: pd.DataFrame,
+) -> dict[str, int]:
+    """Build the deterministic scalar snapshot for one pipeline run."""
+    stocks_scanned, scan_ok, _ = _stage_status_counts(ranking_df)
+    backtest_selected, backtest_ok, _ = _stage_status_counts(backtest_highlights)
+    sweep_selected, sweep_ok, sweep_partial = _stage_status_counts(parameter_sweep_highlights)
+    walk_forward_selected, walk_forward_ok, walk_forward_partial = _stage_status_counts(
+        walk_forward_highlights
+    )
+    return {
+        "Stocks Requested": len(normalize_stock_ids(stock_ids)),
+        "Stocks Scanned": stocks_scanned,
+        "Scan OK": scan_ok,
+        "Scan Failed": stocks_scanned - scan_ok,
+        "Candidates Selected": int(len(candidates_df)),
+        "Backtest Selected": backtest_selected,
+        "Backtest OK": backtest_ok,
+        "Backtest Failed": backtest_selected - backtest_ok,
+        "Parameter Sweep Selected": sweep_selected,
+        "Parameter Sweep OK": sweep_ok,
+        "Parameter Sweep Partial": sweep_partial,
+        "Parameter Sweep Failed": sweep_selected - sweep_ok - sweep_partial,
+        "Walk Forward Selected": walk_forward_selected,
+        "Walk Forward OK": walk_forward_ok,
+        "Walk Forward Partial": walk_forward_partial,
+        "Walk Forward Failed": walk_forward_selected - walk_forward_ok - walk_forward_partial,
+    }
+
+
 def run_daily_research_pipeline(
     stock_ids: Iterable[str],
     config: DailyPipelineConfig,
@@ -203,7 +258,7 @@ def run_daily_research_pipeline(
 ) -> DailyPipelineResult:
     """Run scan and optional research stages with one shared analysis provider."""
     validate_daily_pipeline_config(config)
-    normalized_stock_ids = list(stock_ids)
+    normalized_stock_ids = normalize_stock_ids(stock_ids)
     if not normalized_stock_ids:
         raise ValueError("No stocks provided.")
 
@@ -318,6 +373,14 @@ def run_daily_research_pipeline(
         )
 
     run_configuration = build_daily_pipeline_run_configuration(config)
+    pipeline_run_summary = build_daily_pipeline_run_summary(
+        normalized_stock_ids,
+        ranking_df,
+        candidates_df,
+        backtest_highlights,
+        parameter_sweep_highlights,
+        walk_forward_highlights,
+    )
 
     report_date = (
         config.report_date
@@ -335,6 +398,7 @@ def run_daily_research_pipeline(
         walk_forward_highlights=walk_forward_highlights,
         risk_notes=risk_notes,
         data_limitations=data_limitations,
+        pipeline_run_summary=pipeline_run_summary,
     )
     markdown = render_daily_report_markdown(report_data)
     return DailyPipelineResult(

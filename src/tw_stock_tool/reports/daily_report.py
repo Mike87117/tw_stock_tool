@@ -52,6 +52,7 @@ SUMMARY_COLUMNS = [
 DAILY_REPORT_SECTION_ORDER = [
     ("Report Metadata", "Report Metadata", "dict"),
     ("Run Configuration", "Run Configuration", "dict"),
+    ("Pipeline Run Summary", "Pipeline Run Summary", "dict"),
     ("Report Highlights", "Report Highlights", "list"),
     ("Data Quality Notes", "Data Quality Notes", "list"),
     ("Universe Summary", "Universe Summary", "dict"),
@@ -315,6 +316,7 @@ def build_daily_report_data(
     data_limitations: list[str] | None = None,
     next_research_actions: list[str] | None = None,
     run_configuration: dict[str, Any] | None = None,
+    pipeline_run_summary: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """
     Build structured daily report data from existing scanner and backtest outputs.
@@ -378,6 +380,7 @@ def build_daily_report_data(
             "Type": "Daily Research Report"
         },
         "Run Configuration": dict(run_configuration) if run_configuration is not None else {},
+        "Pipeline Run Summary": dict(pipeline_run_summary) if pipeline_run_summary is not None else {},
         "Report Highlights": highlights,
         "Data Quality Notes": data_quality_notes,
         "Universe Summary": {

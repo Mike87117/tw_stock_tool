@@ -21,6 +21,7 @@ class TestDailyReportMarkdown(unittest.TestCase):
         sections = [
             "## Report Metadata",
             "## Run Configuration",
+            "## Pipeline Run Summary",
             "## Report Highlights",
             "## Data Quality Notes",
             "## Universe Summary",
@@ -46,6 +47,7 @@ class TestDailyReportMarkdown(unittest.TestCase):
         expected_keys = [
             "Report Metadata",
             "Run Configuration",
+            "Pipeline Run Summary",
             "Report Highlights",
             "Data Quality Notes",
             "Universe Summary",
