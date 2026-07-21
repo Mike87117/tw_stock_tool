@@ -118,9 +118,14 @@ class DailyPipelineRunSummaryTest(unittest.TestCase):
         )
 
     def test_summary_builder_is_pure_and_does_not_call_services(self):
-        with patch.object(daily_pipeline, "AnalysisSession") as session, patch.object(
-            daily_pipeline, "analyze_stock", create=True
-        ) as analyzer:
+        with patch.object(daily_pipeline, "AnalysisSession") as session, \
+             patch.object(daily_pipeline, "run_daily_report") as scan, \
+             patch.object(daily_pipeline, "run_candidate_backtest_validation") as backtest, \
+             patch.object(daily_pipeline, "run_candidate_parameter_sweep_validation") as sweep, \
+             patch.object(daily_pipeline, "run_candidate_walk_forward_validation") as walk_forward, \
+             patch.object(daily_pipeline, "build_daily_report_data") as build, \
+             patch.object(daily_pipeline, "render_daily_report_markdown") as render, \
+             patch.object(daily_pipeline, "analyze_stock", create=True) as analyzer:
             build_daily_pipeline_run_summary(
                 [],
                 pd.DataFrame(columns=["Status"]),
@@ -130,7 +135,66 @@ class DailyPipelineRunSummaryTest(unittest.TestCase):
                 pd.DataFrame(columns=["Status"]),
             )
         session.assert_not_called()
+        scan.assert_not_called()
+        backtest.assert_not_called()
+        sweep.assert_not_called()
+        walk_forward.assert_not_called()
+        build.assert_not_called()
+        render.assert_not_called()
         analyzer.assert_not_called()
+
+    def test_pipeline_report_data_contains_exact_summary(self):
+        summary_df = pd.DataFrame(
+            [{"Stocks Scanned": 2, "Candidates": 1, "BUY Count": 1, "WATCH Count": 0}]
+        )
+        candidates_df = pd.DataFrame([{"Stock": "2330", "Signal": "BUY", "Score": 5}])
+        ranking_df = pd.DataFrame(
+            [{"Stock": "2330", "Status": " OK "}, {"Stock": "2317", "Status": "error"}]
+        )
+        expected = {
+            "Stocks Requested": 2,
+            "Stocks Scanned": 2,
+            "Scan OK": 1,
+            "Scan Failed": 1,
+            "Candidates Selected": 1,
+            "Backtest Selected": 0,
+            "Backtest OK": 0,
+            "Backtest Failed": 0,
+            "Parameter Sweep Selected": 0,
+            "Parameter Sweep OK": 0,
+            "Parameter Sweep Partial": 0,
+            "Parameter Sweep Failed": 0,
+            "Walk Forward Selected": 0,
+            "Walk Forward OK": 0,
+            "Walk Forward Partial": 0,
+            "Walk Forward Failed": 0,
+        }
+
+        with patch.object(
+            daily_pipeline,
+            "run_daily_report",
+            return_value=(summary_df, candidates_df, ranking_df, None),
+        ):
+            result = daily_pipeline.run_daily_research_pipeline(
+                [" 2330", "2330", "# ignored", "2317"],
+                daily_pipeline.DailyPipelineConfig(progress=False),
+                analysis_provider=lambda stock_id: None,
+            )
+
+        self.assertEqual(result.report_data["Pipeline Run Summary"], expected)
+
+    def test_empty_summary_markdown_section_is_explicit(self):
+        markdown = render_daily_report_markdown(
+            build_daily_report_data(pipeline_run_summary=None)
+        )
+        start = markdown.index("## Pipeline Run Summary")
+        end = markdown.index("## Report Highlights")
+        section = markdown[start:end]
+
+        self.assertEqual(markdown.count("## Pipeline Run Summary"), 1)
+        self.assertIn("No data provided.", section)
+        self.assertEqual(section.count("No data provided."), 1)
+        self.assertLess(start, end)
 
 if __name__ == "__main__":
     unittest.main()

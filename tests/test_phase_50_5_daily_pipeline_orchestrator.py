@@ -286,6 +286,18 @@ class DailyPipelineRunnerTest(unittest.TestCase):
             return_value={},
         ), patch.object(
             daily_pipeline,
+            "run_candidate_backtest_validation",
+            return_value=(self.backtest, []),
+        ), patch.object(
+            daily_pipeline,
+            "run_candidate_parameter_sweep_validation",
+            return_value=(self.sweep, []),
+        ), patch.object(
+            daily_pipeline,
+            "run_candidate_walk_forward_validation",
+            return_value=(self.walk_forward, []),
+        ), patch.object(
+            daily_pipeline,
             "build_daily_pipeline_run_summary",
             return_value=pipeline_summary,
         ) as summary_builder, patch.object(
@@ -308,6 +320,9 @@ class DailyPipelineRunnerTest(unittest.TestCase):
             result.walk_forward_highlights,
         )
         self.assertIs(captured["pipeline_run_summary"], pipeline_summary)
+        self.assertIs(result.backtest_highlights, self.backtest)
+        self.assertIs(result.parameter_sweep_highlights, self.sweep)
+        self.assertIs(result.walk_forward_highlights, self.walk_forward)
 
     def test_summary_failure_skips_report_build_and_render(self):
         with patch.object(
@@ -326,6 +341,49 @@ class DailyPipelineRunnerTest(unittest.TestCase):
 
         build.assert_not_called()
         render.assert_not_called()
+
+    def test_runner_forwards_raw_stock_ids_but_summary_normalizes_requests(self):
+        caller_ids = [" 2330", "2330", "# ignored", "2317"]
+        captured = {}
+        events = []
+        original_summary = daily_pipeline.build_daily_pipeline_run_summary
+
+        def scan(**kwargs):
+            captured["scan_stock_ids"] = kwargs["stock_ids"]
+            return self.summary, self.candidates, self.ranking, None
+
+        with patch.object(daily_pipeline, "run_daily_report", side_effect=scan), patch.object(
+            daily_pipeline,
+            "build_daily_pipeline_run_configuration",
+            return_value={},
+        ), patch.object(
+            daily_pipeline,
+            "build_daily_pipeline_run_summary",
+            wraps=original_summary,
+        ) as summary_builder, patch.object(
+            daily_pipeline,
+            "build_daily_report_data",
+            side_effect=lambda **kwargs: captured.update(kwargs) or {},
+        ), patch.object(
+            daily_pipeline,
+            "render_daily_report_markdown",
+            return_value="# report",
+        ):
+            result = daily_pipeline.run_daily_research_pipeline(
+                caller_ids,
+                daily_pipeline.DailyPipelineConfig(progress=False),
+                analysis_provider=Mock(),
+                status_callback=events.append,
+            )
+
+        self.assertEqual(captured["scan_stock_ids"], caller_ids)
+        self.assertIsNot(captured["scan_stock_ids"], caller_ids)
+        self.assertEqual(captured["stock_universe"], caller_ids)
+        self.assertIn("Scanning 4 stocks...", events)
+        summary_builder.assert_called_once()
+        self.assertEqual(summary_builder.call_args.args[0], caller_ids)
+        self.assertEqual(result.report_data, {})
+        self.assertEqual(captured["pipeline_run_summary"]["Stocks Requested"], 2)
 
 if __name__ == "__main__":
     unittest.main()

@@ -258,7 +258,7 @@ def run_daily_research_pipeline(
 ) -> DailyPipelineResult:
     """Run scan and optional research stages with one shared analysis provider."""
     validate_daily_pipeline_config(config)
-    normalized_stock_ids = normalize_stock_ids(stock_ids)
+    normalized_stock_ids = list(stock_ids)
     if not normalized_stock_ids:
         raise ValueError("No stocks provided.")
 
