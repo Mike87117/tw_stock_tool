@@ -105,6 +105,7 @@ class DailyPipelineRunnerTest(unittest.TestCase):
              patch.object(daily_pipeline, "run_candidate_backtest_validation", side_effect=backtest), \
              patch.object(daily_pipeline, "run_candidate_parameter_sweep_validation", side_effect=sweep), \
              patch.object(daily_pipeline, "run_candidate_walk_forward_validation", side_effect=walk_forward), \
+             patch.object(daily_pipeline, "build_daily_pipeline_run_configuration", side_effect=lambda config: order.append("configuration") or {"Period": config.period}), \
              patch.object(daily_pipeline, "build_daily_report_data", side_effect=build), \
              patch.object(daily_pipeline, "render_daily_report_markdown", side_effect=lambda data: order.append("render") or "# report"):
             result = daily_pipeline.run_daily_research_pipeline(
@@ -113,7 +114,7 @@ class DailyPipelineRunnerTest(unittest.TestCase):
                 status_callback=events.append,
             )
 
-        self.assertEqual(order, ["scan", "backtest", "sweep", "walk-forward", "build", "render"])
+        self.assertEqual(order, ["scan", "backtest", "sweep", "walk-forward", "configuration", "build", "render"])
         self.assertEqual(result.markdown, "# report")
         self.assertIs(result.parameter_sweep_highlights, self.sweep)
         self.assertIs(result.walk_forward_highlights, self.walk_forward)

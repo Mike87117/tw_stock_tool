@@ -20,6 +20,7 @@ class TestDailyReportMarkdown(unittest.TestCase):
         # Section heading stability
         sections = [
             "## Report Metadata",
+            "## Run Configuration",
             "## Report Highlights",
             "## Data Quality Notes",
             "## Universe Summary",
@@ -44,6 +45,7 @@ class TestDailyReportMarkdown(unittest.TestCase):
         data = build_daily_report_data()
         expected_keys = [
             "Report Metadata",
+            "Run Configuration",
             "Report Highlights",
             "Data Quality Notes",
             "Universe Summary",

@@ -154,6 +154,42 @@ def validate_daily_pipeline_config(config: DailyPipelineConfig) -> None:
             raise ValueError(f"Unsupported walk-forward sort metric: {config.walk_forward_sort_by}")
 
 
+def build_daily_pipeline_run_configuration(
+    config: DailyPipelineConfig,
+) -> dict[str, Any]:
+    """Build the deterministic scalar configuration snapshot for the report."""
+    validate_daily_pipeline_config(config)
+    return {
+        "Period": config.period,
+        "Interval": config.interval,
+        "Signals": ", ".join(config.signals),
+        "Minimum Score": config.min_score,
+        "Candidate Top": config.top,
+        "Auto Adjust": config.auto_adjust,
+        "Force Refresh": config.force_refresh,
+        "Backtest Enabled": config.validate_top > 0,
+        "Backtest Top": config.validate_top,
+        "Validation Strategy": config.validation_strategy,
+        "Initial Capital": config.validation_initial_capital,
+        "Fee Rate": config.validation_fee_rate,
+        "Tax Rate": config.validation_tax_rate,
+        "Position Size": config.validation_position_size,
+        "Parameter Sweep Enabled": config.parameter_sweep_top > 0,
+        "Parameter Sweep Top": config.parameter_sweep_top,
+        "Parameter Sweep Sort By": config.parameter_sweep_sort_by,
+        "Walk Forward Enabled": config.walk_forward_top > 0,
+        "Walk Forward Top": config.walk_forward_top,
+        "Train Days": config.walk_forward_train_days,
+        "Test Days": config.walk_forward_test_days,
+        "Effective Step Days": (
+            config.walk_forward_step_days
+            if config.walk_forward_step_days is not None
+            else config.walk_forward_test_days
+        ),
+        "Walk Forward Sort By": config.walk_forward_sort_by,
+    }
+
+
 def _empty(columns: list[str]) -> pd.DataFrame:
     return pd.DataFrame(columns=columns)
 
@@ -281,6 +317,8 @@ def run_daily_research_pipeline(
             "Walk-forward results are historical out-of-sample research estimates. Parameters are selected on training windows and evaluated on later test windows; results do not predict future performance. Window fields represent observations (rows) in the current engine."
         )
 
+    run_configuration = build_daily_pipeline_run_configuration(config)
+
     report_date = (
         config.report_date
         if config.report_date is not None
@@ -289,6 +327,7 @@ def run_daily_research_pipeline(
     report_data = build_daily_report_data(
         report_date=report_date,
         stock_universe=normalized_stock_ids,
+        run_configuration=run_configuration,
         screening_results=summary_df,
         watchlist_candidates=candidates_df,
         backtest_highlights=backtest_highlights,
