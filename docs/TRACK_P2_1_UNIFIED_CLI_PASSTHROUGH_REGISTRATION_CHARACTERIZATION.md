@@ -596,7 +596,6 @@ shrink report builder/render/write responsibility concentration. Split one repor
 shrink large GUI controller/service modules. Split feature responsibilities. [src/tw_stock_tool/gui/gui_app.py, src/tw_stock_tool/gui/app_services.py]
 yagni duplicate dependency declarations. Choose one dependency source of truth. [requirements.txt, pyproject.toml]
 delete root compatibility wrappers. Remove redirect files. [root-level Python wrappers]
-delete alternate class-based backtest path. Remove duplicate engine and strategy base. [src/tw_stock_tool/backtest/engine.py, src/tw_stock_tool/strategies/base.py]
 shrink historical README and phase-documentation volume. Reorganize navigation and archive history. [README.md, docs/]
 yagni thin safety, validation, schema, and status-propagation boundaries. Merge boundary layers. [src/tw_stock_tool/paper_trading/, src/tw_stock_tool/risk/, src/tw_stock_tool/kill_switch/, tests/]
 net: -350 lines, -0 deps possible.

@@ -2,13 +2,12 @@
 
 ## A. Executive summary
 
-The repository feels cluttered because a mature package layout coexists with many root-level compatibility wrappers, several generations of CLI/report entry points, and one genuinely parallel backtest implementation. The wrappers are intentional compatibility debt: tests and prior roadmap decisions preserve imports and script execution from the repository root while the supported user path is the `twstock` console command. They should not be deleted without a versioned deprecation window.
+The repository feels cluttered because a mature package layout coexists with many root-level compatibility wrappers and several generations of CLI/report entry points. The wrappers are intentional compatibility debt: tests and prior roadmap decisions preserve imports and script execution from the repository root while the supported user path is the `twstock` console command. They should not be deleted without a versioned deprecation window.
 
-The clearest actual duplication is `src/tw_stock_tool/backtest/engine.py` plus `src/tw_stock_tool/strategies/base.py`. Current CLI, GUI, parameter-sweep, walk-forward, artifact, and simulated-paper-trading workflows use `src/tw_stock_tool/backtesting/`; only dedicated tests use the alternate class-based path. The other major risks are responsibility concentration in `data/data_loader.py` (provider fallback, normalization, cache, and orchestration), the large GUI controller/service pair, and repeated CLI parameter assembly.
 
-No unresolved P0 issue was found after the Trade Log change. The previously silent simulated pending-fill outcomes are now terminal audit events. Cleanup should proceed in this order: inventory public compatibility, decide the alternate backtest path, separate data-provider/cache orchestration, consolidate CLI argument builders, then split report and GUI responsibilities only when those areas are otherwise changing.
+No unresolved P0 issue was found after the Trade Log change. The previously silent simulated pending-fill outcomes are now terminal audit events. Cleanup should proceed in this order: inventory public compatibility, separate data-provider/cache orchestration, consolidate CLI argument builders, then split report and GUI responsibilities only when those areas are otherwise changing.
 
-Priority counts: **P0: 0, P1: 3, P2: 6, P3: 3.**
+Priority counts: **P0: 0, P1: 2, P2: 6, P3: 3.**
 
 ## B. Current architecture map
 
@@ -32,7 +31,7 @@ flowchart LR
 - **Data loading:** CLI, GUI services, and analysis call `data.data_loader.download_tw_stock`. That module selects symbols/providers, normalizes frames, manages cache policy, and returns validated historical data.
 - **Analysis and signals:** `analysis.analysis` composes the data loader, indicators, and standard signal generation. `backtesting.strategies` supplies strategy-specific DataFrame transforms used by backtest and simulated-paper-trading CLIs.
 - **Scanning:** `analysis.scanner` performs multi-stock concurrent analysis, deterministic filtering, and explicit error-row capture. `scanners/` contains narrower candidate, breakout, risk-warning, and daily-watchlist workflows; these overlap in vocabulary but not yet in contracts.
-- **Backtesting:** application workflows call `backtesting.backtest.run_backtest_result` or its compatibility dictionary wrapper. It uses standard signals and next-bar-open pending execution. `backtest.engine.BacktestEngine` is a separate class/protocol implementation with a different result model and is test-only in current repository call sites.
+- **Backtesting:** application workflows call `backtesting.backtest.run_backtest_result` or its compatibility dictionary wrapper. It uses standard signals and next-bar-open pending execution.
 - **Parameter sweep:** `backtesting.parameter_sweep` builds parameter grids, executes the active backtest path, and ranks in-sample results.
 - **Walk forward:** `backtesting.walk_forward` splits chronological train/test windows, chooses parameters on train data, runs test windows, and also contains report/export/CLI-era helpers.
 - **Reports:** `reports/` shapes DataFrames, renders Markdown/Excel, and writes files. Some modules keep builder, renderer, file I/O, and error translation together.
@@ -51,8 +50,6 @@ flowchart LR
 | `data/` | Price providers/fallback/cache and stock-list update; called by analysis and utilities | User-visible reliability boundary | `data_loader.py` combines provider calls, normalization, cache, fallback, and diagnostics | REFACTOR into provider/cache/orchestrator seams without changing policy |
 | `scanners/` | Daily candidate and specialized breakout/risk-warning models | Called by daily-watchlist flows | Naming overlaps `analysis.scanner`; ownership distinction is undocumented | DOCUMENT_ONLY, then investigate consolidation if contracts converge |
 | `backtesting/` | Active function engine, metrics, results, serialization, sweep, walk forward, strategy comparison | Primary runtime and artifact API; root wrappers rely on it | `walk_forward.py` is 603 lines; reporting and CLI-era concerns remain mixed | KEEP active path; split opportunistically |
-| `backtest/` | Alternate class/protocol engine | No current application caller; protected by dedicated tests | Duplicates execution semantics and defines a second `BacktestResult` | MERGE_CANDIDATE after compatibility decision |
-| `strategies/` | Abstract base for alternate class engine | Test-only current consumers | Duplicates the callable strategy convention in `backtesting.strategies` | MERGE_CANDIDATE with alternate engine decision |
 | `reports/` | Builders, Markdown/Excel renderers, file output | Called by CLI, GUI services, and root wrappers | Several modules mix shaping, rendering, I/O, and user-facing exceptions | REFACTOR per report, not repository-wide |
 | `paper_trading/` | Models, runtime, stepper, coordinator, result, v1-v3 serialization, exports | Stable compatibility collections and public package exports | Serializer/exporters are necessarily schema-dense; no aggregate multi-symbol result | KEEP; document schema and avoid speculative aggregate API |
 | `risk/` | Pure risk snapshots, limits, decision aggregation | Public package boundary with extensive tests | Some mutable models and repeated numeric validation, but dependency direction is clean | KEEP |
@@ -71,7 +68,6 @@ flowchart LR
 | Classification | Priority | Files or symbols | Evidence | Compatibility risk / coverage | Recommended action | Safe now? | Future phase |
 |---|---:|---|---|---|---|---|---|
 | KEEP | — | `backtesting/backtest.py`, `BacktestResult` | CLI, GUI, sweep, walk-forward, artifacts, and paper converter call this path | High; broad suite coverage | Treat as canonical until an explicit decision says otherwise | Yes | Existing |
-| MERGE_CANDIDATE | P1 | `backtest/engine.py`, `strategies/base.py` | Repository search finds only dedicated tests as consumers; result and cost semantics differ from active engine | High if external imports exist; focused tests only | Inventory releases/imports, then adapt or deprecate the alternate path | No | A2 |
 | REFACTOR | P1 | `data/data_loader.py` | 448 lines own providers, fallback, validation, cache, console capture, and orchestration | High; 551-line test module | Extract provider adapters and cache policy behind current function contract | No | A3 |
 | REFACTOR | P1 | `gui/gui_app.py`, `gui/app_services.py` | 696-line controller plus 428-line services span all tabs/workflows | High; GUI/app-service tests | Split by tab/use-case while retaining `TwStockToolGUI` and service façade | No | A6 |
 | REFACTOR | P2 | CLI strategy/backtest parsers | Same initial-capital, fee, tax, position, MA, and RSI plumbing appears in several commands | High; CLI smoke tests | Add shared argument-registration and namespace-to-parameters helpers | No | A4 |
@@ -95,9 +91,8 @@ No open P0 item was found. The simulated fill data-loss/silent-failure path was 
 
 ### P1
 
-1. **Choose the canonical backtest engine.** Inventory external imports of `tw_stock_tool.backtest.engine`; document semantic differences; add adapter tests; deprecate or merge the class engine in a separate branch.
-2. **Separate data providers from cache/orchestration.** Extract provider-specific fetch functions behind the current `download_tw_stock` result/error contract; leave fallback order unchanged.
-3. **Split GUI work by use case.** Move one tab's validation/submission logic at a time into a service/controller while preserving the public GUI façade and task runner.
+1. **Separate data providers from cache/orchestration.** Extract provider-specific fetch functions behind the current `download_tw_stock` result/error contract; leave fallback order unchanged.
+2. **Split GUI work by use case.** Move one tab's validation/submission logic at a time into a service/controller while preserving the public GUI façade and task runner.
 
 ### P2
 
@@ -155,12 +150,11 @@ src/tw_stock_tool/
   utils/
 ```
 
-This target intentionally keeps most current directories. The only likely removal is the alternate `backtest/` plus `strategies/base.py`, and only after consumer inventory and migration. Provider/report/GUI submodules should be introduced by extraction from a real change, not as empty scaffolding.
+This target intentionally keeps current directories. Provider/report/GUI submodules should be introduced by extraction from a real change, not as empty scaffolding.
 
 ## H. Recommended phased roadmap
 
 1. **Phase A1 — public API and wrapper inventory:** enumerate supported imports/scripts and replacement paths; no deletion.
-2. **Phase A2 — duplicate backtest decision:** compare semantics, external usage, and artifacts; choose adapt, deprecate, or retain with a documented distinct purpose.
 3. **Phase A3 — data provider/cache boundary:** extract one provider path and keep fallback/cache behavior byte-for-byte compatible where practical.
 4. **Phase A4 — CLI argument-builder consolidation:** centralize shared backtest/strategy flags behind existing parser behavior.
 5. **Phase A5 — report and walk-forward separation:** split one high-change report or walk-forward peripheral boundary per branch.

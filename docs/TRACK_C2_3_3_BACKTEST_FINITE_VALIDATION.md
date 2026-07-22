@@ -71,7 +71,7 @@ Validation runs in this order:
 
 ## Non-goals
 
-This phase does not change metrics annualization, signal timing, Backtest formulas, the root compatibility wrapper, alternate Backtest implementations, CLI behavior, Paper Trading, Risk, Analysis, or ML.
+This phase does not change metrics annualization, signal timing, Backtest formulas, the root compatibility wrapper, CLI behavior, Paper Trading, Risk, Analysis, or ML.
 
 ## Remaining Track C2 work
 
