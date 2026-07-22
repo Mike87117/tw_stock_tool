@@ -412,6 +412,14 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 
 **Phase 50.9 status:** Daily Research schema v1 now has UTF-8 JSON file export/load helpers built on the generic `write_text_report` writer. Export creates parent directories, preserves overwrite protection, and serializes before any file I/O; load preserves filesystem errors while surfacing serialization errors through the existing boundary. No CLI, pipeline, Markdown, Excel, trading, recommendation, or Phase 50.10 behavior was added.
 
+**Phase 50.10 status:** Daily CLI now provides opt-in JSON artifact
+export using the existing schema v1 serializer and file helper. The JSON is
+passed directly from DailyPipelineResult.report_data; the CLI supports the
+default <output-dir>/daily_report.json path, custom paths, and overwrite
+protection. Markdown, Excel, pipeline execution, ranking, validation, and
+unified CLI passthrough behavior remain unchanged. No broker, live trading,
+recommendation, or Phase 50.11 functionality was added.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。

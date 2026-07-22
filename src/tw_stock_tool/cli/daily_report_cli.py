@@ -10,6 +10,7 @@ from tw_stock_tool.reports.daily_pipeline import (
     validate_daily_pipeline_config,
 )
 from tw_stock_tool.reports.daily_report import DEFAULT_MIN_SCORE, DEFAULT_SIGNALS, DEFAULT_TOP, collect_stock_ids
+from tw_stock_tool.reports.daily_report_serialization_files import export_daily_report_json_file
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, TAX_RATE
 
 
@@ -136,7 +137,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     parser.add_argument("--output-md", nargs="?", const="", default=None)
     parser.add_argument("--output-excel", nargs="?", const="", default=None)
+    parser.add_argument(
+        "--output-json",
+        nargs="?",
+        const="",
+        default=None,
+        help="Export the Daily Research report as a JSON artifact.",
+    )
     parser.add_argument("--output-dir", default="output")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace existing JSON output artifacts.",
+    )
     args = parser.parse_args(argv)
     try:
         _pipeline_config_from_args(args)
@@ -170,7 +183,23 @@ def main() -> int | None:
         with open(output_md, "w", encoding="utf-8") as file:
             file.write(result.markdown)
         print(f"\nMarkdown report exported to {output_md}")
+        output_json_arg = getattr(args, "output_json", None)
+        if output_json_arg is not None:
+            output_json = (
+                Path(args.output_dir) / "daily_report.json"
+                if output_json_arg == ""
+                else Path(output_json_arg)
+            )
+            exported_json = export_daily_report_json_file(
+                result.report_data,
+                output_json,
+                overwrite=getattr(args, "overwrite", False),
+            )
+            print(f"JSON artifact exported to {exported_json}")
         print("\nProcess completed successfully.")
+    except FileExistsError as exc:
+        print(f"Error: {exc}. Use --overwrite to replace existing files.")
+        return 1
     except Exception as exc:
         print(f"Error: {exc}")
         return 1
