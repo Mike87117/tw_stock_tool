@@ -19,6 +19,10 @@ from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DE
 from tw_stock_tool.analysis.scanner import ScanConfig, load_stock_ids_from_file, normalize_stock_ids, scan_stocks
 from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
 from tw_stock_tool.analysis.stock_selection import apply_stock_selection
+from tw_stock_tool.reports.daily_report_markdown import (
+    DAILY_REPORT_SECTION_ORDER,
+    render_daily_report_markdown,
+)
 
 DEFAULT_SIGNALS = ("BUY", "WATCH")
 DEFAULT_MIN_SCORE = 4.0
@@ -48,24 +52,6 @@ SUMMARY_COLUMNS = [
     "Average Score",
     "Average Volume Ratio",
 ]
-
-DAILY_REPORT_SECTION_ORDER = [
-    ("Report Metadata", "Report Metadata", "dict"),
-    ("Run Configuration", "Run Configuration", "dict"),
-    ("Pipeline Run Summary", "Pipeline Run Summary", "dict"),
-    ("Report Highlights", "Report Highlights", "list"),
-    ("Data Quality Notes", "Data Quality Notes", "list"),
-    ("Universe Summary", "Universe Summary", "dict"),
-    ("Screening Summary", "Screening Summary", "table"),
-    ("Watchlist Candidates for Further Review", "Watchlist Candidates", "table"),
-    ("Backtest Highlights", "Backtest Highlights", "table"),
-    ("Parameter Sweep Highlights", "Parameter Sweep Highlights", "table"),
-    ("Walk Forward Highlights", "Walk Forward Highlights", "table"),
-    ("Risk Notes", "Risk Notes", "list_risk_notes"),
-    ("Data Limitations", "Data Limitations", "list"),
-    ("Next Research Actions", "Next Research Actions", "list"),
-]
-
 
 def collect_stock_ids(
     stocks: Iterable[str] | None,
@@ -398,73 +384,6 @@ def build_daily_report_data(
     }
 
     return report_data
-
-
-def render_daily_report_markdown(report_data: dict[str, Any]) -> str:
-    """
-    Render a structured daily report dict into a Markdown document.
-    Ensures deterministic ordering and research-only language.
-    """
-    lines = ["# Daily Research Report\n"]
-
-    def _render_dict(d: dict[str, Any]) -> list[str]:
-        if not d:
-            return ["No data provided.\n"]
-        out = []
-        for k, v in d.items():
-            if isinstance(v, list) and not v:
-                out.append(f"- **{k}**: None")
-            elif isinstance(v, list):
-                out.append(f"- **{k}**: {', '.join(str(x) for x in v)}")
-            else:
-                out.append(f"- **{k}**: {v}")
-        out.append("")
-        return out
-
-    def _render_list_of_strings(lst: list[str]) -> list[str]:
-        if not lst:
-            return ["No data provided.\n"]
-        out = []
-        for item in lst:
-            out.append(f"- {item}")
-        out.append("")
-        return out
-
-    def _render_table(lst: list[dict[str, Any]]) -> list[str]:
-        if not lst:
-            return ["No data provided.\n"]
-        headers = []
-        for row in lst:
-            for key in row.keys():
-                if key not in headers:
-                    headers.append(key)
-        out = []
-        out.append("| " + " | ".join(headers) + " |")
-        out.append("|" + "|".join(["---"] * len(headers)) + "|")
-        for row in lst:
-            row_vals = [str(row.get(h, "")) for h in headers]
-            out.append("| " + " | ".join(row_vals) + " |")
-        out.append("")
-        return out
-
-    for heading, data_key, renderer_type in DAILY_REPORT_SECTION_ORDER:
-        lines.append(f"## {heading}\n")
-
-        if renderer_type == "dict":
-            lines.extend(_render_dict(report_data.get(data_key, {})))
-        elif renderer_type == "list":
-            lines.extend(_render_list_of_strings(report_data.get(data_key, [])))
-        elif renderer_type == "table":
-            lines.extend(_render_table(report_data.get(data_key, [])))
-        elif renderer_type == "list_risk_notes":
-            risk_notes = report_data.get(data_key, [])
-            disclaimer = "This report is for research purposes only and does not constitute investment advice."
-            if disclaimer not in risk_notes:
-                risk_notes = risk_notes.copy()
-                risk_notes.append(disclaimer)
-            lines.extend(_render_list_of_strings(risk_notes))
-
-    return "\n".join(lines)
 
 
 def _backtest_result_value(result: Any, attribute: str, legacy_key: str) -> Any:

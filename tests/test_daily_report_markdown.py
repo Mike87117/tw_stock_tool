@@ -1,6 +1,20 @@
+import copy
+import subprocess
+import sys
 import unittest
+
 import pandas as pd
-from tw_stock_tool.reports.daily_report import build_daily_report_data, render_daily_report_markdown
+
+from tw_stock_tool.reports.daily_report import (
+    build_daily_report_data,
+    render_daily_report_markdown as legacy_renderer,
+)
+from tw_stock_tool.reports.daily_report_markdown import (
+    _format_markdown_table_cell,
+    render_daily_report_markdown as lightweight_renderer,
+)
+
+render_daily_report_markdown = legacy_renderer
 
 class TestDailyReportMarkdown(unittest.TestCase):
 
@@ -174,6 +188,64 @@ class TestDailyReportMarkdown(unittest.TestCase):
         self.assertIn("Screening summary rows available: 1.", markdown)
         self.assertIn("Data limitations recorded: 2 item(s).", markdown)
         self.assertIn("Some symbols may be absent due to upstream data availability or scan errors.", markdown)
+
+
+class TestDailyReportMarkdownLightweightBoundary(unittest.TestCase):
+    def test_legacy_and_lightweight_imports_are_same_function(self):
+        self.assertIs(legacy_renderer, lightweight_renderer)
+
+    def test_table_cell_formatter_handles_all_required_values(self):
+        cases = [
+            (None, ""),
+            ("data | source", r"data \| source"),
+            ("a\r\nb", "a<br>b"),
+            ("a\rb", "a<br>b"),
+            ("a\nb", "a<br>b"),
+            ("a\r\n|\rb\nc", r"a<br>\|<br>b<br>c"),
+            (42, "42"),
+            (True, "True"),
+            ("\u53f0\u7063", "\u53f0\u7063"),
+            ({"a": 1}, "{'a': 1}"),
+            ([1, 2], "[1, 2]"),
+        ]
+        for value, expected in cases:
+            with self.subTest(value=value):
+                self.assertEqual(_format_markdown_table_cell(value), expected)
+
+    def test_table_headers_and_cells_are_hardened_in_first_seen_order(self):
+        report = build_daily_report_data(
+            watchlist_candidates=[
+                {"Stock|Code": "2330", "Note": "a|b\r\nc", "Optional": None},
+                {"Stock|Code": "2317", "New\nKey": True},
+            ]
+        )
+        before = copy.deepcopy(report)
+        markdown = lightweight_renderer(report)
+        self.assertIn(r"| Stock\|Code | Note | Optional | New<br>Key |", markdown)
+        self.assertIn(r"| 2330 | a\|b<br>c |  |  |", markdown)
+        self.assertIn("| 2317 |  |  | True |", markdown)
+        self.assertEqual(report, before)
+
+    def test_lightweight_renderer_dependency_boundary(self):
+        code = """
+import sys
+import tw_stock_tool.reports.daily_report_markdown
+forbidden = (
+    "pandas", "numpy", "tw_stock_tool.analysis", "tw_stock_tool.data",
+    "tw_stock_tool.backtesting", "tw_stock_tool.paper_trading",
+    "tw_stock_tool.ml", "tw_stock_tool.cli", "yfinance", "sklearn", "shioaji",
+)
+found = sorted(name for name in sys.modules if any(
+    name == prefix or name.startswith(prefix + ".") for prefix in forbidden
+))
+if found:
+    print("forbidden modules: " + ", ".join(found))
+    raise SystemExit(1)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=False
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == '__main__':

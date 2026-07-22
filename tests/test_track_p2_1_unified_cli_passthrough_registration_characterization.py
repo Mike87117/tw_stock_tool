@@ -37,6 +37,16 @@ ROUTES = (
     Route(("doctor",), "Check local environment", "tw_stock_tool.utils.doctor", "doctor.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("scan",), "Run multi-stock technical scanner", "tw_stock_tool.cli.scan_stocks", "scan_stocks.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("daily",), "Run daily candidate report", "tw_stock_tool.cli.daily_report_cli", "daily_report_cli.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(
+        ("daily-report-artifact",),
+        "Validate, inspect, or export a Daily Report JSON artifact",
+        "tw_stock_tool.cli.daily_report_artifact_cli",
+        "daily_report_artifact_cli.py",
+        "STANDARD_TOP_LEVEL_WITH_DESCRIPTION",
+        "Operate on an existing offline Daily Research Report JSON artifact.\n"
+        "Does not fetch market data, run analysis, execute strategies or backtests, connect to brokers, place orders, "
+        "produce live signals, or provide investment advice.",
+    ),
     Route(("stock-list", "update"), "Update stocks.txt from official sources", "tw_stock_tool.data.stock_list_updater", "stock_list_updater.py", "NESTED_CUSTOM_RUNNER"),
     Route(("stock-list", "smoke-check"), "Smoke check official stock-list sources", "tw_stock_tool.cli.stock_list_smoke_check", "stock_list_smoke_check.py", "NESTED_CUSTOM_RUNNER"),
     Route(("stock-list", "clean"), "Clean stock list", "tw_stock_tool.cli.clean_stocks", "clean_stocks.py", "NESTED_STANDARD_PASSTHROUGH"),
@@ -93,6 +103,7 @@ TOP_LEVEL_ORDER = (
     "doctor",
     "scan",
     "daily",
+    "daily-report-artifact",
     "stock-list",
     "price-smoke-check",
     "ai-scan",
@@ -112,16 +123,18 @@ NESTED_ORDER = ("update", "smoke-check", "clean")
 
 
 TOP_HELP = """usage: twstock [-h]
-               {doctor,scan,daily,stock-list,price-smoke-check,ai-scan,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
+               {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
                ...
 
 Unified tw_stock_tool CLI
 
 positional arguments:
-  {doctor,scan,daily,stock-list,price-smoke-check,ai-scan,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
+  {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
     doctor              Check local environment
     scan                Run multi-stock technical scanner
     daily               Run daily candidate report
+    daily-report-artifact
+                        Validate, inspect, or export a Daily Report JSON artifact
     stock-list          Stock-list utilities
     price-smoke-check   Smoke check price data sources
     ai-scan             Run multi-stock AI baseline scanner
@@ -417,9 +430,9 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertIn("usage:", completed.stdout)
     def test_registration_inventory_matches_source_counts_and_helper_boundary(self) -> None:
-        self.assertEqual(len(ROUTES), 19)
+        self.assertEqual(len(ROUTES), 20)
         self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 12)
-        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_WITH_DESCRIPTION" for route in ROUTES), 2)
+        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_WITH_DESCRIPTION" for route in ROUTES), 3)
         self.assertEqual(sum(route.classification == "NESTED_STANDARD_PASSTHROUGH" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "NESTED_CUSTOM_RUNNER" for route in ROUTES), 2)
         self.assertEqual(sum(route.classification == "LAZY_IMPORTED_STANDARD" for route in ROUTES), 0)
@@ -427,7 +440,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
 
         source = (REPOSITORY_ROOT / "src" / "tw_stock_tool" / "cli" / "twstock_cli.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("def _add_passthrough_parser"), 1)
-        self.assertEqual(source.count("_add_passthrough_parser("), 18)
+        self.assertEqual(source.count("_add_passthrough_parser("), 19)
         self.assertEqual(source.count(".add_parser("), 4)
         self.assertEqual(source.count(".set_defaults("), 3)
         self.assertEqual(source.count("stock_list_parser = subparsers.add_parser"), 1)
@@ -440,7 +453,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertNotIn("dataclass", source)
         self.assertEqual(
             sum(route.classification != "NESTED_CUSTOM_RUNNER" for route in ROUTES),
-            17,
+            18,
         )
 
 

@@ -420,6 +420,19 @@ protection. Markdown, Excel, pipeline execution, ranking, validation, and
 unified CLI passthrough behavior remain unchanged. No broker, live trading,
 recommendation, or Phase 50.11 functionality was added.
 
+**Phase 50.11 status:** Daily Report artifact operations are complete. The
+Markdown renderer now lives in a lightweight module while the legacy import
+path remains compatible, and table cells deterministically format pipes,
+newlines, and None values. A deterministic artifact summary boundary,
+Markdown file export boundary, and validate / inspect / export-markdown CLI
+operate directly on existing schema v1 JSON artifacts. The unified CLI route
+supports this JSON-to-Markdown offline workflow without running the Daily
+Pipeline, and dependency boundaries remain covered by clean-subprocess tests.
+The schema v1, Daily CLI, pipeline, scanner, ranking, validation stages, and
+Excel behavior remain unchanged. No Phase 50.12, broker, live-trading,
+recommendation, scheduler, database, GUI, or Excel reconstruction behavior
+was added.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。

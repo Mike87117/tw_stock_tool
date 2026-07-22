@@ -132,6 +132,7 @@ twstock doctor --live
 | 策略比較 | `twstock strategy-compare --stock 2330 --period 2y` |
 | 多股票掃描 | `twstock scan --auto-stock-list --stock-limit 50` |
 | 每日候選報告 | `twstock daily --auto-stock-list --stock-limit 50 --output-md` |
+| Daily Report artifact operations | `twstock daily-report-artifact validate output/daily_report.json` |
 | 產生歷史回測報告 | `twstock backtest-report --stock 2330 --strategy ma_cross --output-excel` |
 | Parameter Sweep | `twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel` |
 | Walk Forward | `twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel` |
@@ -730,6 +731,46 @@ py twstock_cli.py daily `
 
 The JSON is for offline research only. It does not include broker integration,
 live trading, order placement, investment recommendations, or investment advice.
+
+### Daily Report Artifact Operations
+
+Operate on an existing schema v1 Daily Research Report JSON artifact without
+fetching market data or running the Daily Pipeline.
+
+Validate an artifact:
+
+```powershell
+twstock daily-report-artifact validate output/daily_report.json
+```
+
+Inspect deterministic metadata and section counts (not report rows):
+
+```powershell
+twstock daily-report-artifact inspect output/daily_report.json
+```
+
+Restore Markdown from canonical artifact data:
+
+```powershell
+twstock daily-report-artifact export-markdown `
+  output/daily_report.json `
+  --output-markdown output/restored_daily_report.md
+```
+
+Use `--overwrite` to replace an existing Markdown file:
+
+```powershell
+twstock daily-report-artifact export-markdown `
+  output/daily_report.json `
+  --output-markdown output/restored_daily_report.md `
+  --overwrite
+```
+
+- These commands operate only on an existing offline schema v1 JSON artifact.
+- They do not fetch market data or run the Daily Pipeline.
+- `inspect` prints metadata and counts only.
+- `export-markdown` renders canonical artifact data; it does not reconstruct Excel.
+- They do not connect to brokers, place orders, produce live signals, recommend stocks, or provide investment advice.
 
 ### Optional top-candidate backtest validation
 
