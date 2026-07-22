@@ -696,6 +696,41 @@ Excel sheets：
 Clean file 只輸出有效股票的 `Normalized Stock`，例如純數字輸入會保留為 `2330`、`8069`；若原始輸入已明確帶 `.TW` / `.TWO`，則會保留完整市場別。
 
 ## Daily Report
+### Optional Daily Report JSON artifact
+
+Daily Report JSON export is opt-in and produces an offline research artifact.
+It is generated from the same `DailyPipelineResult` as the Markdown report.
+
+```powershell
+py twstock_cli.py daily `
+  --stocks 2330 2317 `
+  --output-json
+```
+
+Without a path, JSON is written to <output-dir>/daily_report.json, defaulting
+to output/daily_report.json. The `--output-json` option is not required; when
+it is omitted, no JSON artifact is produced.
+
+Use a custom JSON path when needed:
+
+```powershell
+py twstock_cli.py daily `
+  --stocks 2330 2317 `
+  --output-json output/daily_report.json
+```
+
+Use `--overwrite` to replace an existing JSON artifact:
+
+```powershell
+py twstock_cli.py daily `
+  --stocks 2330 2317 `
+  --output-json output/daily_report.json `
+  --overwrite
+```
+
+The JSON is for offline research only. It does not include broker integration,
+live trading, order placement, investment recommendations, or investment advice.
+
 ### Optional top-candidate backtest validation
 
 Daily Report keeps its existing scan-only behavior by default. Add `--validate-top N` to backtest the first N candidates in the displayed deterministic candidate order and include scalar results in the Markdown `Backtest Highlights` section:

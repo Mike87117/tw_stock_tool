@@ -17,9 +17,17 @@ class TestDailyReportCli(unittest.TestCase):
         self.assertEqual(args.stock_market, "all")
         self.assertEqual(args.output_dir, "output")
         self.assertIsNone(args.output_md)
+        self.assertIsNone(args.output_json)
+        self.assertFalse(args.overwrite)
         custom = _parse_args(["--stocks", "2330", "2317", "--output-md", "test.md"])
         self.assertEqual(custom.stocks, ["2330", "2317"])
         self.assertEqual(custom.output_md, "test.md")
+
+        json_default = _parse_args(["--output-json"])
+        self.assertEqual(json_default.output_json, "")
+        json_custom = _parse_args(["--output-json", "custom/report.json", "--overwrite"])
+        self.assertEqual(json_custom.output_json, "custom/report.json")
+        self.assertTrue(json_custom.overwrite)
 
     def test_config_adapter_converts_signals_to_tuple(self):
         args = _parse_args(["--signals", "BUY", "WATCH", "--output-excel", "daily.xlsx"])
@@ -27,11 +35,14 @@ class TestDailyReportCli(unittest.TestCase):
         self.assertEqual(config.signals, ("BUY", "WATCH"))
         self.assertEqual(config.output_excel, "daily.xlsx")
 
+    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
     @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
     @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_calls_pipeline_and_writes_default_markdown(self, mock_open, mock_mkdir, mock_collect, mock_run):
+    def test_main_calls_pipeline_and_writes_default_markdown(
+        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
+    ):
         mock_run.return_value = Mock(markdown="# Report")
         with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-md"]):
             result = main()
@@ -44,6 +55,7 @@ class TestDailyReportCli(unittest.TestCase):
         mock_open.assert_called_once_with(Path("output/daily_report.md"), "w", encoding="utf-8")
         mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
         self.assertTrue(callable(mock_run.call_args.kwargs["status_callback"]))
+        mock_export.assert_not_called()
 
     @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
@@ -70,6 +82,109 @@ class TestDailyReportCli(unittest.TestCase):
             self.assertIsNone(main())
         mock_open.assert_called_once_with(Path("reports/daily_report.md"), "w", encoding="utf-8")
         mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+
+    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_main_exports_default_json_from_pipeline_result(
+        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
+    ):
+        report_data = {"sentinel": object()}
+        mock_run.return_value = Mock(markdown="# Report", report_data=report_data)
+        exported_path = Path("C:/exports/daily_report.json")
+        mock_export.return_value = exported_path
+        output = StringIO()
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-json"]), patch.object(
+            sys, "stdout", output
+        ):
+            self.assertIsNone(main())
+        mock_export.assert_called_once_with(
+            report_data,
+            Path("output/daily_report.json"),
+            overwrite=False,
+        )
+        self.assertIs(mock_export.call_args.args[0], mock_run.return_value.report_data)
+        self.assertIn(str(exported_path), output.getvalue())
+        mock_run.assert_called_once()
+
+    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_main_uses_output_dir_for_default_json_path(
+        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
+    ):
+        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-dir", "reports", "--output-json"]):
+            self.assertIsNone(main())
+        self.assertEqual(mock_export.call_args.args[1], Path("reports/daily_report.json"))
+
+    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_main_uses_custom_json_path_without_output_dir(
+        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
+    ):
+        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+        with patch.object(sys, "argv", [
+            "daily_report_cli.py", "--output-dir", "reports", "--output-json", "custom/report.json",
+        ]):
+            self.assertIsNone(main())
+        self.assertEqual(mock_export.call_args.args[1], Path("custom/report.json"))
+
+    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_main_forwards_json_overwrite(self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export):
+        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-json", "--overwrite"]):
+            self.assertIsNone(main())
+        self.assertTrue(mock_export.call_args.kwargs["overwrite"])
+
+    @patch(
+        "tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file",
+        side_effect=FileExistsError("File already exists: report.json"),
+    )
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_json_file_exists_returns_one_and_mentions_overwrite(
+        self, mock_open, mock_collect, mock_run, mock_export
+    ):
+        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+        output = StringIO()
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-json"]), patch.object(
+            sys, "stdout", output
+        ):
+            self.assertEqual(main(), 1)
+        self.assertIn("File already exists", output.getvalue())
+        self.assertIn("--overwrite", output.getvalue())
+        self.assertNotIn("Process completed successfully", output.getvalue())
+
+    @patch(
+        "tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file",
+        side_effect=PermissionError("locked"),
+    )
+    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
+    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    def test_json_export_failure_returns_one(self, mock_open, mock_collect, mock_run, mock_export):
+        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+        output = StringIO()
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-json"]), patch.object(
+            sys, "stdout", output
+        ):
+            self.assertEqual(main(), 1)
+        self.assertIn("locked", output.getvalue())
+        self.assertNotIn("Process completed successfully", output.getvalue())
 
     @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline", return_value=Mock(markdown="# Report"))
     @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
