@@ -433,6 +433,16 @@ Excel behavior remain unchanged. No Phase 50.12, broker, live-trading,
 recommendation, scheduler, database, GUI, or Excel reconstruction behavior
 was added.
 
+**Phase 51.1 status:** Shared Backtest CLI parameter contracts are now covered
+by tests-only characterization for Backtest Report, Parameter Sweep, and Walk
+Forward. Parser actions, defaults, custom values, strategy/grid parameters,
+backtest forwarding, report metadata, output modes, errors, help, and unified
+CLI passthrough are locked to current behavior. No production code, shared
+argument builder, flag, default, help text, output behavior, strategy behavior,
+backtest engine, or Phase 51.2 implementation was changed. The Phase 51.1
+branch remains merge-gated HOLD pending reviewer approval; Phase 51.2 has not
+started.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
