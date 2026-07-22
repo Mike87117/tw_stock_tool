@@ -410,6 +410,8 @@ Trade Log 是研究、Paper Trading、半自動下單與自動下單共用的稽
 
 **Phase 50.8 status:** Daily Research report data now has a pure schema v1 serialization/deserialization boundary with deterministic UTF-8 JSON, canonical section and metadata ordering, and pandas/numpy/missing-value normalization. The boundary performs no file I/O and adds no CLI, Markdown, Excel, trading, recommendation, or Phase 50.9 behavior.
 
+**Phase 50.9 status:** Daily Research schema v1 now has UTF-8 JSON file export/load helpers built on the generic `write_text_report` writer. Export creates parent directories, preserves overwrite protection, and serializes before any file I/O; load preserves filesystem errors while surfacing serialization errors through the existing boundary. No CLI, pipeline, Markdown, Excel, trading, recommendation, or Phase 50.10 behavior was added.
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
