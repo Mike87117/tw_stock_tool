@@ -47,7 +47,6 @@ The audit did not run live market services, network-dependent behavior, the comp
 The following were treated as protected unless complete current evidence proved otherwise:
 
 - root-level compatibility wrappers and historical script/import paths;
-- `src/tw_stock_tool/backtest/engine.py` and `src/tw_stock_tool/strategies/base.py`, whose alternate semantics and retention decision remain documented;
 - yfinance, TWSE, TPEx, TW/TWO symbol fallback, normalization, provider validation, and cache boundaries;
 - `paper_trading`, risk controls, kill switches, guard adapters, validation, schemas, error handling, and nonzero process-status propagation;
 - tests covering wrappers, smoke paths, CLI exit status, fallback behavior, schemas, safety, and historical regressions;
@@ -93,7 +92,6 @@ Line counts are current tracked lines for the named files or groups. An estimate
 | PT-AUDIT-007 | `shrink` | `DEFER_ARCHITECTURAL` | Large GUI controller/service modules | `src/tw_stock_tool/gui/gui_app.py`; `src/tw_stock_tool/gui/app_services.py` | GUI application and service modules contain repeated widget/state-management and feature orchestration code. | GUI imports, callbacks, user workflows, and tests/docs rely on the current feature boundaries. | Source inspection cannot prove unchanged UI state, event ordering, or user-visible behavior. | Must preserve paper-trading and risk-control presentation/guarding in GUI flows. | 1,124 | 0 approved | None | Medium | Characterize UI workflows and state transitions before extracting any feature helper. | Defer until GUI work resumes. |
 | PT-AUDIT-008 | `yagni` | `DEFER_ARCHITECTURAL` | Duplicate dependency declarations | `requirements.txt`; `pyproject.toml` | The same runtime dependencies are declared in both files. | CI installs `requirements.txt`; README directs users to it; `utils/doctor.py` checks it; tests protect both metadata paths. | Removing one source changes supported installation and diagnostic workflows. | Dependency resolution must remain equivalent for all supported workflows. | 38 | 0 approved | No dependency can be removed; source-of-truth change required | High | Characterize CI, README, doctor, metadata tests, and package installation before choosing a source of truth. | Defer as packaging policy, not a Ponytail cleanup now. |
 | PT-AUDIT-009 | `delete` | `REJECT_COMPATIBILITY_BOUNDARY` | Root compatibility wrappers | Root-level Python entry points, including `main.py`, smoke checks, scanners, report CLIs, and compatibility imports | Thin wrappers forward historical script execution and import paths into `src/tw_stock_tool`. | README gives direct `python <wrapper>.py` examples; the wrapper inventory lists 41 compatibility-only rows; tests protect wrapper imports, routing, and exit codes. | Deletion would break documented historical invocation or imports; no complete deprecation path exists. | Wrapper exit propagation and safety guards are tested boundaries. | 363 | 0 | None | High | No deletion proof exists; a future versioned deprecation plan would be required. | Reject immediate deletion. |
-| PT-AUDIT-010 | `delete` | `DEFER_ARCHITECTURAL` | Alternate class-based backtest and strategy path | `src/tw_stock_tool/backtest/engine.py`; `src/tw_stock_tool/strategies/base.py` | A separate class-based path exists alongside canonical `src/tw_stock_tool/backtesting/` modules. | Dedicated tests cover both modules and their compatibility contract; architecture docs record semantic/result-model differences and no approved deletion decision. | Deletion could break direct imports and retained alternate semantics even without production callers. | Backtest result and strategy behavior must not be silently conflated. | 219 | 0 approved | None | High | Require an explicit migration/deprecation decision and characterization of result semantics. | Defer architectural consolidation. |
 | PT-AUDIT-011 | `shrink` | `DEFER_ARCHITECTURAL` | Historical README and phase-documentation volume | `README.md`; selected historical files under `docs/` | README is 2,054 lines and the repository retains historical phase/audit records. | README contains current command examples and compatibility notes; historical documents record prior architecture decisions. | Removing or restructuring history can obscure supported workflows or erase decision context. | No production safety impact, but documentation correctness must be preserved. | 10,262 | 0 approved | None | Medium | Perform a documentation-only navigation review with link and command validation. | Defer as documentation maintenance; do not count it as production reduction. |
 | PT-AUDIT-012 | `yagni` | `REJECT_TEST_SAFETY` | Thin safety, validation, schema, and status-propagation boundaries | `src/tw_stock_tool/paper_trading/`; `src/tw_stock_tool/risk/`; `src/tw_stock_tool/kill_switch/`; guard/validation modules; related tests | Some boundaries are small wrappers or adapters around risk, kill-switch, validation, schemas, and process statuses. | Imports, package exports, tests, CLI routes, and historical regression coverage actively exercise them. | Public imports, schemas, output wording, and nonzero statuses are compatibility contracts. | Removing or merging them could bypass paper-trading guards, risk controls, kill switches, validation, or failure propagation. | Not aggregated | 0 | None | High | No reduction proof is acceptable without safety-specific characterization and approval. | Reject deletion or consolidation. |
 
@@ -107,7 +105,7 @@ Three findings are accepted only as future characterization work: PT-AUDIT-001 a
 
 ## 14. Deferred architecture candidates
 
-PT-AUDIT-004 through PT-AUDIT-008, PT-AUDIT-010, and PT-AUDIT-011 are deferred. They involve schema boundaries, provider/cache behavior, report architecture, GUI behavior, packaging policy, alternate backtesting semantics, or documentation history. No removable-line estimate is approved for them.
+PT-AUDIT-004 through PT-AUDIT-008 and PT-AUDIT-011 are deferred. They involve schema boundaries, provider/cache behavior, report architecture, GUI behavior, packaging policy, alternate backtesting semantics, or documentation history. No removable-line estimate is approved for them.
 
 ## 15. Rejected Ponytail findings
 
@@ -165,7 +163,7 @@ The raw total is neither a safe estimate nor a commitment. It includes candidate
 
 ## 22. False-positive analysis
 
-The largest false positives were root wrappers and the alternate backtest path. Both look thin or duplicative in isolation, but README examples, import paths, dedicated tests, compatibility inventory, and architecture decisions establish active or retained contracts. Similar serialization functions have different result types and schemas. Provider/cache code is a boundary, not merely a large function. Safety adapters, validation, and status propagation are deliberately small. Duplicate requirements declarations are operationally active, so they are not a dependency-removal opportunity.
+The largest false positives were root wrappers. Both look thin or duplicative in isolation, but README examples, import paths, dedicated tests, compatibility inventory, and architecture decisions establish active or retained contracts. Similar serialization functions have different result types and schemas. Provider/cache code is a boundary, not merely a large function. Safety adapters, validation, and status propagation are deliberately small. Duplicate requirements declarations are operationally active, so they are not a dependency-removal opportunity.
 
 ## 23. Highest-value safe opportunity
 
@@ -179,15 +177,13 @@ The phase must first capture `--help`, defaults, required arguments, aliases, tu
 
 ## 25. Deferred future phases
 
-The following remain deferred and are not additional next-phase recommendations: characterization of the unified CLI registration helper; extraction of a test-only subprocess environment helper; schema-preserving serialization utility design; provider/cache seam work; one-report-at-a-time boundary work; GUI characterization; dependency source-of-truth policy; alternate backtest migration; and documentation navigation maintenance.
+The following remain deferred and are not additional next-phase recommendations: characterization of the unified CLI registration helper; extraction of a test-only subprocess environment helper; schema-preserving serialization utility design; provider/cache seam work; one-report-at-a-time boundary work; GUI characterization; dependency source-of-truth policy; and documentation navigation maintenance.
 
 ## 26. Explicitly protected files and modules
 
 Protected examples include:
 
 - all root-level compatibility wrappers;
-- `src/tw_stock_tool/backtest/engine.py`;
-- `src/tw_stock_tool/strategies/base.py`;
 - `src/tw_stock_tool/data/data_loader.py`;
 - `src/tw_stock_tool/paper_trading/`;
 - `src/tw_stock_tool/risk/`;
@@ -269,7 +265,6 @@ shrink report builder/render/write responsibility concentration. Split one repor
 shrink large GUI controller/service modules. Split feature responsibilities. [src/tw_stock_tool/gui/gui_app.py, src/tw_stock_tool/gui/app_services.py]
 yagni duplicate dependency declarations. Choose one dependency source of truth. [requirements.txt, pyproject.toml]
 delete root compatibility wrappers. Remove redirect files. [root-level Python wrappers]
-delete alternate class-based backtest path. Remove duplicate engine and strategy base. [src/tw_stock_tool/backtest/engine.py, src/tw_stock_tool/strategies/base.py]
 shrink historical README and phase-documentation volume. Reorganize navigation and archive history. [README.md, docs/]
 yagni thin safety, validation, schema, and status-propagation boundaries. Merge boundary layers. [src/tw_stock_tool/paper_trading/, src/tw_stock_tool/risk/, src/tw_stock_tool/kill_switch/, tests/]
 net: -350 lines, -0 deps possible.

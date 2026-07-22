@@ -2,7 +2,7 @@
 
 ## A. Executive summary
 
-The repository root preserves historical script and import paths while packaged implementation lives under `src/tw_stock_tool/`. Root wrappers cannot be treated as dead merely because internal callers are absent: README examples, tests, and external scripts may rely on them. `pyproject.toml` declares the canonical `twstock` console script. The active/canonical DataFrame-oriented `backtesting/` path is distinct from the alternate class-based `backtest/engine.py` path under investigation. No removal, migration, or Phase A2 work is authorized here.
+The repository root preserves historical script and import paths while packaged implementation lives under `src/tw_stock_tool/`. Root wrappers cannot be treated as dead merely because internal callers are absent: README examples, tests, and external scripts may rely on them. `pyproject.toml` declares the canonical `twstock` console script. The active/canonical DataFrame-oriented `backtesting/` path is the sole packaged backtest path. Root wrappers target canonical package and CLI modules and remain compatibility surfaces.
 
 ## B. Source-of-truth hierarchy
 
@@ -67,7 +67,7 @@ Each row is one root-level Python file. `None found` means this audit found no r
 | walk_forward.py | import re-export and executable wrapper | tw_stock_tool.backtesting.walk_forward (import); tw_stock_tool.cli.walk_forward_report (execute) | re-exports target module | calls target main() | None found | test_walk_forward.py | COMPATIBILITY_ONLY | Unknown external use | High | tw_stock_tool.backtesting.walk_forward (import); tw_stock_tool.cli.walk_forward_report (execute) | Retain through compatibility window |
 | walk_forward_report.py | executable CLI wrapper | tw_stock_tool.cli.walk_forward_report | Not applicable | calls target main() | None found | test_walk_forward_report.py | COMPATIBILITY_ONLY | Unknown external use | High | tw_stock_tool.cli.walk_forward_report | Retain through compatibility window |
 
-Root `backtest.py` re-exports `tw_stock_tool.backtesting.backtest`; root `strategies.py` re-exports `tw_stock_tool.backtesting.strategies`. They do not expose the alternate class-based package.
+Root `backtest.py` re-exports `tw_stock_tool.backtesting.backtest`; root `strategies.py` re-exports `tw_stock_tool.backtesting.strategies`.
 
 ## E. Package export inventory
 
@@ -77,8 +77,6 @@ A row represents explicit symbols exported from a package initializer, or an exp
 |---|---|---|---|---|---|---|---|---|---|---|
 | analysis | No package exports | analysis submodules | No | No | analysis.py, indicators.py, scanner.py, signals.py, stock_selection.py | analysis commands | analysis/scanner tests | CLI scanner and main | INTERNAL | Medium |
 | backtesting | No package exports; active DataFrame-oriented modules | backtest, results, strategies, report modules | No | No | backtest.py, strategies.py, report wrappers | report commands | backtesting and report tests | CLI reports and strategy compare | SUPPORTED_PUBLIC_API | High |
-| backtest | No package exports; alternate class-based path | backtest/engine.py and class models | No | No | None found | None found | dedicated class-path tests | None found | INVESTIGATE | High |
-| strategies | No package exports; base.py supports alternate class path | strategies/base.py | No | No | root strategies.py targets backtesting.strategies | None found | dedicated class strategy tests | None found | INVESTIGATE | High |
 | reports | No package exports | reports modules | No | No | report.py, plotter.py, daily_report.py, ai_prediction_report.py | report filenames | report tests | CLI and GUI services | SUPPORTED_PUBLIC_API | High |
 | paper_trading | typed models, runners, builders, exporters, serializers, converter | models, engine, results, exporters, serialization modules | Yes | Yes | None found | README imports | paper trading tests | simulation CLI | SUPPORTED_PUBLIC_API | High |
 | risk | RiskDecision, RiskModelError, snapshots, evaluations, rule functions | models and rules | Yes | Yes | None found | None found | risk tests | guard adapter | SUPPORTED_PUBLIC_API | Medium |
@@ -129,19 +127,15 @@ A row represents explicit symbols exported from a package initializer, or an exp
 
 ## H. Duplicate-path findings
 
-`backtesting/` is the active/canonical DataFrame-oriented runtime and artifact path. `backtest/engine.py` is an alternate class-based path under investigation and is `INVESTIGATE`; `strategies/base.py` is its alternate class-path support and is also `INVESTIGATE`. Root `backtest.py` and `strategies.py` target `tw_stock_tool.backtesting.backtest` and `tw_stock_tool.backtesting.strategies`. Dedicated tests prove maintained behavior but do not alone establish a supported external API. Before Phase A2, compare callers, exports, result models, strategy interfaces, fill timing, cost semantics, artifacts, and external usage uncertainty.
+`backtesting/` is the active/canonical DataFrame-oriented runtime and artifact path. Root `backtest.py` and `strategies.py` target the canonical modules.
 
 ## I. Deprecation prerequisites
 
 Deprecation requires a canonical replacement, adapter where needed, import and CLI smoke tests, README migration instructions, warning policy, documented release window, versioning plan, release notes, and removal-test updates.
 
-## J. Phase A2 entry criteria
+## J. Recommended actions and corrected counts
 
-Phase A2 needs a caller/export/test matrix for both paths, semantic comparisons, artifact-consumer evidence, published replacements, and a compatibility window before choosing retention, adaptation, deprecation, merge, or future breaking-release removal. Phase A2 is not started by this document.
-
-## K. Recommended actions and corrected counts
-
-Safe now: maintain this inventory and documentation links. Later: add import and help smoke matrices. Compatibility window required: root wrappers, aliases, public imports. Production migration required: backtest consolidation and GUI/data/report refactors. Must not change yet: filenames, schemas, CLI flags, wrappers, dependencies.
+Safe now: maintain this inventory and documentation links. Later: add import and help smoke matrices. Compatibility window required: root wrappers, aliases, public imports. Production migration required: GUI/data/report refactors. Must not change yet: filenames, schemas, CLI flags, wrappers, dependencies.
 
 Counting units are table rows: root file rows, CLI command rows, package/export rows, and artifact rows are not combined.
 
@@ -149,11 +143,11 @@ Counting units are table rows: root file rows, CLI command rows, package/export 
 |---|---:|
 | Root-level files represented by individual rows | 41 |
 | Unified command forms and SUPPORTED_CLI rows | 19 |
-| Package/export rows | 13 |
+| Package/export rows | 11 |
 | Artifact/schema rows | 9 |
 | SUPPORTED_PUBLIC_API package/export rows | 6 |
 | COMPATIBILITY_ONLY root-file rows | 41 |
 | UNKNOWN_EXTERNAL_USAGE package/export rows | 1 |
-| INVESTIGATE package/export rows | 2 |
+| INVESTIGATE package/export rows | 0 |
 | DEPRECATION_CANDIDATE rows | 0 |
 | REMOVE_CANDIDATE rows | 0 |

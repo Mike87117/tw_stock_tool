@@ -68,9 +68,7 @@ adds concurrent multi-stock orchestration and deterministic result ranking.
 bar open. `backtesting/parameter_sweep.py` evaluates parameter grids and ranks
 results. `backtesting/walk_forward.py` separates training and test slices,
 selects parameters on training data, and evaluates the chosen parameters on
-the following test slice. A second `backtest/engine.py` plus
-`strategies/base.py` exposes a protocol/class-based backtest path used by its
-own tests but not by current CLI workflows.
+the following test slice.
 
 ### Scan and report workflows
 
@@ -218,7 +216,6 @@ order.
 | Scanner | `analysis/scanner.py`: `scan_one_stock`, `scan_stocks` | Concurrent scan, filtering, errors, ranking | Deterministic output and explicit error rows are appropriate | KEEP | Stable mergesort plus stock tie-break; failed rows retained separately | Medium | Existing behavior | No |
 | Report workflows | `reports/daily_report.py`, `reports/backtest_report.py`, `reports/parameter_sweep_report.py`, `reports/walk_forward_report.py` symbol/index review | Build and render research artifacts | Some large modules mix shaping and rendering, but the split is not needed here | REFACTOR_LATER | Builder, renderer, and file-export functions coexist | Medium | Report-specific phase | No |
 | Backtest function engine | `backtesting/backtest.py`: `run_backtest_result`, `run_backtest` | Historical execution and metrics | Next-bar-open pending execution is explicit; result adapter preserves compatibility | KEEP | Comment and control flow execute yesterday's signal at today's open | High | Existing behavior | No |
-| Parallel class backtest | `backtest/engine.py`, `strategies/base.py`, `tests/test_backtest_engine.py`, `tests/test_strategy_base.py` | Alternate protocol/class-based engine | Parallel implementation is a removal or consolidation candidate | REMOVE_CANDIDATE | Current application workflows call `backtesting/backtest.py`; alternate engine is referenced by dedicated tests | High until semantics and users are migrated | Separate backtest consolidation phase | No |
 | Parameter sweep | `backtesting/parameter_sweep.py`: parameter-set loop and ranking | Evaluate and rank in-sample parameter combinations | Errors remain distinguishable; equal-metric ordering lacks an explicit secondary key | REFACTOR_LATER | Stable sort preserves grid order but the tie-break contract is implicit | Medium | Parameter-sweep determinism phase | No |
 | Walk forward | `backtesting/walk_forward.py`: `split_windows`, `_evaluate_window_strategy`, `run_walk_forward` | Train selection then test evaluation | Train/test boundaries avoid selecting on test results | KEEP | Non-overlapping slices within each window; best parameters chosen from train metric before test call | High if changed | Existing behavior | No |
 | CLI orchestration | `cli/main.py`, `cli/backtest_report.py`, `cli/parameter_sweep_report.py`, `cli/walk_forward_report.py`, `cli/daily_report_cli.py` | Parse, orchestrate, print, and export | Argument and parameter dictionary assembly is duplicated | REFACTOR_LATER | Similar strategy/backtest parameter plumbing appears in multiple CLI modules | High because CLI compatibility is tested | Future CLI maintenance phase | No |
@@ -252,13 +249,9 @@ Ranked over-engineering findings, recorded but not applied:
 
 1. `delete:` retire legacy root wrappers after a compatibility window; use the
    `twstock` console script and package modules. [`/` root wrappers]
-2. `yagni:` consolidate the alternate class-based backtest engine and base
-   strategy if it has no external consumers; keep the active
-   `backtesting/backtest.py` path. [`src/tw_stock_tool/backtest/engine.py`,
-   `src/tw_stock_tool/strategies/base.py`]
-3. `shrink:` centralize duplicated CLI strategy/backtest argument-to-dictionary
+2. `shrink:` centralize duplicated CLI strategy/backtest argument-to-dictionary
    plumbing only when a CLI phase already touches those modules. [`src/tw_stock_tool/cli/`]
-4. `shrink:` separate provider/cache orchestration in the data loader only when
+3. `shrink:` separate provider/cache orchestration in the data loader only when
    changing fallback policy. [`src/tw_stock_tool/data/data_loader.py`]
 
 Estimated removable surface after explicit deprecation and migration work:

@@ -7,18 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from tw_stock_tool.backtest.engine import BacktestEngine, BacktestResult as AlternateBacktestResult
 from tw_stock_tool.backtesting import backtest, serialization, serialization_files
 from tw_stock_tool.backtesting.backtest import run_backtest_result
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.paper_trading.backtest_converter import convert_backtest_result_to_simulated_paper_trading_result
-from tw_stock_tool.paper_trading.models import PaperTradingModelError
-from tw_stock_tool.strategies.base import BaseStrategy
-
-
-class Signals(BaseStrategy):
-    def generate_signals(self, df, params=None):
-        return pd.DataFrame({"entry_signal": [True, False, False], "exit_signal": [False, True, False]}, index=df.index)
 
 
 class BacktestCompatibilityContractTest(unittest.TestCase):
@@ -29,16 +21,12 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
         result.profit_factor = 1.0
         return df, result
 
-    def alternate(self, df):
-        return BacktestEngine(df[["Open", "Close"]], Signals(), initial_cash=100).run()
-
-    def test_canonical_result_identity_is_shared_and_alternate_is_distinct(self):
+    def test_canonical_result_identity_is_shared(self):
         from tw_stock_tool.paper_trading import backtest_converter
         self.assertIs(backtest.BacktestResult, BacktestResult)
         self.assertIs(serialization.BacktestResult, BacktestResult)
         self.assertIs(serialization_files.BacktestResult, BacktestResult)
         self.assertIs(backtest_converter.BacktestResult, BacktestResult)
-        self.assertIsNot(AlternateBacktestResult, BacktestResult)
 
     def test_root_wrappers_redirect_only_to_canonical_modules(self):
         root = Path(__file__).resolve().parents[1]
@@ -50,19 +38,18 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
         from tw_stock_tool.backtesting.serialization_files import load_backtest_result_json_file
         from tw_stock_tool.backtesting.strategies import STRATEGIES
         from tw_stock_tool.paper_trading.backtest_converter import convert_backtest_result_to_simulated_paper_trading_result as convert
-        self.assertTrue(issubclass(Signals, BaseStrategy))
         self.assertIs(backtest_result_export_cli.run_backtest_result, run_backtest_result)
         self.assertIs(backtest_result_export_cli.STRATEGIES, STRATEGIES)
         self.assertIs(backtest_artifact_cli.load_backtest_result_json_file, load_backtest_result_json_file)
         self.assertIs(backtest_artifact_cli.convert_backtest_result_to_simulated_paper_trading_result, convert)
 
     def test_artifact_roundtrip_and_type_boundaries(self):
-        df, canonical = self.canonical(); alternate = self.alternate(df)
+        _, canonical = self.canonical()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "result.json"
             serialization_files.export_backtest_result_json_file(canonical, path)
             loaded = serialization_files.load_backtest_result_json_file(path)
-        self.assertIsInstance(loaded, BacktestResult); self.assertNotIsInstance(loaded, AlternateBacktestResult)
+        self.assertIsInstance(loaded, BacktestResult)
         self.assertEqual((loaded.stock, loaded.strategy, loaded.parameters), ("2330", "fixed", {"x": 1}))
         self.assertEqual((loaded.initial_capital, loaded.final_capital, loaded.trade_count), (canonical.initial_capital, canonical.final_capital, canonical.trade_count))
         self.assertEqual((loaded.start_date, loaded.end_date), (canonical.start_date.isoformat(), canonical.end_date.isoformat()))
@@ -71,12 +58,8 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
         self.assertEqual(len(loaded.equity_curve), len(canonical.equity_curve))
         for actual, expected in zip(loaded.equity_curve, canonical.equity_curve): self.assertAlmostEqual(actual, expected)
         self.assertEqual(list(loaded.equity_curve.index), [item.isoformat() for item in canonical.equity_curve.index])
-        with self.assertRaisesRegex(serialization.BacktestResultSerializationError, "BacktestResult"):
-            serialization.serialize_backtest_result(alternate)
-        with self.assertRaisesRegex(PaperTradingModelError, "BacktestResult"):
-            convert_backtest_result_to_simulated_paper_trading_result(alternate)
 
-    def test_converter_accepts_canonical_and_production_consumers_avoid_alternate_imports(self):
+    def test_converter_accepts_canonical_and_production_consumers_use_canonical_imports(self):
         _, result = self.canonical()
         converted = convert_backtest_result_to_simulated_paper_trading_result(result)
         self.assertEqual((converted.symbol, converted.initial_cash, converted.final_cash, converted.total_equity), ("2330", 100, result.final_capital, result.final_capital))
@@ -114,7 +97,6 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
         for name in documented_consumers:
             imports = imported_modules(name)
             self.assertTrue(expected_imports[name].issubset(imports), f"{name}: expected {expected_imports[name]}, found {imports}")
-            self.assertNotIn("tw_stock_tool.backtest.engine", imports); self.assertNotIn("tw_stock_tool.strategies.base", imports)
 
 if __name__ == "__main__":
     unittest.main()
