@@ -20,6 +20,7 @@ from tw_stock_tool.cli import walk_forward_report
 from tw_stock_tool.ml import ai_stock_scanner
 from tw_stock_tool.cli import clean_stocks
 from tw_stock_tool.cli import daily_report_cli
+from tw_stock_tool.cli import daily_report_artifact_cli
 from tw_stock_tool.utils import doctor
 from tw_stock_tool.cli import price_data_smoke_check
 from tw_stock_tool.cli import scan_stocks
@@ -76,6 +77,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_passthrough_parser(subparsers, "scan", scan_stocks.main, "scan_stocks.py", "Run multi-stock technical scanner")
 
     _add_passthrough_parser(subparsers, "daily", daily_report_cli.main, "daily_report_cli.py", "Run daily candidate report")
+
+    _add_passthrough_parser(
+        subparsers,
+        "daily-report-artifact",
+        daily_report_artifact_cli.main,
+        "daily_report_artifact_cli.py",
+        "Validate, inspect, or export a Daily Report JSON artifact",
+        (
+            "Operate on an existing offline Daily Research Report JSON artifact.\n"
+            "Does not fetch market data, run analysis, execute strategies or "
+            "backtests, connect to brokers, place orders, produce live signals, "
+            "or provide investment advice."
+        ),
+    )
 
     stock_list_parser = subparsers.add_parser("stock-list", help="Stock-list utilities")
     stock_list_subparsers = stock_list_parser.add_subparsers(dest="stock_list_command", required=True)

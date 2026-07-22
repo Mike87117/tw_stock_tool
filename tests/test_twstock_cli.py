@@ -644,5 +644,89 @@ class TwStockCliTest(unittest.TestCase):
         mock_main.assert_called_once_with()
 
 
+class DailyReportArtifactUnifiedCliTests(unittest.TestCase):
+    def test_daily_report_artifact_commands_forward_exact_argv(self):
+        cases = [
+            (
+                ["validate", "report.json"],
+                ["daily_report_artifact_cli.py", "validate", "report.json"],
+            ),
+            (
+                ["inspect", "report.json"],
+                ["daily_report_artifact_cli.py", "inspect", "report.json"],
+            ),
+            (
+                [
+                    "export-markdown", "report.json",
+                    "--output-markdown", "report.md", "--overwrite",
+                ],
+                [
+                    "daily_report_artifact_cli.py", "export-markdown", "report.json",
+                    "--output-markdown", "report.md", "--overwrite",
+                ],
+            ),
+        ]
+        for child_args, expected_argv in cases:
+            with self.subTest(child_args=child_args):
+                captured = []
+
+                def fake_main():
+                    captured.append(sys.argv[:])
+
+                with patch.object(
+                    twstock_cli.daily_report_artifact_cli,
+                    "main",
+                    side_effect=fake_main,
+                ) as mocked:
+                    status = twstock_cli.main(["daily-report-artifact", *child_args])
+
+                self.assertEqual(status, 0)
+                mocked.assert_called_once_with()
+                self.assertEqual(captured, [expected_argv])
+
+    def test_daily_report_artifact_status_and_sys_argv_restoration(self):
+        original = sys.argv[:]
+        captured = []
+
+        def fake_main():
+            captured.append(sys.argv[:])
+            return 9
+
+        with patch.object(
+            twstock_cli.daily_report_artifact_cli,
+            "main",
+            side_effect=fake_main,
+        ) as mocked:
+            status = twstock_cli.main([
+                "daily-report-artifact", "validate", "report.json",
+            ])
+
+        self.assertEqual(status, 9)
+        mocked.assert_called_once_with()
+        self.assertEqual(
+            captured,
+            [["daily_report_artifact_cli.py", "validate", "report.json"]],
+        )
+        self.assertEqual(sys.argv, original)
+
+    def test_root_and_artifact_help_register_command_and_safety(self):
+        root = StringIO()
+        with redirect_stdout(root), self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("daily-report-artifact", root.getvalue())
+
+        artifact = StringIO()
+        with redirect_stdout(artifact), self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["daily-report-artifact", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        text = artifact.getvalue().lower()
+        self.assertIn("existing offline daily research report json artifact", text)
+        for forbidden in (
+            "recommended stocks", "best stocks to buy", "guaranteed return",
+        ):
+            self.assertNotIn(forbidden, text)
+
+
 if __name__ == "__main__":
     unittest.main()
