@@ -9,7 +9,11 @@ from tw_stock_tool.reports.backtest_report import (
     export_backtest_report_markdown,
     export_backtest_report_excel,
 )
-from tw_stock_tool.utils.config import DEFAULT_PERIOD
+from tw_stock_tool.cli._report_cli_arguments import (
+    add_force_refresh_argument,
+    add_report_output_arguments,
+    add_stock_strategy_period_arguments,
+)
 
 
 def _normalize_result(
@@ -35,35 +39,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Backtest Report Generator",
         epilog="Backtest fills use next-bar Open as a research assumption."
     )
-    parser.add_argument("--stock", required=True, help="Stock ID (e.g., 2330)")
-    parser.add_argument("--strategy", required=True, help="Strategy name (e.g., ma_cross)")
-    parser.add_argument("--period", default=DEFAULT_PERIOD, help="Data period")
+    add_stock_strategy_period_arguments(parser, strategy_help="Strategy name (e.g., ma_cross)")
     parser.add_argument("--initial-capital", type=float, default=100000.0, help="Initial capital")
-    parser.add_argument("--output-md", nargs="?", const="", default=None, help="Export Markdown report")
-    parser.add_argument("--output-excel", nargs="?", const="", default=None, help="Export Excel report")
-    parser.add_argument("--output-dir", default="output", help="Default output directory")
-    parser.add_argument("--force-refresh", action="store_true", help="Redownload data ignoring cache")
-
-    # Strategy specific params (minimal support for Phase 3.1)
+    add_report_output_arguments(parser)
+    add_force_refresh_argument(parser)
     parser.add_argument("--short-window", type=int, default=5, help="Short MA window")
     parser.add_argument("--long-window", type=int, default=20, help="Long MA window")
-
-    # RSI parameters
     parser.add_argument("--rsi-buy-below", type=float, default=30.0, help="RSI threshold (buy below)")
     parser.add_argument("--rsi-sell-above", type=float, default=70.0, help="RSI threshold (sell above)")
-
-    # Score parameters
     parser.add_argument("--score-buy", type=float, default=None, help="Score threshold (buy)")
     parser.add_argument("--score-sell", type=float, default=None, help="Score threshold (sell)")
-
-    # Backtest engine parameters
     parser.add_argument("--fee-rate", type=float, default=0.001425, help="Backtest fee rate assumption")
     parser.add_argument("--tax-rate", type=float, default=0.003, help="Backtest tax rate assumption")
     parser.add_argument("--position-size", type=float, default=1.0, help="Backtest position size")
     parser.add_argument("--stop-loss-pct", type=float, default=None, help="Stop-loss threshold percentage")
     parser.add_argument("--take-profit-pct", type=float, default=None, help="Take-profit threshold percentage")
     parser.add_argument("--max-hold-days", type=int, default=None, help="Max holding days")
-
     return parser.parse_args(argv)
 
 
