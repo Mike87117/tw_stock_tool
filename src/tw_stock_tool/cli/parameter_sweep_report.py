@@ -13,6 +13,7 @@ from tw_stock_tool.cli._report_cli_arguments import (
     add_parameter_range_arguments,
     add_report_output_arguments,
     add_stock_strategy_period_arguments,
+    build_backtest_parameters,
 )
 from tw_stock_tool.utils.config import DEFAULT_PERIOD, INITIAL_CAPITAL, FEE_RATE, TAX_RATE
 
@@ -99,15 +100,7 @@ def main() -> int | None:
             "score_sell": args.score_sell,
         }
 
-        backtest_params = {
-            "initial_capital": args.initial_capital,
-            "fee_rate": args.fee_rate,
-            "tax_rate": args.tax_rate,
-            "position_size": args.position_size,
-            "stop_loss_pct": args.stop_loss_pct,
-            "take_profit_pct": args.take_profit_pct,
-            "max_hold_days": args.max_hold_days,
-        }
+        backtest_params = build_backtest_parameters(args)
 
         result_dict = {
             "Stock": args.stock,
