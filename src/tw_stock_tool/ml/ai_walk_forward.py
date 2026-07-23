@@ -7,7 +7,6 @@ train data.
 
 from __future__ import annotations
 
-import argparse
 from typing import Any
 
 import pandas as pd
@@ -159,46 +158,3 @@ def run_ai_walk_forward(
     ):
         rows.append(_window_row(window_number, train, test, features, target))
     return pd.DataFrame(rows, columns=AI_WALK_FORWARD_COLUMNS)
-
-
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="AI/ML time-split walk-forward skeleton")
-    parser.add_argument("--stock", required=True, help="Stock id, for example 2330")
-    parser.add_argument("--period", default=DEFAULT_PERIOD)
-    parser.add_argument("--horizon", type=int, default=5)
-    parser.add_argument("--train-size", type=int, default=252)
-    parser.add_argument("--test-size", type=int, default=63)
-    parser.add_argument("--step-size", type=int)
-    parser.add_argument("--force-refresh", action="store_true")
-    parser.add_argument(
-        "--dropna",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Drop rows with missing values when building the ML dataset",
-    )
-    return parser.parse_args(argv)
-
-
-def main() -> int:
-    try:
-        args = _parse_args()
-        result = run_ai_walk_forward(
-            stock_id=args.stock,
-            period=args.period,
-            horizon=args.horizon,
-            train_size=args.train_size,
-            test_size=args.test_size,
-            step_size=args.step_size,
-            force_refresh=args.force_refresh,
-            dropna=args.dropna,
-        )
-        print(result.to_string(index=False))
-        print("\nNo model is trained. This is a time-split validation skeleton only.")
-        return 0
-    except Exception as exc:
-        print(f"Error: {exc}")
-        return 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

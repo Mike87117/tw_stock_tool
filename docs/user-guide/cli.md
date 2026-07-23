@@ -19,7 +19,20 @@ twstock strategy-compare --stock 2330 --period 2y
 twstock backtest-report --stock 2330 --strategy ma_cross --output-excel
 twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel
 twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
+twstock ai-report --stock 2330 --period 5y --horizon 5 --output-excel
+twstock ml-dataset --stock 2330 --period 5y --horizon 5 --output-csv
+twstock gui
 ~~~
+
+## AI、ML 與 GUI
+
+~~~bash
+twstock ai-report --stock 2330 --period 5y --horizon 5 --output-excel
+twstock ml-dataset --stock 2330 --period 5y --horizon 5 --output-csv
+twstock gui
+~~~
+
+AI Report 與 ML Dataset 僅供歷史研究；GUI 是本機 prototype，不提供投資建議，也不連接 broker。AI walk-forward split 與 baseline model 僅透過 `tw_stock_tool.ml.*` package API 使用。
 
 ## 專題文件
 

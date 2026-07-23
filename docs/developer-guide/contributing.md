@@ -4,7 +4,7 @@
 
 套件採用 `src` layout；正式 runtime implementation 位於 `src/tw_stock_tool/`。`pyproject.toml` 定義的 console script 為 `twstock = tw_stock_tool.cli.twstock_cli:main`。
 
-各模組的目前分工請見[架構概覽](../architecture/overview.md)。Repository root 只暫時保留六個未決定的 legacy entries；已移除 wrapper 的 replacement 請見[root entry status](../compatibility/root-wrappers.md)。
+各模組的目前分工請見[架構概覽](../architecture/overview.md)。Repository root 只暫時保留兩個待 Cleanup 4B.2 處理的 legacy entries；已移除 wrapper 的 replacement 請見[root entry status](../compatibility/root-wrappers.md)。
 
 ## 本機安裝與測試
 

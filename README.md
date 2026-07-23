@@ -25,6 +25,9 @@ twstock strategy-compare --stock 2330 --period 2y
 twstock backtest-report --stock 2330 --strategy ma_cross --output-excel
 twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel
 twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
+twstock ai-report --stock 2330 --period 5y --horizon 5 --output-excel
+twstock ml-dataset --stock 2330 --period 5y --horizon 5 --output-csv
+twstock gui
 ~~~
 
 結果僅供歷史研究，不構成投資建議。
@@ -53,16 +56,14 @@ twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-exce
     └── scanners/、simulated_paper_trading_guard/、ui/、utils/
 
 Repository root
-└── 僅暫時保留六個 legacy entry points（非主要實作位置）
+└── 僅暫時保留兩個 legacy entry points（非主要實作位置）
 ~~~
 
-Repository root 不再提供舊 Python compatibility modules。正式 CLI 是 `twstock`，正式 Python implementation 位於 `src/tw_stock_tool/`。目前暫時保留的六個 legacy entries 為：
+Repository root 不再提供舊 Python compatibility modules。正式 CLI 是 `twstock`，正式 Python implementation 位於 `src/tw_stock_tool/`。目前暫時保留、待 Cleanup 4B.2 處理的兩個 legacy entries 為：
 
-- `ai_prediction_report.py`
-- `ai_walk_forward.py`
 - `daily_watchlist.py`
-- `gui_app.py`
-- `ml_dataset.py`
 - `verify_batch.py`
+
+AI Report、ML Dataset 與 GUI 已改由正式 `twstock` commands 提供；AI walk-forward 與 baseline model 保留為 package-only research APIs。
 
 其餘 root wrappers 的移除紀錄見 [Root wrapper removal record](docs/archive/root-wrapper-removal.md)。
