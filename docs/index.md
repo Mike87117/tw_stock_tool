@@ -16,7 +16,7 @@
 
 - [開發指南](developer-guide/contributing.md)
 - [架構概覽](architecture/overview.md)
-- [Root compatibility wrappers](compatibility/root-wrappers.md)
+- [Root entry removal record](archive/root-wrapper-removal.md)
 - [資料提供者與快取契約](DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md)
 
 ## 歷史與決策紀錄

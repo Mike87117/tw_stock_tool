@@ -60,3 +60,18 @@ Cleanup 4B.1 removed the remaining ML/GUI root wrappers after adding canonical i
 | `ml_dataset.py` | `twstock ml-dataset` / `tw_stock_tool.ml.ml_dataset` |
 
 `twstock ai-report`, `twstock ml-dataset`, and `twstock gui` are the supported user-facing interfaces.
+
+## Cleanup 4B.2 final legacy-entry retirement
+
+Cleanup 4B.2 completed the final root-entry and obsolete-cluster retirement:
+
+| Removed entry or cluster | Disposition |
+| --- | --- |
+| daily_watchlist.py | Legacy Daily Watchlist cluster intentionally retired; use twstock daily |
+| verify_batch.py | Obsolete TWSE-only batch comparison utility intentionally retired; canonical smoke checks and data reliability tests remain |
+
+This final phase distinguishes root entry deletion, Daily Watchlist feature-cluster retirement, and Verify Batch package-utility retirement. The exact TWSE OHLCV parity-report behavior was not migrated.
+
+Initial root Python compatibility / legacy entries: 42
+Root entries removed: 42
+Root entries remaining: 0

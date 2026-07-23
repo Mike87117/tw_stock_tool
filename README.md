@@ -41,7 +41,7 @@ twstock gui
 - [股票清單與掃描](docs/user-guide/stock-list-and-scanning.md)
 - [Daily Report](docs/user-guide/daily-report.md)
 - [Artifact 操作](docs/user-guide/artifacts.md)
-- [Root entry status](docs/compatibility/root-wrappers.md)
+- [Root entry removal record](docs/archive/root-wrapper-removal.md)
 
 ## Repository map
 
@@ -56,13 +56,10 @@ twstock gui
     └── scanners/、simulated_paper_trading_guard/、ui/、utils/
 
 Repository root
-└── 僅暫時保留兩個 legacy entry points（非主要實作位置）
+└── 沒有受支援的 Python entry points
 ~~~
 
-Repository root 不再提供舊 Python compatibility modules。正式 CLI 是 `twstock`，正式 Python implementation 位於 `src/tw_stock_tool/`。目前暫時保留、待 Cleanup 4B.2 處理的兩個 legacy entries 為：
-
-- `daily_watchlist.py`
-- `verify_batch.py`
+Repository root 不再提供受支援的 Python entry points 或 compatibility modules。正式 CLI 是 `twstock`，正式 Python implementation 位於 `src/tw_stock_tool/`。
 
 AI Report、ML Dataset 與 GUI 已改由正式 `twstock` commands 提供；AI walk-forward 與 baseline model 保留為 package-only research APIs。
 
