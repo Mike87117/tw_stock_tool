@@ -439,11 +439,16 @@ was added.
 Phase 51.1：已透過 cumulative PR #29 合併
 Phase 51.2：已透過 cumulative PR #29 合併
 
-Phase 52.1：完成（Reviewer Gate HOLD）
+Phase 52.1：Reviewer Gate PASS；透過 cumulative Phase 52.2 PR 等待整合
 PHASE_TYPE: TESTS_AND_CI_ONLY
 MERGE_GATE: HOLD
 
-新增 installed-package CI smoke，以 Python 3.11 與 3.12 執行正式 `pip install .`，驗證 package import、module CLI 與 `twstock` console script；沒有修改 production code、package version 或 dependencies，也沒有開始 Phase 52.2。branch 等待 Reviewer Gate。
+Phase 52.2：完成（Reviewer Gate HOLD）
+PHASE_TYPE: RELEASE_METADATA
+TARGET_VERSION: 0.4.0
+MERGE_GATE: HOLD
+
+Package version 已更新至 0.4.0，v0.4.0 changelog 已完成，installed distribution version consistency 已納入 CI；Phase 52.1 package smoke 包含在 cumulative branch。沒有 production runtime code 或 dependency changes，沒有建立 tag、GitHub Release 或 PyPI publish，沒有開始 Phase 52.3；branch 等待 Reviewer Gate。
 
 ## 14. Broker Interface
 
