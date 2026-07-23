@@ -1,7 +1,20 @@
 import argparse
+from typing import Any
 
 from tw_stock_tool.cli.parsers import parse_int_tuple
 from tw_stock_tool.utils.config import DEFAULT_PERIOD
+
+
+def build_backtest_parameters(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "initial_capital": args.initial_capital,
+        "fee_rate": args.fee_rate,
+        "tax_rate": args.tax_rate,
+        "position_size": args.position_size,
+        "stop_loss_pct": args.stop_loss_pct,
+        "take_profit_pct": args.take_profit_pct,
+        "max_hold_days": args.max_hold_days,
+    }
 
 
 def add_stock_strategy_period_arguments(parser: argparse.ArgumentParser, *, strategy_help: str) -> None:

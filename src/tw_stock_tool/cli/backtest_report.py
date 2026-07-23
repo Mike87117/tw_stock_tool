@@ -13,6 +13,7 @@ from tw_stock_tool.cli._report_cli_arguments import (
     add_force_refresh_argument,
     add_report_output_arguments,
     add_stock_strategy_period_arguments,
+    build_backtest_parameters,
 )
 
 
@@ -79,17 +80,6 @@ def _build_strategy_params(args: argparse.Namespace, strategy_name: str) -> dict
     return {}
 
 
-def _build_backtest_params(args: argparse.Namespace) -> dict[str, Any]:
-    return {
-        "initial_capital": args.initial_capital,
-        "fee_rate": args.fee_rate,
-        "tax_rate": args.tax_rate,
-        "position_size": args.position_size,
-        "stop_loss_pct": args.stop_loss_pct,
-        "take_profit_pct": args.take_profit_pct,
-        "max_hold_days": args.max_hold_days,
-    }
-
 
 def main() -> int | None:
     try:
@@ -118,7 +108,7 @@ def main() -> int | None:
         df_exec = strategy_func(analysis.indicator_df, **params)
 
         print(f"Running backtest with initial capital {args.initial_capital}...")
-        bt_params = _build_backtest_params(args)
+        bt_params = build_backtest_parameters(args)
         raw_result = run_backtest(df_exec, **bt_params)
 
         start_date = df_exec.index[0].strftime('%Y-%m-%d') if not df_exec.empty else "N/A"
