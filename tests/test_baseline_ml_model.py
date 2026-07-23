@@ -106,39 +106,6 @@ class BaselineMLModelTest(unittest.TestCase):
                     test_size=2,
                 )
 
-    def test_parse_args(self) -> None:
-        args = baseline_ml_model._parse_args(
-            [
-                "--stock",
-                "2330",
-                "--period",
-                "5y",
-                "--horizon",
-                "5",
-                "--train-size",
-                "8",
-                "--test-size",
-                "4",
-                "--step-size",
-                "4",
-                "--n-estimators",
-                "5",
-                "--random-state",
-                "7",
-                "--no-dropna",
-            ]
-        )
-
-        self.assertEqual(args.stock, "2330")
-        self.assertEqual(args.period, "5y")
-        self.assertEqual(args.horizon, 5)
-        self.assertEqual(args.train_size, 8)
-        self.assertEqual(args.test_size, 4)
-        self.assertEqual(args.step_size, 4)
-        self.assertEqual(args.n_estimators, 5)
-        self.assertEqual(args.random_state, 7)
-        self.assertFalse(args.dropna)
-
     def test_run_baseline_uses_horizon_sized_real_purge(self) -> None:
         dataset = _sample_dataset(17)
         with patch.object(baseline_ml_model, "build_ml_dataset", return_value=dataset):

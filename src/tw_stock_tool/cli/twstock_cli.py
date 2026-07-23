@@ -17,7 +17,8 @@ from tw_stock_tool.cli import main as analyze_cli
 from tw_stock_tool.cli import benchmark
 from tw_stock_tool.cli import backtest_report
 from tw_stock_tool.cli import walk_forward_report
-from tw_stock_tool.ml import ai_stock_scanner
+from tw_stock_tool.ml import ai_stock_scanner, ml_dataset
+from tw_stock_tool.reports import ai_prediction_report
 from tw_stock_tool.cli import clean_stocks
 from tw_stock_tool.cli import daily_report_cli
 from tw_stock_tool.cli import daily_report_artifact_cli
@@ -49,6 +50,16 @@ def _dispatch_existing_main(
     """Run an existing CLI main with pass-through arguments."""
     with _patched_argv(program_name, args):
         result = module_main()
+    return 0 if result is None else result
+
+
+def _run_gui(args: list[str]) -> int:
+    if args:
+        parser = argparse.ArgumentParser(prog="twstock gui")
+        parser.error(f"unrecognized arguments: {' '.join(args)}")
+    from tw_stock_tool.gui import gui_app
+
+    result = gui_app.main()
     return 0 if result is None else result
 
 
@@ -112,6 +123,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
 
     _add_passthrough_parser(subparsers, "ai-scan", ai_stock_scanner.main, "ai_stock_scanner.py", "Run multi-stock AI baseline scanner")
+
+    _add_passthrough_parser(subparsers, "ai-report", ai_prediction_report.main, "ai_prediction_report.py", "Run baseline ML prediction report")
+
+    _add_passthrough_parser(subparsers, "ml-dataset", ml_dataset.main, "ml_dataset.py", "Build research ML dataset")
+
+    gui_parser = subparsers.add_parser("gui", help="Launch local GUI prototype")
+    gui_parser.set_defaults(handler=lambda args: _run_gui(args.args))
 
     _add_passthrough_parser(subparsers, "cache", cache_manager.main, "cache_manager.py", "Manage price data cache")
 

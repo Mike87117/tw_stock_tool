@@ -1,7 +1,6 @@
 import math
 import unittest
 from unittest.mock import patch
-
 import pandas as pd
 
 from tw_stock_tool.analysis import analysis
@@ -11,7 +10,6 @@ from tw_stock_tool.backtesting.backtest import BacktestError, run_backtest
 from tw_stock_tool.backtesting.metrics import calculate_sharpe, calculate_sortino
 from tw_stock_tool.cli import main as analyze_cli
 from tw_stock_tool.kill_switch.models import KillSwitchState
-from tw_stock_tool.ml import ai_walk_forward
 from tw_stock_tool.ml.ai_walk_forward import split_time_windows
 from tw_stock_tool.paper_trading.models import PaperTradingModelError, SimulatedFill, SimulatedOrder, SimulatedPortfolio
 from tw_stock_tool.risk.models import RiskDecision, RiskInputSnapshot, RiskModelError
@@ -227,11 +225,6 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             analyze_cli._parse_args(["--period", "invalid"])
         self.assertNotEqual(raised.exception.code, 0)
-
-    def test_ai_walk_forward_runtime_exception_returns_nonzero_exit_status(self):
-        args = type("Args", (), {"stock": "2330", "period": "1y", "horizon": 5, "train_size": 8, "test_size": 4, "step_size": None, "force_refresh": False, "dropna": True})()
-        with patch.object(ai_walk_forward, "run_ai_walk_forward", side_effect=ValueError("controlled failure")), patch.object(ai_walk_forward, "_parse_args", return_value=args):
-            self.assertEqual(ai_walk_forward.main(), 1)
 
     def test_analyze_cli_runtime_validation_returns_nonzero_exit_status(self):
         self.assertEqual(analyze_cli.main(["--stock", ""]), 1)

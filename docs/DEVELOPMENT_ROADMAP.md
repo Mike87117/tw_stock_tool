@@ -167,6 +167,8 @@ Broker Interface
 - Phase 16.6：完成 (Report Exporter PermissionError Consistency Patch)
   - Added localized `try/except PermissionError` blocks to all missing exporters (`backtest_report`, `parameter_sweep_report`, `walk_forward_report`, `daily_watchlist`, `verify_batch`) to consistently raise `ValueError` with a user-friendly message when Excel files are locked.
 - Phase 17–27：完成 (Architecture refactoring, test hardening, AI/ML extensions, codebase maintenance)
+
+Cleanup 4B.1 status：AI Report、ML Dataset 與 GUI 已 canonicalize 到 `twstock`；AI walk-forward split 與 baseline model 保留為 package-level research components。
 - Phase 28：完成 (Simulated Paper Trading export / file output)
 - Phase 29.x：完成 (Simulated Paper Trading JSON serialization, file I/O, artifact export CLI, and README documentation)
 - Phase 30.x：完成 (Backtest artifact converter, public converter API, and metadata propagation)

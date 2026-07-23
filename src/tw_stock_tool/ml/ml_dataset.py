@@ -120,7 +120,7 @@ def export_ml_dataset(df: pd.DataFrame, stock_id: str, horizon: int, output: str
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create ML dataset for one Taiwan stock")
+    parser = argparse.ArgumentParser(description="Create ML dataset for one Taiwan stock", allow_abbrev=False)
     parser.add_argument("--stock", required=True, help="Stock id, for example 2330")
     parser.add_argument("--period", default=DEFAULT_PERIOD)
     parser.add_argument("--horizon", type=int, default=5)
@@ -131,7 +131,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=True,
         help="Drop rows with missing feature or target values",
     )
-    parser.add_argument("--output", nargs="?", const="", help="Export CSV; omit path for default output")
+    parser.add_argument("--output-csv", nargs="?", const="", default=None, help="Export CSV; omit path for default output")
     return parser.parse_args(argv)
 
 
@@ -146,7 +146,7 @@ def main() -> int | None:
             dropna=args.dropna,
         )
         print(dataset.to_string())
-        output_path = export_ml_dataset(dataset, args.stock, args.horizon, args.output)
+        output_path = export_ml_dataset(dataset, args.stock, args.horizon, args.output_csv)
         if output_path:
             print(f"\nML dataset exported: {output_path}")
         print("\nThis dataset is for research only and does not train any AI model.")

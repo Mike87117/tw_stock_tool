@@ -52,6 +52,9 @@ ROUTES = (
     Route(("stock-list", "clean"), "Clean stock list", "tw_stock_tool.cli.clean_stocks", "clean_stocks.py", "NESTED_STANDARD_PASSTHROUGH"),
     Route(("price-smoke-check",), "Smoke check price data sources", "tw_stock_tool.cli.price_data_smoke_check", "price_data_smoke_check.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("ai-scan",), "Run multi-stock AI baseline scanner", "tw_stock_tool.ml.ai_stock_scanner", "ai_stock_scanner.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("ai-report",), "Run baseline ML prediction report", "tw_stock_tool.reports.ai_prediction_report", "ai_prediction_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("ml-dataset",), "Build research ML dataset", "tw_stock_tool.ml.ml_dataset", "ml_dataset.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("gui",), "Launch local GUI prototype", "tw_stock_tool.gui.gui_app", "gui_app.py", "LAZY_IMPORTED_STANDARD"),
     Route(("cache",), "Manage price data cache", "tw_stock_tool.data.cache_manager", "cache_manager.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("benchmark",), "Run multi-stock scanner benchmark", "tw_stock_tool.cli.benchmark", "benchmark.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("analyze",), "Run single-stock analysis", "tw_stock_tool.cli.main", "main.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
@@ -107,6 +110,9 @@ TOP_LEVEL_ORDER = (
     "stock-list",
     "price-smoke-check",
     "ai-scan",
+    "ai-report",
+    "ml-dataset",
+    "gui",
     "cache",
     "benchmark",
     "analyze",
@@ -123,13 +129,13 @@ NESTED_ORDER = ("update", "smoke-check", "clean")
 
 
 TOP_HELP = """usage: twstock [-h]
-               {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
+               {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,ai-report,ml-dataset,gui,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
                ...
 
 Unified tw_stock_tool CLI
 
 positional arguments:
-  {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
+  {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,ai-report,ml-dataset,gui,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export}
     doctor              Check local environment
     scan                Run multi-stock technical scanner
     daily               Run daily candidate report
@@ -138,6 +144,9 @@ positional arguments:
     stock-list          Stock-list utilities
     price-smoke-check   Smoke check price data sources
     ai-scan             Run multi-stock AI baseline scanner
+    ai-report           Run baseline ML prediction report
+    ml-dataset          Build research ML dataset
+    gui                 Launch local GUI prototype
     cache               Manage price data cache
     benchmark           Run multi-stock scanner benchmark
     analyze             Run single-stock analysis
@@ -280,7 +289,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
     def test_direct_handlers_preserve_callable_targets_and_child_program_names(self) -> None:
         passthrough = ["--flag", "value", "--output-md", "report.md", "--option=-2", "artifact.json"]
         for route in ROUTES:
-            if route.classification == "NESTED_CUSTOM_RUNNER":
+            if route.classification in {"NESTED_CUSTOM_RUNNER", "LAZY_IMPORTED_STANDARD"}:
                 continue
             expected_main = importlib.import_module(route.module).main
             original_argv = sys.argv[:]
@@ -408,20 +417,56 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(json.loads(completed.stdout), expected)
+    def test_gui_dispatch_is_lazy_and_rejects_unknown_arguments(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["gui", "--unknown"])
+        self.assertEqual(raised.exception.code, 2)
+
+        with patch("tw_stock_tool.gui.gui_app.main", return_value=None) as gui_main:
+            self.assertEqual(twstock_cli.main(["gui"]), 0)
+        gui_main.assert_called_once_with()
+
+    def test_gui_help_does_not_import_gui_module_in_clean_process(self) -> None:
+        script = (
+            "import contextlib, io, json, sys\n"
+            "from tw_stock_tool.cli import twstock_cli\n"
+            "before = 'tw_stock_tool.gui.gui_app' in sys.modules\n"
+            "with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):\n"
+            "    try:\n"
+            "        twstock_cli.main(sys.argv[1:])\n"
+            "    except SystemExit:\n"
+            "        pass\n"
+            "print(json.dumps({'before': before, 'after': 'tw_stock_tool.gui.gui_app' in sys.modules}))\n"
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join((str(REPOSITORY_ROOT / "src"), env.get("PYTHONPATH", "")))
+        for argv in (("--help",), ("gui", "--help")):
+            completed = subprocess.run(
+                [sys.executable, "-c", script, *argv],
+                cwd=REPOSITORY_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            with self.subTest(argv=argv):
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(json.loads(completed.stdout), {"before": False, "after": False})
+
     def test_registration_inventory_matches_source_counts_and_helper_boundary(self) -> None:
-        self.assertEqual(len(ROUTES), 20)
-        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 12)
+        self.assertEqual(len(ROUTES), 23)
+        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 14)
         self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_WITH_DESCRIPTION" for route in ROUTES), 3)
         self.assertEqual(sum(route.classification == "NESTED_STANDARD_PASSTHROUGH" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "NESTED_CUSTOM_RUNNER" for route in ROUTES), 2)
-        self.assertEqual(sum(route.classification == "LAZY_IMPORTED_STANDARD" for route in ROUTES), 0)
+        self.assertEqual(sum(route.classification == "LAZY_IMPORTED_STANDARD" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "LAZY_IMPORTED_WITH_DESCRIPTION" for route in ROUTES), 2)
 
         source = (REPOSITORY_ROOT / "src" / "tw_stock_tool" / "cli" / "twstock_cli.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("def _add_passthrough_parser"), 1)
-        self.assertEqual(source.count("_add_passthrough_parser("), 19)
-        self.assertEqual(source.count(".add_parser("), 4)
-        self.assertEqual(source.count(".set_defaults("), 3)
+        self.assertEqual(source.count("_add_passthrough_parser("), 21)
+        self.assertEqual(source.count(".add_parser("), 5)
+        self.assertEqual(source.count(".set_defaults("), 4)
         self.assertEqual(source.count("stock_list_parser = subparsers.add_parser"), 1)
         self.assertEqual(source.count("update_parser = stock_list_subparsers.add_parser"), 1)
         self.assertEqual(source.count("smoke_parser = stock_list_subparsers.add_parser"), 1)
@@ -432,7 +477,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertNotIn("dataclass", source)
         self.assertEqual(
             sum(route.classification != "NESTED_CUSTOM_RUNNER" for route in ROUTES),
-            18,
+            21,
         )
 
 

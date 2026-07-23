@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import load_workbook
 
-import ai_prediction_report
+from tw_stock_tool.reports import ai_prediction_report
 
 
 def _detail_df() -> pd.DataFrame:
@@ -189,7 +189,7 @@ class AIPredictionReportTest(unittest.TestCase):
                 "--random-state",
                 "7",
                 "--no-dropna",
-                "--output",
+                "--output-excel",
             ]
         )
 
@@ -202,7 +202,12 @@ class AIPredictionReportTest(unittest.TestCase):
         self.assertEqual(args.n_estimators, 5)
         self.assertEqual(args.random_state, 7)
         self.assertFalse(args.dropna)
-        self.assertEqual(args.output, "")
+        self.assertEqual(args.output_excel, "")
+
+    def test_old_output_flag_is_rejected(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            ai_prediction_report._parse_args(["--stock", "2330", "--output"])
+        self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == "__main__":

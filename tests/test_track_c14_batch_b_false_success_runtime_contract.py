@@ -16,7 +16,7 @@ import pandas as pd
 
 from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.backtesting import parameter_sweep, strategy_compare, walk_forward
-from tw_stock_tool.ml import ai_stock_scanner, baseline_ml_model, ml_dataset
+from tw_stock_tool.ml import ai_stock_scanner, ml_dataset
 from tw_stock_tool.reports import ai_prediction_report
 
 
@@ -92,23 +92,10 @@ DIRECT_CASES = (
         "error": "Error:",
     },
     {
-        "name": "baseline_ml_model",
-        "module": baseline_ml_model,
-        "args": _args(
-            stock="2330", period="1y", horizon=5, train_size=10, test_size=5, step_size=None,
-            force_refresh=False, dropna=True, n_estimators=5, random_state=42,
-        ),
-        "boundary": "run_baseline_ml_model",
-        "success": pd.DataFrame({"Window": [1]}),
-        "exports": (),
-        "marker": "Baseline model is for research only",
-        "error": "Error:",
-    },
-    {
         "name": "ml_dataset",
         "module": ml_dataset,
         "args": _args(
-            stock="2330", period="1y", horizon=5, force_refresh=False, dropna=True, output=None,
+            stock="2330", period="1y", horizon=5, force_refresh=False, dropna=True, output_csv=None,
         ),
         "boundary": "build_ml_dataset",
         "success": pd.DataFrame({"Feature": [1]}),
@@ -121,7 +108,7 @@ DIRECT_CASES = (
         "module": ai_prediction_report,
         "args": _args(
             stock="2330", period="1y", horizon=5, train_size=10, test_size=5, step_size=None,
-            force_refresh=False, dropna=True, n_estimators=5, random_state=42, output=None,
+            force_refresh=False, dropna=True, n_estimators=5, random_state=42, output_excel=None,
         ),
         "boundary": "run_ai_prediction_report",
         "success": {
@@ -141,7 +128,6 @@ PACKAGE_FILES = {
     "strategy_compare": "src/tw_stock_tool/backtesting/strategy_compare.py",
     "walk_forward": "src/tw_stock_tool/backtesting/walk_forward.py",
     "ai_stock_scanner": "src/tw_stock_tool/ml/ai_stock_scanner.py",
-    "baseline_ml_model": "src/tw_stock_tool/ml/baseline_ml_model.py",
     "ml_dataset": "src/tw_stock_tool/ml/ml_dataset.py",
     "ai_prediction_report": "src/tw_stock_tool/reports/ai_prediction_report.py",
 }
@@ -391,7 +377,6 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
                 "src/tw_stock_tool/backtesting/strategy_compare.py",
                 "src/tw_stock_tool/backtesting/walk_forward.py",
                 "src/tw_stock_tool/ml/ai_stock_scanner.py",
-                "src/tw_stock_tool/ml/baseline_ml_model.py",
                 "src/tw_stock_tool/ml/ml_dataset.py",
                 "src/tw_stock_tool/reports/ai_prediction_report.py",
             }),

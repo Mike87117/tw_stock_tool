@@ -176,7 +176,7 @@ def export_ai_prediction_report_excel(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="AI prediction report for baseline ML model")
+    parser = argparse.ArgumentParser(description="AI prediction report for baseline ML model", allow_abbrev=False)
     parser.add_argument("--stock", required=True, help="Stock id, for example 2330")
     parser.add_argument("--period", default=DEFAULT_PERIOD)
     parser.add_argument("--horizon", type=int, default=5)
@@ -192,7 +192,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--n-estimators", type=int, default=100)
     parser.add_argument("--random-state", type=int, default=42)
-    parser.add_argument("--output", nargs="?", const="", help="Export Excel; omit path for default output")
+    parser.add_argument("--output-excel", nargs="?", const="", default=None, help="Export Excel; omit path for default output")
     return parser.parse_args(argv)
 
 
@@ -215,7 +215,7 @@ def main() -> int | None:
         print(frames["Summary"].to_string(index=False))
         print("\nDetail")
         print(frames["Detail"].to_string(index=False))
-        output_path = export_ai_prediction_report_excel(frames, args.stock, args.output)
+        output_path = export_ai_prediction_report_excel(frames, args.stock, args.output_excel)
         if output_path:
             print(f"\nAI prediction report exported: {output_path}")
         print("\nBaseline ML report is for research only and is not investment advice.")

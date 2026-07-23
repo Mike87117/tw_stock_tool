@@ -123,6 +123,15 @@ class MLDatasetTest(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertIn("Future_Return_5D", output_path.read_text(encoding="utf-8-sig"))
 
+    def test_parse_args_uses_output_csv_flag(self) -> None:
+        args = ml_dataset._parse_args(["--stock", "2330", "--horizon", "5", "--output-csv"])
+        self.assertEqual(args.output_csv, "")
+
+    def test_old_output_flag_is_rejected(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            ml_dataset._parse_args(["--stock", "2330", "--output"])
+        self.assertEqual(raised.exception.code, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

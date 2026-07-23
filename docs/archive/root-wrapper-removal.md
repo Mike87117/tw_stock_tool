@@ -45,4 +45,18 @@ Cleanup 4A intentionally breaks historical repository-root import and script com
 
 ## Policy
 
-This is an intentional breaking change under Cleanup 4A. Existing core tests were retained or migrated to canonical imports; tests whose only purpose was root forwarding, alias identity, or root subprocess behavior were removed. The six unresolved legacy entries remain explicitly retained for Cleanup 4B.
+This is an intentional breaking change under Cleanup 4A. Existing core tests were retained or migrated to canonical imports; tests whose only purpose was root forwarding, alias identity, or root subprocess behavior were removed. The two unresolved legacy entries remain explicitly retained for Cleanup 4B.2.
+
+
+## Cleanup 4B.1 canonicalization
+
+Cleanup 4B.1 removed the remaining ML/GUI root wrappers after adding canonical interfaces:
+
+| Removed wrapper | Canonical replacement |
+| --- | --- |
+| `ai_prediction_report.py` | `twstock ai-report` / `tw_stock_tool.reports.ai_prediction_report` |
+| `ai_walk_forward.py` | package-only `tw_stock_tool.ml.ai_walk_forward` |
+| `gui_app.py` | `twstock gui` / `tw_stock_tool.gui.gui_app` |
+| `ml_dataset.py` | `twstock ml-dataset` / `tw_stock_tool.ml.ml_dataset` |
+
+`twstock ai-report`, `twstock ml-dataset`, and `twstock gui` are the supported user-facing interfaces.
