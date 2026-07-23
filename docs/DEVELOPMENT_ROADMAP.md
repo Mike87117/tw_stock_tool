@@ -497,3 +497,9 @@ Broker Interface 是未來可能串接券商 API 的抽象層。
 `tw_stock_tool` 的短中期重點是成為穩定、可驗證、可解釋的台股研究工具。長期可以逐步走向 Paper Trading、Broker Interface、半自動下單與自動下單，但每一階段都必須先完成訊號標準、回測標準、風控、Kill Switch 與 Trade Log。
 
 本專案不提供投資建議，不保證獲利。任何交易決策都應由使用者自行判斷並承擔風險。
+
+Phase 51.1：完成（Reviewer Gate HOLD）
+PHASE_TYPE: TESTS_ONLY
+MERGE_GATE: HOLD
+
+本 phase 以 Backtest Report、Parameter Sweep、Walk Forward 為 characterization 對象，鎖定共用 Backtest engine parameter defaults、custom parsing、forwarding 與 metadata；新增的精簡測試補足 defaults 與 help surface，custom parsing、forwarding 與 metadata 沿用既有測試。沒有修改 production code，沒有新增 shared argument helper，也沒有開始 Phase 51.2。branch 等待 Reviewer Gate，不宣稱完成 production refactor。
