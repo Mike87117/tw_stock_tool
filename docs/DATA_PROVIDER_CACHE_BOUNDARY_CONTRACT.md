@@ -189,7 +189,6 @@ Suppression redirects process-global stdout/stderr and remains serialized; logge
 | src/tw_stock_tool/analysis/analysis.py | download_tw_stock | direct via `analyze_stock` | stock/period/interval | df,symbol | propagates workflow error | tuple/schema |
 | src/tw_stock_tool/cli/clean_stocks.py | download_tw_stock | direct | stock/period | df,symbol | invalid-stock handling | resolution |
 | src/tw_stock_tool/cli/price_data_smoke_check.py | data_loader.download_tw_stock | direct live smoke | symbol/options | df,symbol | smoke failure report | tuple/error |
-| src/tw_stock_tool/utils/verify_batch.py | download_tw_stock | direct | stock/period/interval | df,symbol | batch errors | tuple/schema |
 | src/tw_stock_tool/analysis/scanner.py | analyze_stock | indirect | scan inputs | analysis dict | workflow handling | loader via analysis |
 | src/tw_stock_tool/backtesting/parameter_sweep.py | analyze_stock | indirect | stock/period/refresh | analysis | propagates | loader via analysis |
 | src/tw_stock_tool/backtesting/strategy_compare.py | analyze_stock | indirect | stock/period | analysis | propagates | loader via analysis |
@@ -200,7 +199,6 @@ Suppression redirects process-global stdout/stderr and remains serialized; logge
 | src/tw_stock_tool/cli/simulated_paper_trading_cli.py | analyze_stock | indirect | CLI values | analysis | CLI handling | loader via analysis |
 | src/tw_stock_tool/gui/app_services.py | analysis_module.analyze_stock | indirect | UI values | analysis | service handling | loader via analysis |
 | src/tw_stock_tool/ml/ml_dataset.py | analyze_stock | indirect | stock/period | analysis | propagates | loader via analysis |
-| src/tw_stock_tool/scanners/daily_watchlist.py | analyze_stock | indirect | watchlist values | analysis | catches workflow errors | loader via analysis |
 | src/tw_stock_tool/cli/main.py | DataLoaderError | error-only dependency | CLI command | exception | catches | exception type/text |
 | tests/test_data_loader.py | tw_stock_tool.data.data_loader | test direct calls | fixtures | df,symbol/errors | assertions | canonical patch points |
 

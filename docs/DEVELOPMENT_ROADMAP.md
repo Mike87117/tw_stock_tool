@@ -169,6 +169,7 @@ Broker Interface
 - Phase 17–27：完成 (Architecture refactoring, test hardening, AI/ML extensions, codebase maintenance)
 
 Cleanup 4B.1 status：AI Report、ML Dataset 與 GUI 已 canonicalize 到 `twstock`；AI walk-forward split 與 baseline model 保留為 package-level research components。
+Cleanup 4B.2 status：retired the obsolete parallel Daily Watchlist workflow and the unmaintained TWSE-only Verify Batch utility. The canonical Daily Research Pipeline and price-source reliability checks remain.
 - Phase 28：完成 (Simulated Paper Trading export / file output)
 - Phase 29.x：完成 (Simulated Paper Trading JSON serialization, file I/O, artifact export CLI, and README documentation)
 - Phase 30.x：完成 (Backtest artifact converter, public converter API, and metadata propagation)
