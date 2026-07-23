@@ -13,7 +13,7 @@ pip install -e .
 twstock doctor
 ~~~
 
-twstock 是正式命令列入口。
+`twstock` 是正式命令列入口。
 
 ## 常用研究流程
 
@@ -31,14 +31,14 @@ twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-exce
 
 ## 文件導覽
 
-[文件首頁](docs/index.md)是唯一主要入口。常用文件：
+[文件首頁](docs/index.md) 是唯一主要入口。常用文件：
 
 - [CLI 使用指南](docs/user-guide/cli.md)
 - [資料來源與快取](docs/user-guide/data-and-cache.md)
 - [股票清單與掃描](docs/user-guide/stock-list-and-scanning.md)
 - [Daily Report](docs/user-guide/daily-report.md)
 - [Artifact 操作](docs/user-guide/artifacts.md)
-- [Root compatibility wrappers](docs/compatibility/root-wrappers.md)
+- [Root entry status](docs/compatibility/root-wrappers.md)
 
 ## Repository map
 
@@ -52,8 +52,17 @@ twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-exce
     ├── kill_switch/、ml/、paper_trading/、reports/、risk/
     └── scanners/、simulated_paper_trading_guard/、ui/、utils/
 
-Repository root 的 Python 檔案
-└── retained compatibility entries，不是主要實作位置
+Repository root
+└── 僅暫時保留六個 legacy entry points（非主要實作位置）
 ~~~
 
-Root Python scripts 仍保留為歷史相容入口；新使用者應優先使用 twstock。完整對照表見 [root wrapper compatibility](docs/compatibility/root-wrappers.md)。
+Repository root 不再提供舊 Python compatibility modules。正式 CLI 是 `twstock`，正式 Python implementation 位於 `src/tw_stock_tool/`。目前暫時保留的六個 legacy entries 為：
+
+- `ai_prediction_report.py`
+- `ai_walk_forward.py`
+- `daily_watchlist.py`
+- `gui_app.py`
+- `ml_dataset.py`
+- `verify_batch.py`
+
+其餘 root wrappers 的移除紀錄見 [Root wrapper removal record](docs/archive/root-wrapper-removal.md)。

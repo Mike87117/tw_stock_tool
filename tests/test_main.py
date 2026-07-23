@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import main
+from tw_stock_tool.cli import main
 
 
 class MainCliTest(unittest.TestCase):

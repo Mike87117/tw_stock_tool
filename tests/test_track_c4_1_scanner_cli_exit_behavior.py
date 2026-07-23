@@ -79,8 +79,6 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
             str(self._missing_file()),
         )
 
-    def _root_wrapper_failure(self) -> subprocess.CompletedProcess[str]:
-        return self._run_process("scan_stocks.py", "--file", str(self._missing_file()))
 
     def _unified_module_failure(self) -> subprocess.CompletedProcess[str]:
         return self._run_process(
@@ -200,16 +198,7 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
     def test_package_module_runtime_failure_should_exit_nonzero(self) -> None:
         self.assertEqual(self._package_module_failure().returncode, 1)
 
-    def test_root_wrapper_process_reports_failure_and_exits_one(self) -> None:
-        completed = self._root_wrapper_failure()
 
-        self.assertEqual(completed.returncode, 1)
-        self.assertIn("錯誤：", completed.stdout)
-        self.assertNotIn("Traceback", completed.stdout + completed.stderr)
-        self._assert_no_artifacts()
-
-    def test_root_wrapper_runtime_failure_should_exit_nonzero(self) -> None:
-        self.assertEqual(self._root_wrapper_failure().returncode, 1)
 
     def test_unified_function_propagates_scanner_failure_status(self) -> None:
         status, output = self._run_unified_missing_file()

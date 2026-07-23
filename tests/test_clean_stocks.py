@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import load_workbook
 
-import clean_stocks
+from tw_stock_tool.cli import clean_stocks
 
 
 def _download_df() -> pd.DataFrame:

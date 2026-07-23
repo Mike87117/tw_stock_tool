@@ -223,52 +223,8 @@ requests.get = _fake_get
         self.assertFalse(helper_path.exists())
         self.assertEqual(completed.returncode, 1)
 
-    def test_root_wrapper_validation_failure_is_visible_and_exits_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            output = temp_path / "stocks.txt"
-            before = list(temp_path.iterdir())
-            completed, helper_path = self._run_offline_process(
-                str(REPOSITORY_ROOT / "stock_list_updater.py"),
-                "--market",
-                "twse",
-                "--output",
-                str(output),
-            )
 
-            self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertFalse(helper_path.exists())
-        self.assertEqual(completed.returncode, 1)
-        self._assert_error_output(
-            completed.stdout,
-            completed.stderr,
-            "Error: Abnormally few common stocks parsed: 1 < 100.",
-        )
-        self.assertFalse(output.exists())
-
-    def test_root_wrapper_execution_calls_package_main_once_and_propagates_status(self) -> None:
-        with patch.object(stock_cli, "main", return_value=1) as main_mock:
-            with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(
-                    str(REPOSITORY_ROOT / "stock_list_updater.py"), run_name="__main__"
-                )
-
-        self.assertEqual(raised.exception.code, 1)
-        main_mock.assert_called_once_with()
-
-    def test_root_wrapper_validation_failure_should_exit_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output = Path(temp_dir) / "stocks.txt"
-            completed, helper_path = self._run_offline_process(
-                str(REPOSITORY_ROOT / "stock_list_updater.py"),
-                "--market",
-                "twse",
-                "--output",
-                str(output),
-            )
-        self.assertFalse(helper_path.exists())
-        self.assertEqual(completed.returncode, 1)
 
     def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -367,17 +323,6 @@ requests.get = _fake_get
         self._assert_argparse_failure(completed)
         self.assertFalse(output.exists())
 
-    def test_root_invalid_argument_is_argparse_exit_two(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            output = temp_path / "stocks.txt"
-            before = list(temp_path.iterdir())
-            completed = self._run_process(
-                str(REPOSITORY_ROOT / "stock_list_updater.py"), "--definitely-invalid-option"
-            )
-            self.assertEqual(list(temp_path.iterdir()), before)
-        self._assert_argparse_failure(completed)
-        self.assertFalse(output.exists())
 
     def test_unified_invalid_argument_is_argparse_exit_two(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -395,13 +340,6 @@ requests.get = _fake_get
         self._assert_argparse_failure(completed)
         self.assertFalse(output.exists())
 
-    def test_root_import_alias_remains_compatible(self) -> None:
-        with patch.object(stock_cli, "main") as main_mock:
-            root_stock_list_updater = importlib.import_module("stock_list_updater")
-
-        self.assertIs(root_stock_list_updater, stock_cli)
-        self.assertIs(root_stock_list_updater.main, stock_cli.main)
-        main_mock.assert_not_called()
 
     def test_sibling_runtime_status_contract_is_one_and_dispatcher_propagates_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import load_workbook
 
-import parameter_sweep
-from analysis import StockAnalysis
+from tw_stock_tool.backtesting import parameter_sweep
+from tw_stock_tool.analysis.analysis import StockAnalysis
 
 
 def _sample_signal_df() -> pd.DataFrame:

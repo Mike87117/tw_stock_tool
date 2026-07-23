@@ -15,7 +15,7 @@ from unittest.mock import mock_open, patch
 
 import pandas as pd
 
-import twstock_cli
+from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.cli import backtest_report, daily_report_cli, parameter_sweep_report
 from tw_stock_tool.cli import simulated_paper_trading_cli, walk_forward_report
 from tw_stock_tool.utils import doctor
@@ -101,26 +101,7 @@ CASES = (
 )
 
 
-WRAPPERS = {
-    "backtest_report.py": "tw_stock_tool.cli.backtest_report",
-    "doctor.py": "tw_stock_tool.utils.doctor",
-    "parameter_sweep.py": "tw_stock_tool.backtesting.parameter_sweep",
-    "parameter_sweep_report.py": "tw_stock_tool.cli.parameter_sweep_report",
-    "walk_forward.py": "tw_stock_tool.backtesting.walk_forward",
-    "walk_forward_report.py": "tw_stock_tool.cli.walk_forward_report",
-}
 EXPECTED_PACKAGES = frozenset(case[3] for case in CASES)
-EXPECTED_WRAPPERS = frozenset(WRAPPERS)
-EXCLUDED = frozenset({
-    "src/tw_stock_tool/cli/twstock_cli.py",
-    "src/tw_stock_tool/backtesting/parameter_sweep.py",
-    "src/tw_stock_tool/backtesting/strategy_compare.py",
-    "src/tw_stock_tool/backtesting/walk_forward.py",
-    "src/tw_stock_tool/ml/",
-    "src/tw_stock_tool/reports/ai_prediction_report.py",
-    "ai_prediction_report.py", "ai_stock_scanner.py", "ml_dataset.py",
-    "strategy_compare.py", "baseline_ml_model.py",
-})
 EXPORTS = {
     "backtest_report": ("export_backtest_report_excel", "export_backtest_report_markdown"),
     "parameter_sweep_report": ("export_parameter_sweep_report_excel", "export_parameter_sweep_report_markdown"),
@@ -232,7 +213,7 @@ def process_script(case, success, unified=False):
         lines.append(f"module.{boundary} = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('controlled failure'))")
     call = f"twstock_cli.main([{route!r}])" if unified else "module.main()"
     if unified:
-        lines.insert(4, "import twstock_cli")
+        lines.insert(4, "from tw_stock_tool.cli import twstock_cli")
     lines.append(f"raise SystemExit({call})")
     return "\n".join(lines)
 def parse_args(module, argv):
@@ -367,36 +348,14 @@ class C15BatchAReturnCodeNormalizationTest(unittest.TestCase):
                 completed = run_subprocess("-c", process_script(case, success, unified=True))
                 self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
             parser = [case[4], *case[7]]
-            completed = run_subprocess("-c", f"import twstock_cli; raise SystemExit(twstock_cli.main({parser!r}))")
+            completed = run_subprocess("-c", f"from tw_stock_tool.cli import twstock_cli; raise SystemExit(twstock_cli.main({parser!r}))")
             self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
 
-    def test_root_wrapper_process_and_import_compatibility(self):
-        for wrapper, target in WRAPPERS.items():
-            with self.subTest(wrapper=wrapper, mode="import"):
-                wrapper_module = importlib.import_module(wrapper[:-3])
-                target_module = importlib.import_module(target)
-                if wrapper in {"parameter_sweep.py", "walk_forward.py", "doctor.py"}:
-                    self.assertIs(wrapper_module, target_module)
-                else:
-                    self.assertIs(wrapper_module.main, target_module.main)
-            for delegated, expected in ((None, 0), (1, 1)):
-                implementation = {
-                    "parameter_sweep.py": "tw_stock_tool.cli.parameter_sweep_report",
-                    "walk_forward.py": "tw_stock_tool.cli.walk_forward_report",
-                }.get(wrapper, target)
-                script = (
-                    "import importlib, runpy\n"
-                    f"module = importlib.import_module({target!r})\n"
-                    f"implementation = importlib.import_module({implementation!r})\n"
-                    f"implementation.main = lambda: {delegated!r}\n"
-                    f"runpy.run_path({str(ROOT / wrapper)!r}, run_name='__main__')\n"
-                )
-                completed = run_subprocess("-c", script)
-                self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
 
-    def test_static_scope_inventory_is_exact_and_in_memory(self):
+
+
+    def test_static_package_inventory_is_exact(self):
         packages = frozenset(case[3] for case in CASES)
-        wrappers = frozenset(WRAPPERS)
         expected_packages = frozenset({
             "src/tw_stock_tool/cli/backtest_report.py",
             "src/tw_stock_tool/cli/daily_report_cli.py",
@@ -405,14 +364,7 @@ class C15BatchAReturnCodeNormalizationTest(unittest.TestCase):
             "src/tw_stock_tool/cli/walk_forward_report.py",
             "src/tw_stock_tool/utils/doctor.py",
         })
-        expected_wrappers = frozenset({
-            "backtest_report.py", "doctor.py", "parameter_sweep.py",
-            "parameter_sweep_report.py", "walk_forward.py", "walk_forward_report.py",
-        })
         self.assertEqual(packages, expected_packages)
-        self.assertEqual(wrappers, expected_wrappers)
-        self.assertFalse(packages & EXCLUDED)
-        self.assertFalse(wrappers & EXCLUDED)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from strategies import macd_strategy, ma_cross_strategy, rsi_strategy, score_strategy
+from tw_stock_tool.backtesting.strategies import macd_strategy, ma_cross_strategy, rsi_strategy, score_strategy
 
 
 def _strategy_frame() -> pd.DataFrame:

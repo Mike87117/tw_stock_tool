@@ -238,42 +238,9 @@ requests.get = _get
         )
         self.assertIn("Missing expected stocks: 2317, 8069", completed.stdout)
 
-    def test_stock_root_wrapper_failure_exits_one_without_traceback_or_artifact(self) -> None:
-        completed = self._run_offline_process(
-            "stock",
-            str(REPOSITORY_ROOT / "stock_list_smoke_check.py"),
-        )
 
-        self.assertEqual(completed.returncode, 1)
-        self._assert_failure_output(
-            completed.stdout,
-            completed.stderr,
-            "Status: FAIL",
-        )
-        self.assertIn("Missing expected stocks: 2317, 8069", completed.stdout)
 
-    def _stock_root_runpy_outcome(self) -> tuple[tuple[str, object], object]:
-        with patch.object(stock_cli, "main", return_value=1) as main_mock:
-            try:
-                runpy.run_path(
-                    str(REPOSITORY_ROOT / "stock_list_smoke_check.py"),
-                    run_name="__main__",
-                )
-            except SystemExit as exc:
-                outcome = ("system_exit", exc.code)
-            else:
-                outcome = ("return", None)
-        return outcome, main_mock
 
-    def test_stock_root_runpy_invokes_package_main_once_and_propagates_integer_status(self) -> None:
-        outcome, main_mock = self._stock_root_runpy_outcome()
-
-        self.assertEqual(outcome, ("system_exit", 1))
-        main_mock.assert_called_once_with()
-
-    def test_stock_root_runpy_should_propagate_integer_status(self) -> None:
-        outcome, _ = self._stock_root_runpy_outcome()
-        self.assertEqual(outcome, ("system_exit", 1))
 
     def _stock_unified_failure(self) -> tuple[tuple[str, object], str, str, list[str], object]:
         twse, tpex = self._stock_failure_frames()
@@ -326,7 +293,6 @@ requests.get = _get
     def test_stock_argparse_controls_keep_status_two(self) -> None:
         commands = (
             ("-m", "tw_stock_tool.cli.stock_list_smoke_check"),
-            (str(REPOSITORY_ROOT / "stock_list_smoke_check.py"),),
             ("-m", "tw_stock_tool.cli.twstock_cli", "stock-list", "smoke-check"),
         )
         for command in commands:
@@ -335,13 +301,6 @@ requests.get = _get
                     self._run_process(*command, "--definitely-invalid-option")
                 )
 
-    def test_stock_root_import_alias_is_compatible_and_does_not_execute(self) -> None:
-        with patch.object(stock_cli, "main") as main_mock:
-            root_module = importlib.import_module("stock_list_smoke_check")
-
-        self.assertIs(root_module, stock_cli)
-        self.assertIs(root_module.main, stock_cli.main)
-        main_mock.assert_not_called()
 
     def _price_direct_success(self) -> tuple[tuple[str, object], str, str, object]:
         def fake_download(stock_id: str, **kwargs: object) -> tuple[pd.DataFrame, str]:
@@ -401,42 +360,9 @@ requests.get = _get
         )
         self.assertIn("Error: Price data smoke check failed.", completed.stdout)
 
-    def test_price_root_wrapper_failure_exits_one_without_traceback_or_artifact(self) -> None:
-        completed = self._run_offline_process(
-            "price",
-            str(REPOSITORY_ROOT / "price_data_smoke_check.py"),
-        )
 
-        self.assertEqual(completed.returncode, 1)
-        self._assert_failure_output(
-            completed.stdout,
-            completed.stderr,
-            "Price Data Smoke Check",
-        )
-        self.assertIn("Error: Price data smoke check failed.", completed.stdout)
 
-    def _price_root_runpy_outcome(self) -> tuple[tuple[str, object], object]:
-        with patch.object(price_cli, "main", return_value=1) as main_mock:
-            try:
-                runpy.run_path(
-                    str(REPOSITORY_ROOT / "price_data_smoke_check.py"),
-                    run_name="__main__",
-                )
-            except SystemExit as exc:
-                outcome = ("system_exit", exc.code)
-            else:
-                outcome = ("return", None)
-        return outcome, main_mock
 
-    def test_price_root_runpy_invokes_package_main_once_and_propagates_integer_status(self) -> None:
-        outcome, main_mock = self._price_root_runpy_outcome()
-
-        self.assertEqual(outcome, ("system_exit", 1))
-        main_mock.assert_called_once_with()
-
-    def test_price_root_runpy_should_propagate_integer_status(self) -> None:
-        outcome, _ = self._price_root_runpy_outcome()
-        self.assertEqual(outcome, ("system_exit", 1))
 
     def _price_unified_failure(self) -> tuple[tuple[str, object], str, str, list[str], object]:
         stdout = StringIO()
@@ -492,7 +418,6 @@ requests.get = _get
     def test_price_argparse_controls_keep_status_two(self) -> None:
         commands = (
             ("-m", "tw_stock_tool.cli.price_data_smoke_check"),
-            (str(REPOSITORY_ROOT / "price_data_smoke_check.py"),),
             ("-m", "tw_stock_tool.cli.twstock_cli", "price-smoke-check"),
         )
         for command in commands:
@@ -501,13 +426,6 @@ requests.get = _get
                     self._run_process(*command, "--definitely-invalid-option")
                 )
 
-    def test_price_root_import_alias_is_compatible_and_does_not_execute(self) -> None:
-        with patch.object(price_cli, "main") as main_mock:
-            root_module = importlib.import_module("price_data_smoke_check")
-
-        self.assertIs(root_module, price_cli)
-        self.assertIs(root_module.main, price_cli.main)
-        main_mock.assert_not_called()
 
 
 if __name__ == "__main__":

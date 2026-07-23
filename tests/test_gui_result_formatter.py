@@ -3,7 +3,7 @@ import unittest
 
 import pandas as pd
 
-from gui_result_formatter import format_task_result
+from tw_stock_tool.gui.gui_result_formatter import format_task_result
 
 
 class GuiResultFormatterTest(unittest.TestCase):

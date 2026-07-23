@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import doctor
+from tw_stock_tool.utils import doctor
 
 
 class DoctorTest(unittest.TestCase):

@@ -1,8 +1,8 @@
 ﻿import unittest
 from unittest.mock import Mock, patch
 
-import gui_app
-from gui_tasks import TaskState
+from tw_stock_tool.gui import gui_app
+from tw_stock_tool.gui.gui_tasks import TaskState
 
 
 class GuiAppTest(unittest.TestCase):

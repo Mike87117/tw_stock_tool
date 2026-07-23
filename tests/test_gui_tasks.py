@@ -2,7 +2,7 @@
 import time
 import unittest
 
-import gui_tasks
+from tw_stock_tool.gui import gui_tasks
 
 
 class GuiTasksTest(unittest.TestCase):

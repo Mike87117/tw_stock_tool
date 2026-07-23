@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import app_services
-from scanner import ScanConfig
+from tw_stock_tool.gui import app_services
+from tw_stock_tool.analysis.scanner import ScanConfig
 
 
 class AppServicesTest(unittest.TestCase):

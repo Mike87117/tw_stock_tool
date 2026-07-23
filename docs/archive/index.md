@@ -10,5 +10,6 @@
 - [Ponytail repository audit](../PONYTAIL_REPOSITORY_AUDIT.md)
 - [Repository architecture review](../REPOSITORY_ARCHITECTURE_REVIEW.md)
 - [CLI runtime contract inventory](../CLI_RUNTIME_CONTRACT_INVENTORY.json)
+- [Cleanup 4A root-wrapper removal record](root-wrapper-removal.md)
 
 其餘 `TRACK_*` 與 `phase_*` 文件同樣保留為歷史驗證與完成紀錄。現行使用資訊請回到[文件首頁](../index.md)。

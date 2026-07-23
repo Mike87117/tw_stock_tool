@@ -23,12 +23,6 @@ MODULES = {
     "sweep": (parameter_sweep_report, "parameter_sweep_report.py"),
     "walk": (walk_forward_report, "walk_forward_report.py"),
 }
-WRAPPERS = {
-    "backtest": "backtest_report.py",
-    "sweep": "parameter_sweep_report.py",
-    "walk": "walk_forward_report.py",
-}
-
 
 def _callable_name(value: object) -> str | None:
     if value is None:
@@ -720,44 +714,10 @@ class ReportCliArgumentCharacterizationTest(unittest.TestCase):
                     self.assertNotIn("Traceback", combined)
                     self.assertEqual(before, after)
 
-    def test_package_and_root_help_subprocesses_match_parser_snapshots(self) -> None:
-        commands = {
-            "backtest": (
-                ["-m", "tw_stock_tool.cli.backtest_report", "--help"],
-                "backtest_report.py",
-            ),
-            "sweep": (
-                ["-m", "tw_stock_tool.cli.parameter_sweep_report", "--help"],
-                "parameter_sweep_report.py",
-            ),
-            "walk": (
-                ["-m", "tw_stock_tool.cli.walk_forward_report", "--help"],
-                "walk_forward_report.py",
-            ),
-        }
-        for key, (module_command, wrapper_name) in commands.items():
-            expected = _normalize_usage(HELP_SNAPSHOTS[key])
-            for boundary, command in (
-                ("package", [sys.executable, *module_command]),
-                ("root", [sys.executable, str(REPOSITORY_ROOT / wrapper_name), "--help"]),
-            ):
-                with self.subTest(parser=key, boundary=boundary):
-                    completed = subprocess.run(
-                        command,
-                        cwd=REPOSITORY_ROOT,
-                        env=_subprocess_environment(),
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    self.assertEqual(completed.returncode, 0)
-                    self.assertEqual(completed.stderr, "")
-                    self.assertEqual(_normalize_usage(completed.stdout), expected)
 
     def test_public_parser_modules_and_routes_remain_present(self) -> None:
         for key, (module, _) in MODULES.items():
             self.assertTrue(callable(module._parse_args), key)
-            self.assertTrue((REPOSITORY_ROOT / WRAPPERS[key]).is_file())
 
         for command in ("backtest-report", "parameter-sweep", "walk-forward"):
             with self.subTest(command=command):

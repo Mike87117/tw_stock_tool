@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from cache_utils import cache_summary, clear_cache, list_cache_files
+from tw_stock_tool.data.cache_utils import cache_summary, clear_cache, list_cache_files
 
 
 class CacheUtilsTest(unittest.TestCase):

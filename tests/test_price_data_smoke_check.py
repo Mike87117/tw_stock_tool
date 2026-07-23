@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import price_data_smoke_check
+from tw_stock_tool.cli import price_data_smoke_check
 
 
 def _price_df() -> pd.DataFrame:

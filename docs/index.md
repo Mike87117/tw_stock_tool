@@ -19,11 +19,13 @@
 - [Root compatibility wrappers](compatibility/root-wrappers.md)
 - [資料提供者與快取契約](DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md)
 
-## 現行設計參考
-
-- [Repository architecture review](REPOSITORY_ARCHITECTURE_REVIEW.md)
-- [Public API and wrapper inventory](PUBLIC_API_AND_WRAPPER_INVENTORY.md)
-
 ## 歷史與決策紀錄
 
-[歷史與決策紀錄](archive/index.md)導覽完成的 phase、characterization、audit 與 roadmap 文件。 [Daily Report MVP](DAILY_REPORT_MVP.md) 是 Historical MVP design；後續 phases 已擴充 Daily Pipeline，現行使用方式請見 [Daily Report](user-guide/daily-report.md)。
+[歷史與決策紀錄](archive/index.md) 導覽完成的 phase、characterization、audit 與 roadmap 文件。以下盤點只供歷史參考，不是目前 root invocation 或 import 指南：
+
+- [Development Roadmap](DEVELOPMENT_ROADMAP.md)
+- [Public API and wrapper inventory](PUBLIC_API_AND_WRAPPER_INVENTORY.md)
+- [CLI runtime contract inventory](CLI_RUNTIME_CONTRACT_INVENTORY.json)
+- [Cleanup 4A root-wrapper removal record](archive/root-wrapper-removal.md)
+
+[Daily Report MVP](DAILY_REPORT_MVP.md) 是 Historical MVP design；後續 phases 已擴充 Daily Pipeline，現行使用方式請見 [Daily Report](user-guide/daily-report.md)。

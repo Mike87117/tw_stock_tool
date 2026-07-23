@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import strategy_compare
-from analysis import StockAnalysis
+from tw_stock_tool.backtesting import strategy_compare
+from tw_stock_tool.analysis.analysis import StockAnalysis
 
 
 def _fake_analysis() -> StockAnalysis:

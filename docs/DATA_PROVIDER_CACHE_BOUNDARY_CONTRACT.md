@@ -4,7 +4,7 @@
 
 **DATA_PROVIDER_CACHE_CONTRACT_INVENTORIED_EXTRACTION_NOT_AUTHORIZED**
 
-`download_tw_stock()` remains the stable orchestration facade. Provider, cache, normalization, diagnostics, and orchestration coexist in `data_loader.py`. Existing tests protect many behaviors but are not a complete extraction contract. Track B2 must add missing characterization before any production change; the Track A stack remains HOLD and unchanged. **No data-provider or cache extraction is authorized by Track B1.**
+`download_tw_stock()` remains the stable orchestration facade. Provider, cache, normalization, diagnostics, and orchestration coexist in `src/tw_stock_tool/data/data_loader.py`. Existing tests protect many behaviors but are not a complete extraction contract. Track B2 must add missing characterization before any production change; the Track A stack remains HOLD and unchanged. **No data-provider or cache extraction is authorized by Track B1.**
 
 ## B. Scope and boundary terminology
 
@@ -16,7 +16,7 @@
 | Provider candidate | attempted source for a resolved symbol. |
 | Symbol candidate | `.TW` or `.TWO` resolved market symbol. |
 | Runtime cache | loader-owned path, freshness, read/write, and stale policy. |
-| Cache administration | CSV listing, summary, and deletion in `cache_utils.py`. |
+| Cache administration | CSV listing, summary, and deletion in `tw_stock_tool.data.cache_utils`. |
 | Fresh cache | eligible current-session cache by Taiwan market-close rule. |
 | Stale cache | bounded fallback after live failure. |
 | Force refresh | bypasses both cache-read stages. |
@@ -25,14 +25,14 @@
 | Error translation | aggregated `DataLoaderError` result. |
 | Diagnostic side effect | stdout/stderr status or warning. |
 | Patch surface | tracked direct call or monkeypatch target. |
-| Compatibility wrapper | root module forwarding package module. |
+| Package forwarding module | historical wrapper terminology; current code uses canonical package paths. |
 | Characterization test | deterministic observable-behavior test. |
 | Extraction seam | candidate cohesive code movement boundary. |
 | Orchestration | candidate/provider/cache/error coordination. |
 | Policy change | intentional behavior change requiring approval. |
 | Behavior-preserving refactor | move preserving imports, patches, output, errors, timing, identity. |
 
-`cache_utils.py` is cache administration, not runtime cache-selection policy; `cache_manager.py` is its CLI facade. Underscore names may still be patch or external surfaces. B1 inventories current behavior rather than redesigning it.
+`tw_stock_tool.data.cache_utils` is cache administration, not runtime cache-selection policy; `tw_stock_tool.data.cache_manager` is its CLI facade. Underscore names may still be patch or external surfaces. B1 inventories current behavior rather than redesigning it.
 
 ## C. Public loader API contract
 
@@ -202,17 +202,14 @@ Suppression redirects process-global stdout/stderr and remains serialized; logge
 | src/tw_stock_tool/ml/ml_dataset.py | analyze_stock | indirect | stock/period | analysis | propagates | loader via analysis |
 | src/tw_stock_tool/scanners/daily_watchlist.py | analyze_stock | indirect | watchlist values | analysis | catches workflow errors | loader via analysis |
 | src/tw_stock_tool/cli/main.py | DataLoaderError | error-only dependency | CLI command | exception | catches | exception type/text |
-| tests/test_data_loader.py | root data_loader | test direct calls | fixtures | df,symbol/errors | assertions | wrapper identity/patches |
+| tests/test_data_loader.py | tw_stock_tool.data.data_loader | test direct calls | fixtures | df,symbol/errors | assertions | canonical patch points |
 
 No concrete report-specific runtime caller beyond the listed CLI report modules was identified by tracked-file search; no other concrete GUI or ML runtime caller was identified beyond the listed paths.
 
-### Wrapper and import surfaces
+### Canonical import surfaces
 
 | Surface | Target | Re-export behavior | Executable behavior | Test evidence | External-use uncertainty | Required preservation |
 |---|---|---|---|---|---|---|
-| Root `data_loader.py` | `tw_stock_tool.data.data_loader` | compatibility wrapper; redirects module identity | no independent implementation | test_data_loader | unknown | module identity |
-| Root `cache_utils.py` | `tw_stock_tool.data.cache_utils` | compatibility wrapper; redirects module identity | no independent implementation | test_cache_utils | unknown | functions |
-| Root `cache_manager.py` | `tw_stock_tool.data.cache_manager` | compatibility wrapper; redirects module identity | Does not independently call `main()` | wrapper/source | unknown | module identity |
 | `src/tw_stock_tool/data/cache_manager.py` | cache_utils | package module | owns administration CLI implementation | cache tests | unknown | main behavior |
 | Package submodule imports | data package submodules | direct paths | n/a | source/tests | unknown | paths |
 | `tw_stock_tool.data.__init__` | package initializer | no public exports | n/a | source | unknown | empty export surface |

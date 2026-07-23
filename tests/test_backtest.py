@@ -4,7 +4,7 @@ import unittest
 import pandas as pd
 
 from tw_stock_tool.backtesting.results import BacktestResult
-from backtest import BacktestError, run_backtest, run_backtest_result
+from tw_stock_tool.backtesting.backtest import BacktestError, run_backtest, run_backtest_result
 
 
 def _backtest_frame(closes: list[float], signals: list[str], opens: list[float] | None = None) -> pd.DataFrame:

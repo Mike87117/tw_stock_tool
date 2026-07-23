@@ -8,11 +8,11 @@ import pandas as pd
 import unittest
 from unittest.mock import patch
 
-import data_loader
-import scanner
-import scan_stocks as scan_stocks_cli
-from analysis import StockAnalysis
-from scanner import ScanConfig, _filter_ok_rows, _sort_ok_rows, normalize_stock_ids, scan_stocks
+from tw_stock_tool.data import data_loader
+from tw_stock_tool.analysis import scanner
+from tw_stock_tool.cli import scan_stocks as scan_stocks_cli
+from tw_stock_tool.analysis.analysis import StockAnalysis
+from tw_stock_tool.analysis.scanner import ScanConfig, _filter_ok_rows, _sort_ok_rows, normalize_stock_ids, scan_stocks
 
 
 def _fake_analysis(stock_id: str, score: float, signal: str) -> StockAnalysis:

@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 
-import stock_list_smoke_check
+from tw_stock_tool.cli import stock_list_smoke_check
 
 
 def _frame(stocks: list[str], market: str) -> pd.DataFrame:
