@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import ml_dataset
-from analysis import StockAnalysis
+from tw_stock_tool.ml import ml_dataset
+from tw_stock_tool.analysis.analysis import StockAnalysis
 
 
 def _sample_signal_df() -> pd.DataFrame:

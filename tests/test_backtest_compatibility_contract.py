@@ -28,10 +28,6 @@ class BacktestCompatibilityContractTest(unittest.TestCase):
         self.assertIs(serialization_files.BacktestResult, BacktestResult)
         self.assertIs(backtest_converter.BacktestResult, BacktestResult)
 
-    def test_root_wrappers_redirect_only_to_canonical_modules(self):
-        root = Path(__file__).resolve().parents[1]
-        for code in ("import backtest; import tw_stock_tool.backtesting.backtest as c; assert backtest is c", "import strategies; import tw_stock_tool.backtesting.strategies as c; assert strategies is c"):
-            subprocess.run([sys.executable, "-c", code], cwd=root, check=True)
 
     def test_retained_imports_and_cli_identity(self):
         from tw_stock_tool.cli import backtest_artifact_cli, backtest_result_export_cli

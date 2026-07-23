@@ -408,27 +408,6 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(json.loads(completed.stdout), expected)
-    def test_root_package_and_script_invocation_boundaries_are_unchanged(self) -> None:
-        import tomllib
-
-        with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as stream:
-            pyproject = tomllib.load(stream)
-        self.assertEqual(pyproject["project"]["scripts"]["twstock"], "tw_stock_tool.cli.twstock_cli:main")
-        self.assertFalse((REPOSITORY_ROOT / "src" / "tw_stock_tool" / "__main__.py").exists())
-
-        root_wrapper = importlib.import_module("twstock_cli")
-        self.assertIs(root_wrapper.main, twstock_cli.main)
-
-        env = os.environ.copy()
-        env["PYTHONPATH"] = os.pathsep.join((str(REPOSITORY_ROOT / "src"), str(REPOSITORY_ROOT), env.get("PYTHONPATH", "")))
-        for command in (
-            [sys.executable, "-m", "tw_stock_tool.cli.twstock_cli", "--help"],
-            [sys.executable, str(REPOSITORY_ROOT / "twstock_cli.py"), "--help"],
-        ):
-            with self.subTest(command=command):
-                completed = subprocess.run(command, cwd=REPOSITORY_ROOT, env=env, capture_output=True, text=True, check=False)
-                self.assertEqual(completed.returncode, 0, completed.stderr)
-                self.assertIn("usage:", completed.stdout)
     def test_registration_inventory_matches_source_counts_and_helper_boundary(self) -> None:
         self.assertEqual(len(ROUTES), 20)
         self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 12)

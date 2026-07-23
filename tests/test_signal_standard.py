@@ -122,7 +122,7 @@ class TestSignalStandard(unittest.TestCase):
         pd.testing.assert_frame_equal(df, original)
 
     def test_run_backtest_supports_standard_signals_without_legacy_signal(self):
-        from backtest import run_backtest
+        from tw_stock_tool.backtesting.backtest import run_backtest
 
         df = pd.DataFrame(
             {
@@ -142,7 +142,7 @@ class TestSignalStandard(unittest.TestCase):
         self.assertEqual(trades.iloc[0]["Entry Price"], 105)
         self.assertEqual(trades.iloc[0]["Exit Price"], 125)
     def test_run_backtest_legacy_and_standard_signals_match(self):
-        from backtest import run_backtest
+        from tw_stock_tool.backtesting.backtest import run_backtest
 
         index = pd.date_range("2024-01-01", periods=5, freq="D")
         legacy_df = pd.DataFrame(

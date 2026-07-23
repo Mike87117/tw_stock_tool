@@ -8,31 +8,21 @@ from tw_stock_tool.reports.parameter_sweep_report import (
     export_parameter_sweep_report_markdown,
     export_parameter_sweep_report_excel,
 )
+from tw_stock_tool.cli._report_cli_arguments import (
+    add_force_refresh_argument,
+    add_parameter_range_arguments,
+    add_report_output_arguments,
+    add_stock_strategy_period_arguments,
+)
 from tw_stock_tool.utils.config import DEFAULT_PERIOD, INITIAL_CAPITAL, FEE_RATE, TAX_RATE
-
-
-from tw_stock_tool.cli.parsers import parse_int_tuple
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Parameter Sweep Report CLI")
-    parser.add_argument("--stock", required=True, help="Stock ID (e.g., 2330)")
-    parser.add_argument("--strategy", required=True, help="Strategy name (e.g., ma_cross, all)")
-    parser.add_argument("--period", default=DEFAULT_PERIOD, help="Data period")
-    parser.add_argument("--output-md", nargs="?", const="", default=None, help="Export Markdown report")
-    parser.add_argument("--output-excel", nargs="?", const="", default=None, help="Export Excel report")
-    parser.add_argument("--output-dir", default="output", help="Default output directory")
-    parser.add_argument("--force-refresh", action="store_true", help="Redownload data ignoring cache")
-
-    # Custom Parameter Ranges
-    parser.add_argument("--ma-short-windows", type=parse_int_tuple, help="Comma-separated integers, e.g. 5,10")
-    parser.add_argument("--ma-long-windows", type=parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--rsi-buy-below", type=parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--rsi-sell-above", type=parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--score-buy", type=parse_int_tuple, help="Comma-separated integers")
-    parser.add_argument("--score-sell", type=parse_int_tuple, help="Comma-separated integers, can be negative")
-
-    # Engine Parameters
+    add_stock_strategy_period_arguments(parser, strategy_help="Strategy name (e.g., ma_cross, all)")
+    add_report_output_arguments(parser)
+    add_force_refresh_argument(parser)
+    add_parameter_range_arguments(parser)
     parser.add_argument("--initial-capital", type=float, default=INITIAL_CAPITAL, help="Initial capital (default from config)")
     parser.add_argument("--fee-rate", type=float, default=FEE_RATE, help="Fee rate (default from config)")
     parser.add_argument("--tax-rate", type=float, default=TAX_RATE, help="Tax rate (default from config)")
@@ -40,7 +30,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stop-loss-pct", type=float, default=None, help="Stop loss percentage (e.g., 0.05 for 5%%)")
     parser.add_argument("--take-profit-pct", type=float, default=None, help="Take profit percentage")
     parser.add_argument("--max-hold-days", type=int, default=None, help="Maximum holding days")
-
     return parser.parse_args(argv)
 
 

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import data_loader
+from tw_stock_tool.data import data_loader
 
 
 def _download_df() -> pd.DataFrame:
@@ -618,7 +618,6 @@ class DataLoaderTest(unittest.TestCase):
         with patch.object(data_loader,"_period_start",return_value=pd.Timestamp("2024-01-01")), patch.object(data_loader,"_month_starts",return_value=[pd.Timestamp("2024-01-01")]), patch.object(data_loader.requests,"get",return_value=Response(monthly)), patch.object(data_loader,"_download_tpex_latest_quote") as latest:
             self.assertEqual(float(data_loader._download_tpex_stock("6488","1mo","1d").iloc[0]["Volume"]),1000)
         latest.assert_not_called()
-        import tw_stock_tool.data.data_loader as package_loader; self.assertIs(data_loader, package_loader)
         logger=logging.getLogger("yfinance"); old=(logger.disabled,logger.level,logger.propagate); logger.disabled=False; logger.setLevel(logging.WARNING); logger.propagate=True; stdout=StringIO(); stderr=StringIO()
         try:
             with patch.object(data_loader.yf,"download",side_effect=RuntimeError("boom")), redirect_stdout(stdout), redirect_stderr(stderr):
@@ -653,15 +652,6 @@ class DataLoaderTest(unittest.TestCase):
         self.assertNotIn("provider stdout", stdout.getvalue())
         self.assertNotIn("provider stderr", stderr.getvalue())
 
-    def test_root_wrapper_helper_patch_delegates_to_package_loader(self) -> None:
-        import tw_stock_tool.data.data_loader as package_loader
-        self.assertIs(data_loader, package_loader)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
-                self.assertEqual(data_loader._cache_path("2330.TW", "1y", "1d", True).parent, Path(tmp_dir))
-                with patch.object(data_loader, "_read_cache", side_effect=ValueError("root patch")) as patched, patch.object(data_loader, "_is_cache_fresh", return_value=True), patch.object(data_loader.yf, "download", return_value=_download_df()):
-                    package_loader.download_tw_stock("2330")
-                patched.assert_called_once()
 
     def test_cache_age_days_uses_utc_and_propagates_stat_error(self) -> None:
         class Stat:

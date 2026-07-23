@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import load_workbook
 
-import ai_stock_scanner
+from tw_stock_tool.ml import ai_stock_scanner
 
 
 def _summary(stock: str, f1: float, accuracy: float, errors: int = 0) -> pd.DataFrame:

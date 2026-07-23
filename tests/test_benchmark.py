@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import benchmark
+from tw_stock_tool.cli import benchmark
 
 
 class BenchmarkTest(unittest.TestCase):

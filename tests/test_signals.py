@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from signals import generate_signals
+from tw_stock_tool.analysis.signals import generate_signals
 
 
 def _neutral_frame(rows: int = 4) -> pd.DataFrame:

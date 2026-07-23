@@ -5,7 +5,7 @@ import unittest
 import pandas as pd
 from openpyxl import load_workbook
 
-from report import ReportError, export_stock_ranking
+from tw_stock_tool.reports.report import ReportError, export_stock_ranking
 
 
 class ReportTest(unittest.TestCase):

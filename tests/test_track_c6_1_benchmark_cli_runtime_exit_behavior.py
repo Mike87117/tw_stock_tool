@@ -47,8 +47,6 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
     def _package_validation_failure(self) -> subprocess.CompletedProcess[str]:
         return self._run_process("-m", "tw_stock_tool.cli.benchmark")
 
-    def _root_validation_failure(self) -> subprocess.CompletedProcess[str]:
-        return self._run_process(str(REPOSITORY_ROOT / "benchmark.py"))
 
     def _unified_module_validation_failure(self) -> subprocess.CompletedProcess[str]:
         return self._run_process(
@@ -170,22 +168,8 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
     def test_package_module_validation_failure_should_exit_one(self) -> None:
         self.assertEqual(self._package_validation_failure().returncode, 1)
 
-    def test_root_wrapper_validation_failure_invokes_benchmark_and_exits_one(self) -> None:
-        completed = self._root_validation_failure()
 
-        self.assertEqual(completed.returncode, 1)
-        self._assert_validation_failure_output(completed.stdout, completed.stderr)
 
-    def test_root_wrapper_execution_calls_package_main(self) -> None:
-        with patch.object(benchmark_cli, "main", return_value=None) as main_mock:
-            with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(str(REPOSITORY_ROOT / "benchmark.py"), run_name="__main__")
-
-        self.assertIsNone(raised.exception.code)
-        main_mock.assert_called_once_with()
-
-    def test_root_wrapper_validation_failure_should_exit_one(self) -> None:
-        self.assertEqual(self._root_validation_failure().returncode, 1)
 
     def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -219,13 +203,6 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             )
         )
 
-    def test_root_invalid_argument_is_argparse_exit_two(self) -> None:
-        self._assert_argparse_failure(
-            self._run_process(
-                str(REPOSITORY_ROOT / "benchmark.py"),
-                "--definitely-invalid-option",
-            )
-        )
 
     def test_unified_invalid_argument_is_argparse_exit_two(self) -> None:
         self._assert_argparse_failure(
@@ -237,11 +214,6 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             )
         )
 
-    def test_root_import_alias_remains_compatible(self) -> None:
-        root_benchmark = importlib.import_module("benchmark")
-
-        self.assertIs(root_benchmark, benchmark_cli)
-        self.assertIs(root_benchmark.main, benchmark_cli.main)
 
     def test_sibling_runtime_status_contract_is_one_and_dispatcher_propagates_it(self) -> None:
         scanner_args = scanner_cli._parse_args(

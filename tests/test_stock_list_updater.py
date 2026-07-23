@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 
-import stock_list_updater
+from tw_stock_tool.data import stock_list_updater
 
 
 class StockListUpdaterTest(unittest.TestCase):

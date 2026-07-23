@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import baseline_ml_model
+from tw_stock_tool.ml import baseline_ml_model
 
 
 def _sample_dataset(rows: int = 18) -> pd.DataFrame:

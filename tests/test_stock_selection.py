@@ -1,6 +1,6 @@
 import unittest
 
-from stock_selection import apply_stock_selection
+from tw_stock_tool.analysis.stock_selection import apply_stock_selection
 
 
 class StockSelectionTest(unittest.TestCase):

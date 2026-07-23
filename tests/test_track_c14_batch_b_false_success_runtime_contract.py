@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import twstock_cli
+from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.backtesting import parameter_sweep, strategy_compare, walk_forward
 from tw_stock_tool.ml import ai_stock_scanner, baseline_ml_model, ml_dataset
 from tw_stock_tool.reports import ai_prediction_report
@@ -145,31 +145,6 @@ PACKAGE_FILES = {
     "ml_dataset": "src/tw_stock_tool/ml/ml_dataset.py",
     "ai_prediction_report": "src/tw_stock_tool/reports/ai_prediction_report.py",
 }
-WRAPPER_FILES = frozenset({
-    "ai_prediction_report.py",
-    "ai_stock_scanner.py",
-    "ml_dataset.py",
-    "strategy_compare.py",
-})
-
-EXCLUDED_FILES = frozenset({
-    "src/tw_stock_tool/cli/twstock_cli.py",
-    "src/tw_stock_tool/cli/backtest_report.py",
-    "src/tw_stock_tool/cli/daily_report_cli.py",
-    "src/tw_stock_tool/cli/parameter_sweep_report.py",
-    "src/tw_stock_tool/cli/simulated_paper_trading_cli.py",
-    "src/tw_stock_tool/cli/walk_forward_report.py",
-    "src/tw_stock_tool/utils/doctor.py",
-    "parameter_sweep.py",
-    "parameter_sweep_report.py",
-    "walk_forward.py",
-    "walk_forward_report.py",
-    "doctor.py",
-    "baseline_ml_model.py",
-    "docs/CLI_RUNTIME_CONTRACT_INVENTORY.json",
-    "docs/TRACK_C13_REPOSITORY_WIDE_CLI_RUNTIME_CONTRACT_AUDIT.md",
-})
-
 
 def _parse(module: object, argv: list[str]) -> argparse.Namespace:
     parser = module._parse_args
@@ -248,7 +223,7 @@ def _unified_harness(route: str, target: object, args: list[str], boundary: str,
         )
     return (
         "import importlib\n"
-        "import twstock_cli\n"
+        "from tw_stock_tool.cli import twstock_cli\n"
         f"target = importlib.import_module({target.__name__!r})\n"
         f"{setup}\n"
         f"raise SystemExit(twstock_cli.main({args!r}))\n"
@@ -403,29 +378,9 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
                     completed = _run_subprocess("-c", _unified_harness(route, module, argv, boundary, success))
                     self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
             parser_args = ["strategy-compare"] if route == "strategy-compare" else ["ai-scan", "--horizon", "bad"]
-            completed = _run_subprocess("-c", f"import twstock_cli; raise SystemExit(twstock_cli.main({parser_args!r}))")
+            completed = _run_subprocess("-c", f"from tw_stock_tool.cli import twstock_cli; raise SystemExit(twstock_cli.main({parser_args!r}))")
             self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
 
-    def test_root_wrappers_propagate_status_and_preserve_import_aliases(self) -> None:
-        wrappers = (
-            ("ai_prediction_report.py", "tw_stock_tool.reports.ai_prediction_report"),
-            ("ai_stock_scanner.py", "tw_stock_tool.ml.ai_stock_scanner"),
-            ("ml_dataset.py", "tw_stock_tool.ml.ml_dataset"),
-            ("strategy_compare.py", "tw_stock_tool.backtesting.strategy_compare"),
-        )
-        for wrapper, target in wrappers:
-            with self.subTest(wrapper=wrapper, mode="import"):
-                self.assertIs(importlib.import_module(wrapper[:-3]), importlib.import_module(target))
-            for delegated, expected in (("None", 0), ("1", 1)):
-                script = (
-                    "import importlib, runpy\n"
-                    f"module = importlib.import_module({target!r})\n"
-                    f"module.main = lambda: {delegated}\n"
-                    f"runpy.run_path({str(REPOSITORY_ROOT / wrapper)!r}, run_name='__main__')\n"
-                )
-                with self.subTest(wrapper=wrapper, delegated=delegated):
-                    completed = _run_subprocess("-c", script)
-                    self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
 
     def test_batch_b_target_inventory_is_exact_and_excludes_other_batches(self) -> None:
         package_targets = frozenset(PACKAGE_FILES.values())
@@ -441,17 +396,6 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
                 "src/tw_stock_tool/reports/ai_prediction_report.py",
             }),
         )
-        self.assertEqual(
-            WRAPPER_FILES,
-            frozenset({
-                "ai_prediction_report.py",
-                "ai_stock_scanner.py",
-                "ml_dataset.py",
-                "strategy_compare.py",
-            }),
-        )
-        self.assertFalse(package_targets & EXCLUDED_FILES)
-        self.assertFalse(WRAPPER_FILES & EXCLUDED_FILES)
 
 
 if __name__ == "__main__":

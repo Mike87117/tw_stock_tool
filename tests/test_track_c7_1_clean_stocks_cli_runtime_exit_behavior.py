@@ -171,38 +171,8 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             )
         self.assertEqual(completed.returncode, 1)
 
-    def test_root_wrapper_validation_failure_is_visible_and_exits_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            missing_path = temp_path / "missing.txt"
-            before = list(temp_path.iterdir())
-            completed = self._run_process(
-                str(REPOSITORY_ROOT / "clean_stocks.py"), "--file", str(missing_path)
-            )
-            self.assertEqual(list(temp_path.iterdir()), before)
 
-        self.assertEqual(completed.returncode, 1)
-        self._assert_error_output(
-            completed.stdout,
-            completed.stderr,
-            f"Error: Stock file not found: {missing_path}",
-        )
 
-    def test_root_wrapper_execution_calls_package_main_once_and_propagates_status(self) -> None:
-        with patch.object(clean_cli, "main", return_value=1) as main_mock:
-            with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(str(REPOSITORY_ROOT / "clean_stocks.py"), run_name="__main__")
-
-        self.assertEqual(raised.exception.code, 1)
-        main_mock.assert_called_once_with()
-
-    def test_root_wrapper_validation_failure_should_exit_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            missing_path = Path(temp_dir) / "missing.txt"
-            completed = self._run_process(
-                str(REPOSITORY_ROOT / "clean_stocks.py"), "--file", str(missing_path)
-            )
-        self.assertEqual(completed.returncode, 1)
 
     def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -275,14 +245,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             self.assertEqual(list(Path(temp_dir).iterdir()), before)
         self._assert_argparse_failure(completed)
 
-    def test_root_invalid_argument_is_argparse_exit_two(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            before = list(Path(temp_dir).iterdir())
-            completed = self._run_process(
-                str(REPOSITORY_ROOT / "clean_stocks.py"), "--definitely-invalid-option"
-            )
-            self.assertEqual(list(Path(temp_dir).iterdir()), before)
-        self._assert_argparse_failure(completed)
 
     def test_unified_invalid_argument_is_argparse_exit_two(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -297,13 +259,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             self.assertEqual(list(Path(temp_dir).iterdir()), before)
         self._assert_argparse_failure(completed)
 
-    def test_root_import_alias_remains_compatible(self) -> None:
-        with patch.object(clean_cli, "main") as main_mock:
-            root_clean_stocks = importlib.import_module("clean_stocks")
-
-        self.assertIs(root_clean_stocks, clean_cli)
-        self.assertIs(root_clean_stocks.main, clean_cli.main)
-        main_mock.assert_not_called()
 
     def test_sibling_runtime_status_contract_is_one_and_dispatcher_propagates_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

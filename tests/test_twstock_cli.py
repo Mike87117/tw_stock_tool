@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-import twstock_cli
+from tw_stock_tool.cli import twstock_cli
 
 
 class TwStockCliTest(unittest.TestCase):
@@ -616,32 +616,7 @@ class TwStockCliTest(unittest.TestCase):
         target_func = getattr(module, func_name)
         self.assertTrue(callable(target_func))
 
-    def test_root_twstock_cli_wrapper_reexports_package_cli_main(self) -> None:
-        import importlib
-        import tw_stock_tool.cli.twstock_cli as package_twstock_cli
-        from pathlib import Path
 
-        repo_root = Path(__file__).parent.parent
-        sys.path.insert(0, str(repo_root))
-        try:
-            root_twstock_cli = importlib.import_module("twstock_cli")
-            self.assertIs(root_twstock_cli.main, package_twstock_cli.main)
-        finally:
-            sys.path.pop(0)
-
-    def test_root_twstock_cli_wrapper_executes_package_main_when_run_as_script(self) -> None:
-        import runpy
-        from pathlib import Path
-
-        repo_root = Path(__file__).parent.parent
-        script_path = repo_root / "twstock_cli.py"
-
-        with patch("tw_stock_tool.cli.twstock_cli.main", return_value=0) as mock_main:
-            with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(str(script_path), run_name="__main__")
-
-        self.assertEqual(raised.exception.code, 0)
-        mock_main.assert_called_once_with()
 
 
 class DailyReportArtifactUnifiedCliTests(unittest.TestCase):
@@ -709,7 +684,7 @@ class DailyReportArtifactUnifiedCliTests(unittest.TestCase):
         )
         self.assertEqual(sys.argv, original)
 
-    def test_root_and_artifact_help_register_command_and_safety(self):
+    def test_cli_and_artifact_help_register_command_and_safety(self):
         root = StringIO()
         with redirect_stdout(root), self.assertRaises(SystemExit) as raised:
             twstock_cli.main(["--help"])

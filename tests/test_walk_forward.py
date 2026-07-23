@@ -11,8 +11,8 @@ from openpyxl import load_workbook
 from typing import Any
 import unittest.mock as mock
 
-import walk_forward
-from analysis import StockAnalysis
+from tw_stock_tool.backtesting import walk_forward
+from tw_stock_tool.analysis.analysis import StockAnalysis
 
 
 class WalkForwardTest(unittest.TestCase):
@@ -87,8 +87,8 @@ class WalkForwardTest(unittest.TestCase):
             walk_forward.split_windows(df, train_days=4, test_days=2, step_days=1)
 
     def test_ma_cross_walk_forward(self) -> None:
-        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
-            "walk_forward.run_backtest",
+        with patch("tw_stock_tool.backtesting.walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "tw_stock_tool.backtesting.walk_forward.run_backtest",
             side_effect=self._fake_backtest,
         ):
             result = walk_forward.run_walk_forward(
@@ -103,8 +103,8 @@ class WalkForwardTest(unittest.TestCase):
         self.assertEqual(set(result["Strategy"]), {"ma_cross"})
 
     def test_rsi_walk_forward(self) -> None:
-        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
-            "walk_forward.run_backtest",
+        with patch("tw_stock_tool.backtesting.walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "tw_stock_tool.backtesting.walk_forward.run_backtest",
             side_effect=self._fake_backtest,
         ):
             result = walk_forward.run_walk_forward(
@@ -119,8 +119,8 @@ class WalkForwardTest(unittest.TestCase):
         self.assertEqual(set(result["Strategy"]), {"rsi"})
 
     def test_score_walk_forward(self) -> None:
-        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
-            "walk_forward.run_backtest",
+        with patch("tw_stock_tool.backtesting.walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "tw_stock_tool.backtesting.walk_forward.run_backtest",
             side_effect=self._fake_backtest,
         ):
             result = walk_forward.run_walk_forward(
@@ -135,10 +135,10 @@ class WalkForwardTest(unittest.TestCase):
         self.assertEqual(set(result["Strategy"]), {"score"})
 
     def test_window_failure_does_not_stop_all_results(self) -> None:
-        with patch("walk_forward.analyze_stock", return_value=self._analysis()), patch(
-            "walk_forward.run_backtest",
+        with patch("tw_stock_tool.backtesting.walk_forward.analyze_stock", return_value=self._analysis()), patch(
+            "tw_stock_tool.backtesting.walk_forward.run_backtest",
             side_effect=self._fake_backtest,
-        ), patch("walk_forward.ma_cross_strategy", side_effect=ValueError("strategy failed")):
+        ), patch("tw_stock_tool.backtesting.walk_forward.ma_cross_strategy", side_effect=ValueError("strategy failed")):
             result = walk_forward.run_walk_forward(
                 "2330",
                 strategy="all",
@@ -334,7 +334,7 @@ class WalkForwardTest(unittest.TestCase):
             columns=walk_forward.WALK_FORWARD_COLUMNS,
         )
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "walk_forward.xlsx"
+            path = Path(tmpdir) / "tw_stock_tool.backtesting.walk_forward.xlsx"
             output = walk_forward.export_walk_forward_excel(
                 detail,
                 stock_id="2330",

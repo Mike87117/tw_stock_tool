@@ -173,33 +173,7 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         self.assertIn("controlled summary failure", combined)
         self.assertNotIn("Traceback", combined)
 
-    def test_root_wrapper_runtime_should_invoke_cache_manager_and_exit_one(self) -> None:
-        wrapper = repr(str(REPOSITORY_ROOT / "cache_manager.py"))
-        completed = self._run_python(
-            f"""
-            import runpy
-            import sys
-            from tw_stock_tool.data import cache_utils
 
-            def fail():
-                raise RuntimeError("controlled summary failure")
-
-            cache_utils.cache_summary = fail
-            sys.argv = ["cache_manager.py", "--summary"]
-            runpy.run_path({wrapper}, run_name="__main__")
-            """
-        )
-        combined = completed.stdout + completed.stderr
-        self.assertEqual(completed.returncode, 1)
-        self.assertIn("controlled summary failure", combined)
-        self.assertNotIn("Traceback", combined)
-
-    def test_root_wrapper_invalid_argument_should_exit_two(self) -> None:
-        completed = self._run_process(str(REPOSITORY_ROOT / "cache_manager.py"), "--definitely-invalid-option")
-        combined = completed.stdout + completed.stderr
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn("usage:", combined)
-        self.assertIn("error", combined.lower())
 
     def test_package_invalid_argument_is_parser_owned_exit_two(self) -> None:
         completed = self._run_process(
@@ -262,11 +236,6 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         self.assertIn("controlled summary failure", combined)
         self.assertNotIn("Traceback", combined)
 
-    def test_root_import_alias_remains_compatible(self) -> None:
-        import cache_manager as root_cache_manager
-
-        self.assertIs(root_cache_manager, cache_manager)
-        self.assertIs(root_cache_manager.main, cache_manager.main)
 
 
 if __name__ == "__main__":

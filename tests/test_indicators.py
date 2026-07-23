@@ -3,7 +3,7 @@ import unittest
 
 import pandas as pd
 
-from indicators import IndicatorError, _rsi, add_indicators
+from tw_stock_tool.analysis.indicators import IndicatorError, _rsi, add_indicators
 
 
 def _sample_ohlcv(rows: int = 80) -> pd.DataFrame:
