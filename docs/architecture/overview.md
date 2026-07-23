@@ -14,7 +14,6 @@ src/tw_stock_tool/
 ├── paper_trading/                 模擬紙上交易模型、序列化與輸出
 ├── reports/                       報告與圖表輸出
 ├── risk/                          研究用風險模型
-├── scanners/                      掃描與 watchlist 流程
 ├── simulated_paper_trading_guard/ 模擬交易防護邊界
 ├── ui/                            唯讀 UI 邊界
 └── utils/                         設定、診斷與共用工具

@@ -53,7 +53,7 @@ twstock gui
 └── src/tw_stock_tool/
     ├── analysis/、backtesting/、cli/、data/、gui/
     ├── kill_switch/、ml/、paper_trading/、reports/、risk/
-    └── scanners/、simulated_paper_trading_guard/、ui/、utils/
+    └── simulated_paper_trading_guard/、ui/、utils/
 
 Repository root
 └── 沒有受支援的 Python entry points
