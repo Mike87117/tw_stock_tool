@@ -763,5 +763,20 @@ and investment advice or guaranteed returns.
 **Phase 53.1 status:** Planning and documentation are complete. This phase is
 `RESEARCH_ONLY`, `OFFLINE_ONLY`, and `PLANNING_AND_DOCS_ONLY`; no production code,
 test code, serialization, exporter, CLI, GUI, broker, or live-trading behavior
-was changed. Reviewer Gate is required and `MERGE_GATE: HOLD`. Phase 53.2 has
-not started.
+was changed. Reviewer Gate is required and `MERGE_GATE: HOLD`.
+
+### 12.8 Phase 53.2 Implementation Record
+
+- **New Module**: `src/tw_stock_tool/paper_trading/portfolio_results.py`
+- **Result Dataclasses**: Added `SimulatedPortfolioPositionResult`, `SimulatedPortfolioPendingOrderResult`, and `SimulatedPortfolioTradingResult`.
+- **Builder Signature**: Implemented `build_simulated_portfolio_trading_result(runtime_state, *, initial_cash, last_prices)`.
+- **Valuation Policy**: Exact matching `last_prices` required for open positions; missing prices fail closed. Extra prices ignored. No DataFrame or network lookup.
+- **Position Inclusion**: All portfolio positions mapped, including zero-quantity positions with realized PnL. Rejected-only symbols not fabricated.
+- **Pending Snapshot**: `(symbol, order_id)` deterministic order. Pending BUY exposes reserved notional, SELL is zero.
+- **Trade Log Preservation**: Immutable snapshots of original global collections preserving source object references and chronology.
+- **Read-Only Constraints**: Source properties, trade log lists, state variables, and `last_prices` mapping remain strictly unmodified.
+- **Shallow Immutability**: Result dataclasses are `frozen=True` and slotted, but preserve underlying mutable event object references (e.g. `SimulatedOrder`, `SimulatedFill`) from the trade log.
+- **Tests**: Implemented full `test_paper_trading_portfolio_results.py` covering model constraints, construction rules, validation policies, identity limits, metric counts, and preservation logic.
+- **Deferred Scope**: explicitly deferred JSON/Markdown/CSV exporters, multi-symbol CLI flags, GUI, `--max-total-exposure`, and live trading.
+
+**Phase 53.2 status:** Complete. `MERGE_GATE: HOLD`. Phase 53.3 has not started.
