@@ -453,7 +453,20 @@ TARGET_VERSION: 0.4.0
 TARGET_TAG: v0.4.0
 MERGE_GATE: HOLD
 
-v0.4.0 changelog 日期已校正為 2026-07-24。已重新驗證 package metadata、安裝與 console entrypoint。`v0.4.0` tag 與 GitHub Release 尚未建立。本 Phase 不建立 tag、不建立 GitHub Release、不發布 PyPI。等待 Reviewer Gate 與 merge。merge 後才允許獨立 publication action。沒有開始 Phase 53。
+v0.4.0 changelog 日期已校正為 2026-07-24。已重新驗證 package metadata、安裝與 console entrypoint。`v0.4.0` tag 與 GitHub Release 已由獨立 publication action 建立。本 Phase 不修改 tag、不修改 GitHub Release、不發布 PyPI。沒有開始 Phase 53。
+
+Phase 53.1：完成（Reviewer Gate HOLD）
+PHASE_TYPE: PLANNING_AND_DOCS_ONLY
+TARGET: MULTI_SYMBOL_SIMULATED_PORTFOLIO_RESULT_BOUNDARY
+RESEARCH_ONLY: YES
+OFFLINE_ONLY: YES
+PRODUCTION_CODE_CHANGED: NO
+TEST_CODE_CHANGED: NO
+PHASE_53_2_STARTED: NO
+MERGE_GATE: HOLD
+
+Phase 53.1 已完成多股票 simulated portfolio aggregate result boundary 規劃。現有 coordinator 仍回傳 `SimulatedPaperTradingRuntimeState`，現有 `SimulatedPaperTradingResult`、schema v1/v2/v3、Markdown/CSV exporter、single-stock CLI 與 package exports 均保持不變。Phase 53.2 僅規劃新增獨立純 Python immutable result/builder、明確 final-price validation、deterministic position ordering、aggregate metrics、pending-order snapshot 與 read-only tests。JSON、exporter、CLI、GUI、Risk Manager、Kill Switch、Broker、Live Trading、PyPI 與 Phase 53.2 以後工作均未開始。
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
