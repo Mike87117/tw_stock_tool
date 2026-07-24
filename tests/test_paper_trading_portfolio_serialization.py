@@ -506,6 +506,54 @@ class TestSimulatedPortfolioSerialization(unittest.TestCase):
         with self.assertRaises(PaperTradingModelError):
             deserialize_simulated_portfolio_trading_result(bad_d)
 
+    def test_nested_payload_missing_extra_fields(self):
+        d = serialize_simulated_portfolio_trading_result(self.valid_result)
+
+        # 5.1 Fill payload missing / extra field
+        bad_fill_missing = copy.deepcopy(d)
+        bad_fill_missing["fills"][0].pop("price")
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_fill_missing)
+
+        bad_fill_extra = copy.deepcopy(d)
+        bad_fill_extra["fills"][0]["unexpected"] = 1
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_fill_extra)
+
+        # 5.2 Rejection top-level missing / extra field
+        bad_rej_missing = copy.deepcopy(d)
+        bad_rej_missing["rejections"][0].pop("reasons")
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_rej_missing)
+
+        bad_rej_extra = copy.deepcopy(d)
+        bad_rej_extra["rejections"][0]["unexpected"] = 1
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_rej_extra)
+
+        # 5.3 Rejection candidate order missing / extra field
+        bad_cand_missing = copy.deepcopy(d)
+        bad_cand_missing["rejections"][0]["candidate_order"].pop("order_id")
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_cand_missing)
+
+        bad_cand_extra = copy.deepcopy(d)
+        bad_cand_extra["rejections"][0]["candidate_order"]["unexpected"] = 1
+        with self.assertRaisesRegex(PaperTradingModelError, "candidate_order extra fields"):
+            deserialize_simulated_portfolio_trading_result(bad_cand_extra)
+
+        # 5.4 Audit payload missing / extra field
+        bad_audit_missing = copy.deepcopy(d)
+        bad_audit_missing["audit_log"][0].pop("record_id")
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_audit_missing)
+
+        bad_audit_extra = copy.deepcopy(d)
+        bad_audit_extra["audit_log"][0]["unexpected"] = 1
+        with self.assertRaises(PaperTradingModelError):
+            deserialize_simulated_portfolio_trading_result(bad_audit_extra)
+
+
     def test_exact_schema_shape_and_payload_keys(self):
         data = serialize_simulated_portfolio_trading_result(self.valid_result)
         expected_keys = {

@@ -286,6 +286,10 @@ def _deserialize_simulated_rejection(r: Any, index: int | str) -> SimulatedOrder
     if c_missing:
         raise PaperTradingModelError(f"Rejection {index} candidate_order missing fields: {c_missing}")
 
+    c_extra = set(c_ord.keys()) - c_allowed
+    if c_extra:
+        raise PaperTradingModelError(f"Rejection {index} candidate_order extra fields: {c_extra}")
+
     qty = _enforce_numeric(c_ord["quantity"], int, f"rejections[{index}].candidate_order.quantity")
     try:
         candidate_obj = SimulatedOrder(

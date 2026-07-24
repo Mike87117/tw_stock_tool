@@ -786,7 +786,7 @@ was changed. Reviewer Gate is required and `MERGE_GATE: HOLD`.
 - **Derived Value Protection**: Re-validated all intermediate derived values (`market_val`, `cost_basis`, `unrealized_pnl`, `total_equity`, `reserved_buy_notional`) to fail closed on float overflows instead of silently propagating `inf`/`nan`.
 - **Extended Test Matrix**: Expanded `test_paper_trading_portfolio_results.py` using `subTest` loop coverage for boundary type errors. Added regression tests to artificially induce numeric overflows on all derived metrics.
 
-**Phase 53.1–53.2 status:** Merged via PR #34 (main merge commit `b8d01b34527b50ea8b0248b0f86585a5f5681306`). `MERGE_GATE: HOLD`. Phase 53.3 has started.
+**Phase 53.1–53.2 status:** Merged via PR #34 (main merge commit `b8d01b34527b50ea8b0248b0f86585a5f5681306`). Phase 53.3 has started.
 
 ## 13. Phase 53.3 Aggregate Portfolio Serialization
 
