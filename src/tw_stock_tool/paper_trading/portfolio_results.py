@@ -14,6 +14,8 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedOrderRejection,
     SimulatedPosition,
     SimulatedTradeLogRecord,
+    SimulatedPortfolio,
+    SimulatedTradeLog,
 )
 from tw_stock_tool.paper_trading.runtime import (
     SimulatedPaperTradingRuntimeState,
@@ -68,6 +70,17 @@ class SimulatedPortfolioTradingResult:
     audit_log: tuple[SimulatedTradeLogRecord, ...]
 
 
+def _require_finite_number(name: str, value: object, *, non_negative: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.")
+    val_float = float(value)
+    if not math.isfinite(val_float):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.")
+    if non_negative and val_float < 0:
+        raise PaperTradingModelError(f"{name} must be >= 0.")
+    return val_float
+
+
 def build_simulated_portfolio_trading_result(
     runtime_state: SimulatedPaperTradingRuntimeState,
     *,
@@ -77,27 +90,27 @@ def build_simulated_portfolio_trading_result(
     if not isinstance(runtime_state, SimulatedPaperTradingRuntimeState):
         raise PaperTradingModelError("runtime_state must be a SimulatedPaperTradingRuntimeState.")
 
-    # 9. initial_cash validation
-    if isinstance(initial_cash, bool) or not isinstance(initial_cash, Real):
-        raise PaperTradingModelError("initial_cash must be finite numeric data.")
-    init_cash_float = float(initial_cash)
-    if not math.isfinite(init_cash_float):
-        raise PaperTradingModelError("initial_cash must be finite numeric data.")
-    if init_cash_float < 0:
-        raise PaperTradingModelError("initial_cash must be >= 0.")
+    init_cash_float = _require_finite_number("initial_cash", initial_cash, non_negative=True)
 
     portfolio = runtime_state.portfolio
+    if not isinstance(portfolio, SimulatedPortfolio):
+        raise PaperTradingModelError("runtime_state.portfolio must be a SimulatedPortfolio.")
+    if not isinstance(portfolio.positions, dict):
+        raise PaperTradingModelError("portfolio.positions must be a dictionary.")
+    if not isinstance(portfolio.trade_log, SimulatedTradeLog):
+        raise PaperTradingModelError("portfolio.trade_log must be a SimulatedTradeLog.")
+    
+    if not isinstance(portfolio.trade_log.orders, list):
+        raise PaperTradingModelError("trade_log.orders must be a list.")
+    if not isinstance(portfolio.trade_log.fills, list):
+        raise PaperTradingModelError("trade_log.fills must be a list.")
+    if not isinstance(portfolio.trade_log.rejections, list):
+        raise PaperTradingModelError("trade_log.rejections must be a list.")
+    if not isinstance(portfolio.trade_log.records, list):
+        raise PaperTradingModelError("trade_log.records must be a list.")
 
-    # 10. Portfolio cash validation
-    if isinstance(portfolio.cash, bool) or not isinstance(portfolio.cash, Real):
-        raise PaperTradingModelError("portfolio cash must be finite numeric data.")
-    final_cash = float(portfolio.cash)
-    if not math.isfinite(final_cash):
-        raise PaperTradingModelError("portfolio cash must be finite numeric data.")
-    if final_cash < 0:
-        raise PaperTradingModelError("portfolio cash must be >= 0.")
+    final_cash = _require_finite_number("portfolio cash", portfolio.cash, non_negative=True)
 
-    # 11. last_prices validation
     if not isinstance(last_prices, Mapping):
         raise PaperTradingModelError("last_prices must be a Mapping.")
 
@@ -105,16 +118,11 @@ def build_simulated_portfolio_trading_result(
     for k, v in last_prices.items():
         if not isinstance(k, str) or not k.strip():
             raise PaperTradingModelError("last_prices keys must be non-blank strings.")
-        if isinstance(v, bool) or isinstance(v, str) or not isinstance(v, Real):
-            raise PaperTradingModelError("last_prices values must be finite numeric data > 0.")
-        fv = float(v)
-        if not math.isfinite(fv) or fv <= 0:
-            raise PaperTradingModelError("last_prices values must be finite numeric data > 0.")
-        validated_prices[k] = fv
+        validated_prices[k] = _require_finite_number("last_prices values", v)
+        if validated_prices[k] <= 0:
+            raise PaperTradingModelError("last_prices values must be > 0.")
 
-    # 12. Position state validation & 13. Position metrics
     position_results = []
-
     for symbol_key, pos in portfolio.positions.items():
         if not isinstance(symbol_key, str) or not symbol_key.strip():
             raise PaperTradingModelError("portfolio.positions key must be a non-blank string.")
@@ -130,30 +138,21 @@ def build_simulated_portfolio_trading_result(
         if pos.quantity < 0:
             raise PaperTradingModelError("position.quantity must be >= 0.")
 
-        if isinstance(pos.average_cost, bool) or not isinstance(pos.average_cost, Real):
-            raise PaperTradingModelError("position.average_cost must be finite numeric data.")
-        avg_cost = float(pos.average_cost)
-        if not math.isfinite(avg_cost):
-            raise PaperTradingModelError("position.average_cost must be finite numeric data.")
-        if avg_cost < 0:
-            raise PaperTradingModelError("position.average_cost must be >= 0.")
+        avg_cost = _require_finite_number("position.average_cost", pos.average_cost, non_negative=True)
         if pos.quantity > 0 and avg_cost <= 0:
             raise PaperTradingModelError("open position average_cost must be > 0.")
         if pos.quantity == 0 and avg_cost != 0.0:
             raise PaperTradingModelError("closed position average_cost must be 0.")
 
-        if isinstance(pos.realized_pnl, bool) or not isinstance(pos.realized_pnl, Real):
-            raise PaperTradingModelError("position.realized_pnl must be finite numeric data.")
-        realized_pnl = float(pos.realized_pnl)
-        if not math.isfinite(realized_pnl):
-            raise PaperTradingModelError("position.realized_pnl must be finite numeric data.")
+        realized_pnl = _require_finite_number("position.realized_pnl", pos.realized_pnl)
 
         if pos.quantity > 0:
             if pos.symbol not in validated_prices:
                 raise PaperTradingModelError(f"Missing last price for open position: {pos.symbol}")
             last_price = validated_prices[pos.symbol]
-            market_val = float(pos.quantity * last_price)
-            unrealized_pnl = market_val - float(pos.quantity * avg_cost)
+            market_val = _require_finite_number("position market_value", float(pos.quantity * last_price), non_negative=True)
+            cost_basis = _require_finite_number("position cost_basis", float(pos.quantity * avg_cost), non_negative=True)
+            unrealized_pnl = _require_finite_number("position unrealized_pnl", market_val - cost_basis)
         else:
             last_price = None
             market_val = 0.0
@@ -172,7 +171,6 @@ def build_simulated_portfolio_trading_result(
     position_results.sort(key=lambda x: x.symbol)
     positions_tuple = tuple(position_results)
 
-    # 14. Pending state validation
     if not isinstance(runtime_state.pending_orders, dict):
         raise PaperTradingModelError("pending_orders must be a dictionary.")
 
@@ -199,16 +197,12 @@ def build_simulated_portfolio_trading_result(
         if isinstance(order.quantity, bool) or not isinstance(order.quantity, int) or order.quantity <= 0:
             raise PaperTradingModelError("order quantity must be a positive integer.")
 
-        if isinstance(state.reference_price, bool) or not isinstance(state.reference_price, Real):
-            raise PaperTradingModelError("pending reference_price must be numeric.")
-        ref_price = float(state.reference_price)
-        if not math.isfinite(ref_price) or ref_price <= 0:
-            raise PaperTradingModelError("pending reference_price must be finite and strictly positive.")
+        ref_price = _require_finite_number("pending reference_price", state.reference_price, non_negative=True)
+        if ref_price <= 0:
+            raise PaperTradingModelError("pending reference_price must be > 0.")
 
         reserved_buy_notional = float(order.quantity * ref_price) if order.side == "BUY" else 0.0
-
-        if reserved_buy_notional < 0 or not math.isfinite(reserved_buy_notional):
-             raise PaperTradingModelError("reserved buy notional must be finite and >= 0.")
+        reserved_buy_notional = _require_finite_number("reserved buy notional", reserved_buy_notional, non_negative=True)
 
         pending_results.append(SimulatedPortfolioPendingOrderResult(
             order_id=order.order_id,
@@ -225,14 +219,17 @@ def build_simulated_portfolio_trading_result(
     pending_results.sort(key=lambda x: (x.symbol, x.order_id))
     pending_tuple = tuple(pending_results)
 
-    # 15. Aggregate metrics
-    total_market_value = float(sum(p.market_value for p in positions_tuple))
-    total_equity = final_cash + total_market_value
-    realized_pnl = float(sum(p.realized_pnl for p in positions_tuple))
-    unrealized_pnl = float(sum(p.unrealized_pnl for p in positions_tuple if p.quantity > 0))
+    total_market_value = _require_finite_number("total_market_value", sum(p.market_value for p in positions_tuple), non_negative=True)
+    total_equity = _require_finite_number("total_equity", final_cash + total_market_value, non_negative=True)
+    realized_pnl = _require_finite_number("realized_pnl", sum(p.realized_pnl for p in positions_tuple))
+    unrealized_pnl = _require_finite_number("unrealized_pnl", sum(p.unrealized_pnl for p in positions_tuple if p.quantity > 0))
 
-    total_return = total_equity - init_cash_float
-    total_return_pct = None if init_cash_float == 0 else total_return / init_cash_float
+    total_return = _require_finite_number("total_return", total_equity - init_cash_float)
+    
+    if init_cash_float == 0:
+        total_return_pct = None
+    else:
+        total_return_pct = _require_finite_number("total_return_pct", total_return / init_cash_float)
 
     open_position_count = sum(1 for p in positions_tuple if p.quantity > 0)
 
@@ -241,7 +238,6 @@ def build_simulated_portfolio_trading_result(
     rejection_count = len(portfolio.trade_log.rejections)
     audit_record_count = len(portfolio.trade_log.records)
 
-    # 16. Trade Log preservation
     return SimulatedPortfolioTradingResult(
         initial_cash=init_cash_float,
         final_cash=final_cash,
@@ -263,3 +259,4 @@ def build_simulated_portfolio_trading_result(
         rejections=tuple(portfolio.trade_log.rejections),
         audit_log=tuple(portfolio.trade_log.records),
     )
+

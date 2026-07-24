@@ -779,4 +779,11 @@ was changed. Reviewer Gate is required and `MERGE_GATE: HOLD`.
 - **Tests**: Implemented full `test_paper_trading_portfolio_results.py` covering model constraints, construction rules, validation policies, identity limits, metric counts, and preservation logic.
 - **Deferred Scope**: explicitly deferred JSON/Markdown/CSV exporters, multi-symbol CLI flags, GUI, `--max-total-exposure`, and live trading.
 
+### 12.9 Phase 53.2 Reviewer Correction Record
+
+- **Mutable Runtime Re-Validation**: Added explicit `isinstance` checks for mutable `portfolio`, `portfolio.positions`, `portfolio.trade_log`, and its inner collections inside `build_simulated_portfolio_trading_result`.
+- **Numeric Overflow Validation**: Implemented private `_require_finite_number` helper to guarantee `float` extraction and catch `math.nan`, `math.inf`, `-math.inf` on inputs.
+- **Derived Value Protection**: Re-validated all intermediate derived values (`market_val`, `cost_basis`, `unrealized_pnl`, `total_equity`, `reserved_buy_notional`) to fail closed on float overflows instead of silently propagating `inf`/`nan`.
+- **Extended Test Matrix**: Expanded `test_paper_trading_portfolio_results.py` using `subTest` loop coverage for boundary type errors. Added regression tests to artificially induce numeric overflows on all derived metrics.
+
 **Phase 53.2 status:** Complete. `MERGE_GATE: HOLD`. Phase 53.3 has not started.
