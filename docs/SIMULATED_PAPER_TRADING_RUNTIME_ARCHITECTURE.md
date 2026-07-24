@@ -786,4 +786,15 @@ was changed. Reviewer Gate is required and `MERGE_GATE: HOLD`.
 - **Derived Value Protection**: Re-validated all intermediate derived values (`market_val`, `cost_basis`, `unrealized_pnl`, `total_equity`, `reserved_buy_notional`) to fail closed on float overflows instead of silently propagating `inf`/`nan`.
 - **Extended Test Matrix**: Expanded `test_paper_trading_portfolio_results.py` using `subTest` loop coverage for boundary type errors. Added regression tests to artificially induce numeric overflows on all derived metrics.
 
-**Phase 53.2 status:** Complete. `MERGE_GATE: HOLD`. Phase 53.3 has not started.
+**Phase 53.2 status:** Complete. `MERGE_GATE: HOLD`. Phase 53.3 has started.
+
+## 13. Phase 53.3 Aggregate Portfolio Serialization
+
+Phase 53.3 added the `simulated_portfolio_trading_result` schema v1 boundary via `src/tw_stock_tool/paper_trading/portfolio_serialization.py`.
+
+- **Independent Schema**: Schema v1 does not inherit from or widen the single-symbol schema v3. It strictly represents the multi-symbol portfolio results.
+- **Canonical Ordering**: Schema v1 strictly requires positions to be canonically ordered by `symbol` and pending orders to be canonically ordered by `(symbol, order_id)`.
+- **Top-level Validation**: Deserialization fails closed on missing/extra fields and invalid schema versions.
+- **Numeric Enforcement**: All numeric properties enforce strict numeric typing and fail closed on string coercions or non-finite values.
+
+**Phase 53.3 status:** Implementation complete.
