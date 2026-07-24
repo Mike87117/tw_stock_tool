@@ -436,17 +436,20 @@ Excel behavior remain unchanged. No Phase 50.12, broker, live-trading,
 recommendation, scheduler, database, GUI, or Excel reconstruction behavior
 was added.
 
-Phase 51.1：完成（Reviewer Gate PASS；Merge Gate HOLD）
-PHASE_TYPE: TESTS_ONLY
+Phase 51.1：已透過 cumulative PR #29 合併
+Phase 51.2：已透過 cumulative PR #29 合併
+
+Phase 52.1：Reviewer Gate PASS；透過 cumulative Phase 52.2 PR 等待整合
+PHASE_TYPE: TESTS_AND_CI_ONLY
 MERGE_GATE: HOLD
 
-本 phase 以 Backtest Report、Parameter Sweep、Walk Forward 為 characterization 對象，鎖定共用 Backtest engine parameter defaults、custom parsing、forwarding 與 metadata。沒有修改 production code，沒有新增 shared argument helper。
-
-Phase 51.2：完成（Reviewer Gate HOLD）
-PHASE_TYPE: PRODUCTION_CODE
+Phase 52.2：完成（Reviewer Gate HOLD）
+PHASE_TYPE: RELEASE_METADATA
+TARGET_VERSION: 0.4.0
 MERGE_GATE: HOLD
 
-共用 `build_backtest_parameters(args)` 已抽出至 `_report_cli_arguments.py`，三個 CLI 已使用同一個 mapping；flags、defaults、help、engine forwarding、metadata、outputs 與 failure behavior 保持不變。production code 淨縮減 11 行。未實作 argument registration helper，因三個 CLI 的 help/order/default contracts 不完全一致；沒有加入 CLI framework，也沒有開始下一 Phase。branch 等待 Reviewer Gate。
+Package version 已更新至 0.4.0，v0.4.0 changelog 已完成，installed distribution version consistency 已納入 CI；Phase 52.1 package smoke 包含在 cumulative branch。沒有 production runtime code 或 dependency changes，沒有建立 tag、GitHub Release 或 PyPI publish，沒有開始 Phase 52.3；branch 等待 Reviewer Gate。
+
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
