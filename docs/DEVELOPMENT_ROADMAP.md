@@ -439,17 +439,21 @@ was added.
 Phase 51.1：已透過 cumulative PR #29 合併
 Phase 51.2：已透過 cumulative PR #29 合併
 
-Phase 52.1：Reviewer Gate PASS；透過 cumulative Phase 52.2 PR 等待整合
+Phase 52.1：已透過 cumulative PR #31 合併
 PHASE_TYPE: TESTS_AND_CI_ONLY
-MERGE_GATE: HOLD
 
-Phase 52.2：完成（Reviewer Gate HOLD）
+Phase 52.2：已透過 cumulative PR #31 合併
 PHASE_TYPE: RELEASE_METADATA
 TARGET_VERSION: 0.4.0
+MAIN_MERGE_COMMIT: 3270491c577e88d3dc19df7fe9f8930f127e8ca0
+
+Phase 52.3：完成（Reviewer Gate HOLD）
+PHASE_TYPE: RELEASE_PUBLICATION_READINESS
+TARGET_VERSION: 0.4.0
+TARGET_TAG: v0.4.0
 MERGE_GATE: HOLD
 
-Package version 已更新至 0.4.0，v0.4.0 changelog 已完成，installed distribution version consistency 已納入 CI；Phase 52.1 package smoke 包含在 cumulative branch。沒有 production runtime code 或 dependency changes，沒有建立 tag、GitHub Release 或 PyPI publish，沒有開始 Phase 52.3；branch 等待 Reviewer Gate。
-
+v0.4.0 changelog 日期已校正為 2026-07-24。已重新驗證 package metadata、安裝與 console entrypoint。`v0.4.0` tag 與 GitHub Release 尚未建立。本 Phase 不建立 tag、不建立 GitHub Release、不發布 PyPI。等待 Reviewer Gate 與 merge。merge 後才允許獨立 publication action。沒有開始 Phase 53。
 ## 14. Broker Interface
 
 Broker Interface 是未來可能串接券商 API 的抽象層。
