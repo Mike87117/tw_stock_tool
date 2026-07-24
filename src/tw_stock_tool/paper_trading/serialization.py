@@ -93,62 +93,65 @@ def _deserialize_trade_log_record(data: Any, index: int) -> SimulatedTradeLogRec
             error_code=None if data["error_code"] is None else str(data["error_code"]),
             error_message=None if data["error_message"] is None else str(data["error_message"]),
         )
-    except (ValueError, TypeError) as exc:
+    except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
         raise PaperTradingModelError(f"Audit record {index} invalid: {exc}") from exc
 
 
+def _serialize_simulated_order(o: SimulatedOrder, index: int | str) -> dict[str, Any]:
+    if not isinstance(o.metadata, dict):
+        raise PaperTradingModelError(f"Order {index} metadata must be a dict.")
+    try:
+        json.dumps(o.metadata)
+    except (TypeError, ValueError):
+        raise PaperTradingModelError(f"Order {index} metadata is not JSON serializable.")
+
+    return {
+        "order_id": str(o.order_id),
+        "symbol": str(o.symbol),
+        "side": str(o.side),
+        "quantity": _enforce_numeric(o.quantity, int, f"orders[{index}].quantity"),
+        "signal_time": _serialize_datetime_like(o.signal_time),
+        "created_at": _serialize_datetime_like(o.created_at),
+        "strategy": str(o.strategy) if o.strategy is not None else None,
+        "metadata": dict(o.metadata),
+    }
+
+
+def _serialize_simulated_fill(f: SimulatedFill, index: int | str) -> dict[str, Any]:
+    return {
+        "order_id": str(f.order_id),
+        "symbol": str(f.symbol),
+        "side": str(f.side),
+        "quantity": _enforce_numeric(f.quantity, int, f"fills[{index}].quantity"),
+        "price": _enforce_numeric(f.price, float, f"fills[{index}].price"),
+        "filled_at": _serialize_datetime_like(f.filled_at),
+        "fee": _enforce_numeric(f.fee, float, f"fills[{index}].fee"),
+        "tax": _enforce_numeric(f.tax, float, f"fills[{index}].tax"),
+        "slippage": _enforce_numeric(f.slippage, float, f"fills[{index}].slippage"),
+    }
+
+
+def _serialize_simulated_rejection(r: SimulatedOrderRejection, index: int | str) -> dict[str, Any]:
+    c_ord = r.candidate_order
+    return {
+        "candidate_order": {
+            "order_id": str(c_ord.order_id),
+            "symbol": str(c_ord.symbol),
+            "side": str(c_ord.side),
+            "quantity": _enforce_numeric(c_ord.quantity, int, f"rejections[{index}].candidate_order.quantity"),
+            "signal_time": _serialize_datetime_like(c_ord.signal_time),
+            "created_at": _serialize_datetime_like(c_ord.created_at),
+            "strategy": str(c_ord.strategy) if c_ord.strategy is not None else None,
+            "metadata": dict(c_ord.metadata),
+        },
+        "reasons": list(r.reasons),
+    }
+
+
 def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult) -> dict[str, Any]:
-    orders = []
-    for i, o in enumerate(result.orders):
-        if not isinstance(o.metadata, dict):
-            raise PaperTradingModelError(f"Order {i} metadata must be a dict.")
-        try:
-            json.dumps(o.metadata)
-        except (TypeError, ValueError):
-            raise PaperTradingModelError(f"Order {i} metadata is not JSON serializable.")
-
-        orders.append({
-            "order_id": str(o.order_id),
-            "symbol": str(o.symbol),
-            "side": str(o.side),
-            "quantity": _enforce_numeric(o.quantity, int, f"orders[{i}].quantity"),
-            "signal_time": _serialize_datetime_like(o.signal_time),
-            "created_at": _serialize_datetime_like(o.created_at),
-            "strategy": str(o.strategy) if o.strategy is not None else None,
-            "metadata": dict(o.metadata),
-        })
-    
-    fills = []
-    for i, f in enumerate(result.fills):
-        fills.append({
-            "order_id": str(f.order_id),
-            "symbol": str(f.symbol),
-            "side": str(f.side),
-            "quantity": _enforce_numeric(f.quantity, int, f"fills[{i}].quantity"),
-            "price": _enforce_numeric(f.price, float, f"fills[{i}].price"),
-            "filled_at": _serialize_datetime_like(f.filled_at),
-            "fee": _enforce_numeric(f.fee, float, f"fills[{i}].fee"),
-            "tax": _enforce_numeric(f.tax, float, f"fills[{i}].tax"),
-            "slippage": _enforce_numeric(f.slippage, float, f"fills[{i}].slippage"),
-        })
-
-    rejections = []
-    for i, r in enumerate(result.rejections):
-        c_ord = r.candidate_order
-        rejections.append({
-            "candidate_order": {
-                "order_id": str(c_ord.order_id),
-                "symbol": str(c_ord.symbol),
-                "side": str(c_ord.side),
-                "quantity": _enforce_numeric(c_ord.quantity, int, f"rejections[{i}].candidate_order.quantity"),
-                "signal_time": _serialize_datetime_like(c_ord.signal_time),
-                "created_at": _serialize_datetime_like(c_ord.created_at),
-                "strategy": str(c_ord.strategy) if c_ord.strategy is not None else None,
-                "metadata": dict(c_ord.metadata),
-            },
-            "reasons": list(r.reasons),
-        })
-
+    orders = [_serialize_simulated_order(o, i) for i, o in enumerate(result.orders)]
+    fills = [_serialize_simulated_fill(f, i) for i, f in enumerate(result.fills)]
+    rejections = [_serialize_simulated_rejection(r, i) for i, r in enumerate(result.rejections)]
     audit_log = [_serialize_trade_log_record(record, i) for i, record in enumerate(result.audit_log)]
 
     return {
@@ -175,7 +178,7 @@ def serialize_simulated_paper_trading_result(result: SimulatedPaperTradingResult
 def _enforce_numeric(val: Any, t: type, name: str) -> Any:
     if isinstance(val, bool):
         raise PaperTradingModelError(f"Field {name} cannot be a boolean.")
-    
+
     if t is int:
         if isinstance(val, float):
             if not math.isfinite(val):
@@ -187,11 +190,128 @@ def _enforce_numeric(val: Any, t: type, name: str) -> Any:
         converted = t(val)
     except (ValueError, TypeError, OverflowError):
         raise PaperTradingModelError(f"Field {name} must be convertible to {t.__name__}.")
-        
+
     if t is float and not math.isfinite(converted):
         raise PaperTradingModelError(f"Field {name} must be finite.")
-        
+
     return converted
+
+
+def _deserialize_simulated_order(o: Any, index: int | str) -> SimulatedOrder:
+    if not isinstance(o, dict):
+        raise PaperTradingModelError(f"Order at index {index} must be a dict.")
+    o_allowed = {"order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy", "metadata"}
+    o_missing = o_allowed - set(o.keys())
+    if o_missing:
+        raise PaperTradingModelError(f"Order {index} missing fields: {o_missing}")
+    o_extra = set(o.keys()) - o_allowed
+    if o_extra:
+        raise PaperTradingModelError(f"Order {index} extra fields: {o_extra}")
+
+    if not isinstance(o["metadata"], dict):
+        raise PaperTradingModelError(f"Order {index} metadata must be a dict.")
+
+    try:
+        json.dumps(o["metadata"])
+    except (TypeError, ValueError):
+        raise PaperTradingModelError(f"Order {index} metadata is not JSON serializable.")
+
+    qty = _enforce_numeric(o["quantity"], int, f"orders[{index}].quantity")
+
+    try:
+        return SimulatedOrder(
+            order_id=str(o["order_id"]),
+            symbol=str(o["symbol"]),
+            side=str(o["side"]),  # type check implicitly in SimulatedOrder
+            quantity=qty,
+            signal_time=str(o["signal_time"]) if o["signal_time"] is not None else None,
+            created_at=str(o["created_at"]) if o["created_at"] is not None else None,
+            strategy=str(o["strategy"]) if o["strategy"] is not None else None,
+            metadata=dict(o["metadata"]),
+        )
+    except Exception as e:
+        raise PaperTradingModelError(f"Order {index} invalid: {e}")
+
+
+def _deserialize_simulated_fill(f: Any, index: int | str) -> SimulatedFill:
+    if not isinstance(f, dict):
+        raise PaperTradingModelError(f"Fill at index {index} must be a dict.")
+    f_allowed = {"order_id", "symbol", "side", "quantity", "price", "filled_at", "fee", "tax", "slippage"}
+    f_missing = f_allowed - set(f.keys())
+    if f_missing:
+        raise PaperTradingModelError(f"Fill {index} missing fields: {f_missing}")
+    f_extra = set(f.keys()) - f_allowed
+    if f_extra:
+        raise PaperTradingModelError(f"Fill {index} extra fields: {f_extra}")
+
+    qty = _enforce_numeric(f["quantity"], int, f"fills[{index}].quantity")
+    price = _enforce_numeric(f["price"], float, f"fills[{index}].price")
+    fee = _enforce_numeric(f["fee"], float, f"fills[{index}].fee")
+    tax = _enforce_numeric(f["tax"], float, f"fills[{index}].tax")
+    slippage = _enforce_numeric(f["slippage"], float, f"fills[{index}].slippage")
+
+    try:
+        return SimulatedFill(
+            order_id=str(f["order_id"]),
+            symbol=str(f["symbol"]),
+            side=str(f["side"]),
+            quantity=qty,
+            price=price,
+            filled_at=str(f["filled_at"]) if f["filled_at"] is not None else None,
+            fee=fee,
+            tax=tax,
+            slippage=slippage,
+        )
+    except Exception as e:
+        raise PaperTradingModelError(f"Fill {index} invalid: {e}")
+
+
+def _deserialize_simulated_rejection(r: Any, index: int | str) -> SimulatedOrderRejection:
+    if not isinstance(r, dict):
+        raise PaperTradingModelError(f"Rejection at index {index} must be a dict.")
+    r_allowed = {"candidate_order", "reasons"}
+    r_missing = r_allowed - set(r.keys())
+    if r_missing:
+        raise PaperTradingModelError(f"Rejection {index} missing fields: {r_missing}")
+    r_extra = set(r.keys()) - r_allowed
+    if r_extra:
+        raise PaperTradingModelError(f"Rejection {index} extra fields: {r_extra}")
+
+    c_ord = r["candidate_order"]
+    if not isinstance(c_ord, dict):
+        raise PaperTradingModelError(f"Rejection {index} candidate_order must be a dict.")
+
+    c_allowed = {"order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy", "metadata"}
+    c_missing = c_allowed - set(c_ord.keys())
+    if c_missing:
+        raise PaperTradingModelError(f"Rejection {index} candidate_order missing fields: {c_missing}")
+
+    c_extra = set(c_ord.keys()) - c_allowed
+    if c_extra:
+        raise PaperTradingModelError(f"Rejection {index} candidate_order extra fields: {c_extra}")
+
+    qty = _enforce_numeric(c_ord["quantity"], int, f"rejections[{index}].candidate_order.quantity")
+    try:
+        candidate_obj = SimulatedOrder(
+            order_id=str(c_ord["order_id"]),
+            symbol=str(c_ord["symbol"]),
+            side=str(c_ord["side"]),
+            quantity=qty,
+            signal_time=str(c_ord["signal_time"]) if c_ord["signal_time"] is not None else None,
+            created_at=str(c_ord["created_at"]) if c_ord["created_at"] is not None else None,
+            strategy=str(c_ord["strategy"]) if c_ord["strategy"] is not None else None,
+            metadata=dict(c_ord["metadata"]) if "metadata" in c_ord else {},
+        )
+
+        if not isinstance(r["reasons"], list):
+            raise PaperTradingModelError(f"Rejection {index} reasons must be a list.")
+        reasons = tuple(str(x) for x in r["reasons"])
+        return SimulatedOrderRejection(
+            candidate_order=candidate_obj,
+            reasons=reasons,
+        )
+    except Exception as e:
+        raise PaperTradingModelError(f"Rejection {index} invalid: {e}")
 
 
 def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> SimulatedPaperTradingResult:
@@ -216,11 +336,11 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
     missing = allowed_keys - set(data.keys())
     if missing:
         raise PaperTradingModelError(f"Missing required top-level fields: {missing}")
-    
+
     extra = set(data.keys()) - allowed_keys
     if extra:
         raise PaperTradingModelError(f"Extra unknown top-level fields: {extra}")
-    
+
     if data["result_type"] != "simulated_paper_trading_result":
         raise PaperTradingModelError(f"Unsupported result_type: {data['result_type']}")
 
@@ -229,124 +349,14 @@ def deserialize_simulated_paper_trading_result(data: dict[str, Any]) -> Simulate
     if not isinstance(data["fills"], list):
         raise PaperTradingModelError("Field 'fills' must be a list.")
 
-    parsed_orders = []
-    for i, o in enumerate(data["orders"]):
-        if not isinstance(o, dict):
-            raise PaperTradingModelError(f"Order at index {i} must be a dict.")
-        o_allowed = {"order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy", "metadata"}
-        o_missing = o_allowed - set(o.keys())
-        if o_missing:
-            raise PaperTradingModelError(f"Order {i} missing fields: {o_missing}")
-        o_extra = set(o.keys()) - o_allowed
-        if o_extra:
-            raise PaperTradingModelError(f"Order {i} extra fields: {o_extra}")
-        
-        if not isinstance(o["metadata"], dict):
-            raise PaperTradingModelError(f"Order {i} metadata must be a dict.")
-        
-        try:
-            json.dumps(o["metadata"])
-        except (TypeError, ValueError):
-            raise PaperTradingModelError(f"Order {i} metadata is not JSON serializable.")
-
-        qty = _enforce_numeric(o["quantity"], int, f"orders[{i}].quantity")
-
-        try:
-            order_obj = SimulatedOrder(
-                order_id=str(o["order_id"]),
-                symbol=str(o["symbol"]),
-                side=str(o["side"]),  # type check implicitly in SimulatedOrder
-                quantity=qty,
-                signal_time=str(o["signal_time"]) if o["signal_time"] is not None else None,
-                created_at=str(o["created_at"]) if o["created_at"] is not None else None,
-                strategy=str(o["strategy"]) if o["strategy"] is not None else None,
-                metadata=dict(o["metadata"]),
-            )
-        except Exception as e:
-            raise PaperTradingModelError(f"Order {i} invalid: {e}")
-        parsed_orders.append(order_obj)
-        
-    parsed_fills = []
-    for i, f in enumerate(data["fills"]):
-        if not isinstance(f, dict):
-            raise PaperTradingModelError(f"Fill at index {i} must be a dict.")
-        f_allowed = {"order_id", "symbol", "side", "quantity", "price", "filled_at", "fee", "tax", "slippage"}
-        f_missing = f_allowed - set(f.keys())
-        if f_missing:
-            raise PaperTradingModelError(f"Fill {i} missing fields: {f_missing}")
-        f_extra = set(f.keys()) - f_allowed
-        if f_extra:
-            raise PaperTradingModelError(f"Fill {i} extra fields: {f_extra}")
-        
-        qty = _enforce_numeric(f["quantity"], int, f"fills[{i}].quantity")
-        price = _enforce_numeric(f["price"], float, f"fills[{i}].price")
-        fee = _enforce_numeric(f["fee"], float, f"fills[{i}].fee")
-        tax = _enforce_numeric(f["tax"], float, f"fills[{i}].tax")
-        slippage = _enforce_numeric(f["slippage"], float, f"fills[{i}].slippage")
-        
-        try:
-            fill_obj = SimulatedFill(
-                order_id=str(f["order_id"]),
-                symbol=str(f["symbol"]),
-                side=str(f["side"]),
-                quantity=qty,
-                price=price,
-                filled_at=str(f["filled_at"]) if f["filled_at"] is not None else None,
-                fee=fee,
-                tax=tax,
-                slippage=slippage,
-            )
-        except Exception as e:
-            raise PaperTradingModelError(f"Fill {i} invalid: {e}")
-        parsed_fills.append(fill_obj)
+    parsed_orders = [_deserialize_simulated_order(o, i) for i, o in enumerate(data["orders"])]
+    parsed_fills = [_deserialize_simulated_fill(f, i) for i, f in enumerate(data["fills"])]
 
     parsed_rejections = []
     if "rejections" in data:
         if not isinstance(data["rejections"], list):
             raise PaperTradingModelError("Field 'rejections' must be a list.")
-        for i, r in enumerate(data["rejections"]):
-            if not isinstance(r, dict):
-                raise PaperTradingModelError(f"Rejection at index {i} must be a dict.")
-            r_allowed = {"candidate_order", "reasons"}
-            r_missing = r_allowed - set(r.keys())
-            if r_missing:
-                raise PaperTradingModelError(f"Rejection {i} missing fields: {r_missing}")
-            r_extra = set(r.keys()) - r_allowed
-            if r_extra:
-                raise PaperTradingModelError(f"Rejection {i} extra fields: {r_extra}")
-            
-            c_ord = r["candidate_order"]
-            if not isinstance(c_ord, dict):
-                raise PaperTradingModelError(f"Rejection {i} candidate_order must be a dict.")
-            
-            c_allowed = {"order_id", "symbol", "side", "quantity", "signal_time", "created_at", "strategy", "metadata"}
-            c_missing = c_allowed - set(c_ord.keys())
-            if c_missing:
-                raise PaperTradingModelError(f"Rejection {i} candidate_order missing fields: {c_missing}")
-            
-            qty = _enforce_numeric(c_ord["quantity"], int, f"rejections[{i}].candidate_order.quantity")
-            try:
-                candidate_obj = SimulatedOrder(
-                    order_id=str(c_ord["order_id"]),
-                    symbol=str(c_ord["symbol"]),
-                    side=str(c_ord["side"]),
-                    quantity=qty,
-                    signal_time=str(c_ord["signal_time"]) if c_ord["signal_time"] is not None else None,
-                    created_at=str(c_ord["created_at"]) if c_ord["created_at"] is not None else None,
-                    strategy=str(c_ord["strategy"]) if c_ord["strategy"] is not None else None,
-                    metadata=dict(c_ord["metadata"]) if "metadata" in c_ord else {},
-                )
-                
-                if not isinstance(r["reasons"], list):
-                    raise PaperTradingModelError(f"Rejection {i} reasons must be a list.")
-                reasons = tuple(str(x) for x in r["reasons"])
-                rejection_obj = SimulatedOrderRejection(
-                    candidate_order=candidate_obj,
-                    reasons=reasons,
-                )
-            except Exception as e:
-                raise PaperTradingModelError(f"Rejection {i} invalid: {e}")
-            parsed_rejections.append(rejection_obj)
+        parsed_rejections = [_deserialize_simulated_rejection(r, i) for i, r in enumerate(data["rejections"])]
 
     parsed_audit_log = []
     if schema_version >= 3:
