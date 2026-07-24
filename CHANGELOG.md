@@ -28,7 +28,7 @@
 - Repository-root Python entry points and compatibility imports are no longer supported. Use `twstock ...` or `tw_stock_tool.*`.
 - AI Report uses `--output-excel`; ML Dataset uses `--output-csv`; update scripts that used generic `--output`.
 - The legacy Daily Watchlist workflow was retired; use `twstock daily`.
-- The obsolete Verify Batch utility was retired; use the canonical stock-list and price-data smoke-check commands.
+- The obsolete Verify Batch utility was retired. Use `twstock stock-list smoke-check` and `twstock price-smoke-check` for supported source checks; the former TWSE OHLCV parity report has no direct replacement.
 - Root-level standalone AI walk-forward and baseline-model entrypoints were removed; use the package-level research APIs.
 - The alternate class-based `BacktestEngine`/`BaseStrategy` path was removed; use the active function-based `tw_stock_tool.backtesting` APIs.
 
