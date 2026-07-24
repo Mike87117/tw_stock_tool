@@ -131,6 +131,50 @@ class TestSimulatedPortfolioResults(unittest.TestCase):
             build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={})
         self.portfolio.trade_log = SimulatedTradeLog()
 
+    def test_invalid_runtime_type(self):
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(object(), initial_cash=100.0, last_prices={})
+
+    def test_invalid_pending_container(self):
+        self.runtime_state.pending_orders = None
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={})
+        self.runtime_state.pending_orders = {}
+
+    def test_invalid_pending_key_type(self):
+        order = SimulatedOrder("O1", "2330", "BUY", 1000, self.dt)
+        self.runtime_state.pending_orders[123] = SimulatedPendingOrderState(order, 600.0)
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={})
+        self.runtime_state.pending_orders.clear()
+
+    def test_huge_initial_cash(self):
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=10**1000, last_prices={})
+
+    def test_huge_portfolio_cash(self):
+        self.portfolio.cash = 10**1000
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={})
+        self.portfolio.cash = 100000.0
+
+    def test_huge_last_price(self):
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={"2330": 10**1000})
+
+    def test_huge_position_quantity(self):
+        self.portfolio.positions["2330"] = SimulatedPosition("2330", 10**1000, 1.0, 0.0)
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={"2330": 1.0})
+        self.portfolio.positions.clear()
+
+    def test_huge_pending_quantity(self):
+        order = SimulatedOrder("O1", "2330", "BUY", 10**1000, self.dt)
+        self.runtime_state.pending_orders["2330"] = SimulatedPendingOrderState(order, 1.0)
+        with self.assertRaises(PaperTradingModelError):
+            build_simulated_portfolio_trading_result(self.runtime_state, initial_cash=100.0, last_prices={})
+        self.runtime_state.pending_orders.clear()
+
     def test_trade_log_mutation(self):
         attrs = ["orders", "fills", "rejections", "records"]
         for attr in attrs:

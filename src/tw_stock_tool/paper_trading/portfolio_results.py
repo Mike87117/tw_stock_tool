@@ -73,12 +73,27 @@ class SimulatedPortfolioTradingResult:
 def _require_finite_number(name: str, value: object, *, non_negative: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
         raise PaperTradingModelError(f"{name} must be finite numeric data.")
-    val_float = float(value)
-    if not math.isfinite(val_float):
+
+    try:
+        numeric = float(value)
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.") from None
+
+    if not math.isfinite(numeric):
         raise PaperTradingModelError(f"{name} must be finite numeric data.")
-    if non_negative and val_float < 0:
+
+    if non_negative and numeric < 0:
         raise PaperTradingModelError(f"{name} must be >= 0.")
-    return val_float
+
+    return numeric
+
+
+def _multiply_finite_numbers(name: str, left: object, right: object, *, non_negative: bool = False) -> float:
+    try:
+        value = left * right
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.") from None
+    return _require_finite_number(name, value, non_negative=non_negative)
 
 
 def build_simulated_portfolio_trading_result(
@@ -99,7 +114,7 @@ def build_simulated_portfolio_trading_result(
         raise PaperTradingModelError("portfolio.positions must be a dictionary.")
     if not isinstance(portfolio.trade_log, SimulatedTradeLog):
         raise PaperTradingModelError("portfolio.trade_log must be a SimulatedTradeLog.")
-    
+
     if not isinstance(portfolio.trade_log.orders, list):
         raise PaperTradingModelError("trade_log.orders must be a list.")
     if not isinstance(portfolio.trade_log.fills, list):
@@ -150,9 +165,13 @@ def build_simulated_portfolio_trading_result(
             if pos.symbol not in validated_prices:
                 raise PaperTradingModelError(f"Missing last price for open position: {pos.symbol}")
             last_price = validated_prices[pos.symbol]
-            market_val = _require_finite_number("position market_value", float(pos.quantity * last_price), non_negative=True)
-            cost_basis = _require_finite_number("position cost_basis", float(pos.quantity * avg_cost), non_negative=True)
-            unrealized_pnl = _require_finite_number("position unrealized_pnl", market_val - cost_basis)
+            market_val = _multiply_finite_numbers("position market_value", pos.quantity, last_price, non_negative=True)
+            cost_basis = _multiply_finite_numbers("position cost_basis", pos.quantity, avg_cost, non_negative=True)
+            try:
+                unrealized_diff = market_val - cost_basis
+            except (OverflowError, TypeError, ValueError):
+                raise PaperTradingModelError("position unrealized_pnl must be finite numeric data.") from None
+            unrealized_pnl = _require_finite_number("position unrealized_pnl", unrealized_diff)
         else:
             last_price = None
             market_val = 0.0
@@ -180,11 +199,11 @@ def build_simulated_portfolio_trading_result(
             raise PaperTradingModelError("pending_orders keys must be non-blank strings.")
         if not isinstance(state, SimulatedPendingOrderState):
             raise PaperTradingModelError("pending_orders values must be SimulatedPendingOrderState.")
-        
+
         order = getattr(state, "order", None)
         if not isinstance(order, SimulatedOrder):
             raise PaperTradingModelError("pending state order must be SimulatedOrder.")
-        
+
         if symbol_key != order.symbol:
             raise PaperTradingModelError("pending_orders key must match the pending order symbol.")
 
@@ -201,8 +220,10 @@ def build_simulated_portfolio_trading_result(
         if ref_price <= 0:
             raise PaperTradingModelError("pending reference_price must be > 0.")
 
-        reserved_buy_notional = float(order.quantity * ref_price) if order.side == "BUY" else 0.0
-        reserved_buy_notional = _require_finite_number("reserved buy notional", reserved_buy_notional, non_negative=True)
+        if order.side == "BUY":
+            reserved_buy_notional = _multiply_finite_numbers("reserved buy notional", order.quantity, ref_price, non_negative=True)
+        else:
+            reserved_buy_notional = 0.0
 
         pending_results.append(SimulatedPortfolioPendingOrderResult(
             order_id=order.order_id,
@@ -219,17 +240,44 @@ def build_simulated_portfolio_trading_result(
     pending_results.sort(key=lambda x: (x.symbol, x.order_id))
     pending_tuple = tuple(pending_results)
 
-    total_market_value = _require_finite_number("total_market_value", sum(p.market_value for p in positions_tuple), non_negative=True)
-    total_equity = _require_finite_number("total_equity", final_cash + total_market_value, non_negative=True)
-    realized_pnl = _require_finite_number("realized_pnl", sum(p.realized_pnl for p in positions_tuple))
-    unrealized_pnl = _require_finite_number("unrealized_pnl", sum(p.unrealized_pnl for p in positions_tuple if p.quantity > 0))
+    try:
+        total_market_value_raw = sum(p.market_value for p in positions_tuple)
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError("total_market_value must be finite numeric data.") from None
+    total_market_value = _require_finite_number("total_market_value", total_market_value_raw, non_negative=True)
 
-    total_return = _require_finite_number("total_return", total_equity - init_cash_float)
-    
+    try:
+        total_equity_raw = final_cash + total_market_value
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError("total_equity must be finite numeric data.") from None
+    total_equity = _require_finite_number("total_equity", total_equity_raw, non_negative=True)
+
+    try:
+        realized_pnl_raw = sum(p.realized_pnl for p in positions_tuple)
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError("realized_pnl must be finite numeric data.") from None
+    realized_pnl = _require_finite_number("realized_pnl", realized_pnl_raw)
+
+    try:
+        unrealized_pnl_raw = sum(p.unrealized_pnl for p in positions_tuple if p.quantity > 0)
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError("unrealized_pnl must be finite numeric data.") from None
+    unrealized_pnl = _require_finite_number("unrealized_pnl", unrealized_pnl_raw)
+
+    try:
+        total_return_raw = total_equity - init_cash_float
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError("total_return must be finite numeric data.") from None
+    total_return = _require_finite_number("total_return", total_return_raw)
+
     if init_cash_float == 0:
         total_return_pct = None
     else:
-        total_return_pct = _require_finite_number("total_return_pct", total_return / init_cash_float)
+        try:
+            total_return_pct_raw = total_return / init_cash_float
+        except (OverflowError, ZeroDivisionError, TypeError, ValueError):
+            raise PaperTradingModelError("total_return_pct must be finite numeric data.") from None
+        total_return_pct = _require_finite_number("total_return_pct", total_return_pct_raw)
 
     open_position_count = sum(1 for p in positions_tuple if p.quantity > 0)
 
