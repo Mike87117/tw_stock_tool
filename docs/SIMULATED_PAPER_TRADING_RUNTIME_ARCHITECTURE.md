@@ -476,3 +476,314 @@ Lifecycle integration is centralized in `paper_trading/stepper.py`, so the full-
 `SimulatedPaperTradingResult.audit_log` exposes the records. JSON schema v3 adds `audit_log`; strict v1/v2 loading is retained. Markdown adds `Trade Log`; CSV adds `<basename>_trade_log.csv`; Orders, Fills, and Rejections remain.
 
 Current limits remain deliberate: the stable result and CLI are single-symbol, the coordinator has no aggregate public result/CLI, and no broker, live account, real order, semi-automatic, or automatic trading interface exists.
+
+## 12. Phase 53.1 Aggregate Portfolio Result Boundary Planning
+
+### 12.1 Planning baseline and evidence
+
+Phase 53.1 planning was performed from repository `Mike87117/tw_stock_tool` on
+branch `main` at `302e1c4036d4a0262f68b811ca9a944014a2c340`; `origin/main` matched
+the same commit. The working tree was clean before inspection and the existing
+user stash was not touched. The required baseline targeted tests all passed:
+
+```text
+test_paper_trading_models       16 tests PASS
+test_paper_trading_runtime      30 tests PASS
+test_paper_trading_coordinator  36 tests PASS
+test_paper_trading_results      21 tests PASS
+test_paper_trading_serialization 46 tests PASS
+test_simulated_paper_trading_cli 42 tests PASS
+full suite                       1792 tests PASS
+compileall                       PASS
+```
+
+The local LLM Wiki health, projects, and current-project search endpoints were
+not reachable at the available local endpoints during this planning run. The
+Wiki result is therefore `unavailable` and non-blocking; repository source,
+tests, runtime behavior, and this architecture document are authoritative.
+
+### 12.2 Current execution path and gap
+
+The implemented multi-symbol path is:
+
+```text
+Mapping[str, DataFrame]
+-> chronological union timeline
+-> deterministic symbol-ascending processing
+-> same-timestamp pending fills first
+-> per-symbol candidate and guard evaluation
+-> shared SimulatedPortfolio and SimulatedPaperTradingRuntimeState
+-> runtime_state returned by run_chronological_multi_symbol_simulated_paper_trading(...)
+```
+
+`SimulatedPortfolio.positions` is already keyed by symbol, and
+`SimulatedTradeLog.records` is the global append-only canonical audit sequence.
+`SimulatedPaperTradingRuntimeState.pending_orders` preserves at most one
+accepted next-bar order per symbol and exposes pending BUY reservation through
+`total_reserved_buy_notional`. The coordinator intentionally returns mutable
+runtime state, not a report result.
+
+The remaining gap is a pure, offline aggregate result boundary. The current
+`SimulatedPaperTradingResult` has one `symbol`, one final position quantity,
+one average cost, one optional last price, and single-symbol equity semantics.
+It cannot represent all positions, per-symbol valuation/PnL, aggregate equity,
+global counts, or terminal pending orders without changing the existing
+single-symbol API and schema v3 contract.
+
+### 12.3 Approved aggregate result contract for Phase 53.2
+
+Phase 53.2 should add a separate module-level model, without changing
+`SimulatedPaperTradingResult`:
+
+```python
+@dataclass(frozen=True, slots=True)
+class SimulatedPortfolioPositionResult:
+    symbol: str
+    quantity: int
+    average_cost: float
+    last_price: float | None
+    market_value: float
+    realized_pnl: float
+    unrealized_pnl: float
+
+
+@dataclass(frozen=True, slots=True)
+class SimulatedPortfolioPendingOrderResult:
+    order_id: str
+    symbol: str
+    side: Literal["BUY", "SELL"]
+    quantity: int
+    signal_time: Any
+    created_at: Any | None
+    strategy: str | None
+    reference_price: float
+    reserved_buy_notional: float
+
+
+@dataclass(frozen=True, slots=True)
+class SimulatedPortfolioTradingResult:
+    initial_cash: float
+    final_cash: float
+    total_market_value: float
+    total_equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    total_return: float
+    total_return_pct: float | None
+    open_position_count: int
+    order_count: int
+    fill_count: int
+    rejection_count: int
+    audit_record_count: int
+    positions: tuple[SimulatedPortfolioPositionResult, ...]
+    pending_orders: tuple[SimulatedPortfolioPendingOrderResult, ...]
+    orders: tuple[SimulatedOrder, ...]
+    fills: tuple[SimulatedFill, ...]
+    rejections: tuple[SimulatedOrderRejection, ...]
+    audit_log: tuple[SimulatedTradeLogRecord, ...]
+```
+
+The position and pending-order rows are immutable scalar snapshots. Pending
+order metadata remains represented by the canonical order/audit records rather
+than being duplicated in a speculative result field. The aggregate result is
+frozen and slotted; collections are tuples. No rounding occurs at this domain
+boundary; exporters may format values later.
+
+The builder should accept exactly one
+`SimulatedPaperTradingRuntimeState`, an explicit `Mapping[str, float]` of final
+valuation prices, and `initial_cash`. It must validate the runtime state and
+read the portfolio and pending state without replacing or mutating either.
+This prevents an inconsistent portfolio/pending pair from being supplied.
+
+#### Final valuation-price contract
+
+- `last_prices` must be a `Mapping`; it is not a DataFrame, provider,
+  callback, or network/data-fetching input.
+- Every key must be a non-blank string. Every value, including extra entries,
+  must be a numeric `Real` but not `bool`, normalized to `float`, finite,
+  and strictly positive.
+- Extra symbol prices are allowed and ignored after validation. This lets a
+  caller pass a complete final-price map without changing the position policy.
+- Every open position (`quantity > 0`) must have a supplied price; a missing
+  price raises `PaperTradingModelError` (fail closed).
+- Closed positions do not require a price and expose `last_price=None`, zero
+  market value, and zero unrealized PnL.
+- No fetching, fallback lookup, DataFrame re-read, or implicit last-price
+  retention occurs in the pure builder. The caller owns the final-price source.
+
+#### Position inclusion and ordering
+
+The result includes every valid entry already present in
+`portfolio.positions`, including quantity-zero positions with realized PnL.
+Rejected-only symbols that never entered `portfolio.positions` are not invented
+as positions. Position rows are sorted by symbol for deterministic output;
+source dictionaries are never sorted in place. `symbol_count` and
+`closed_position_count` are intentionally derived (`len(positions)` and a
+quantity predicate) rather than stored duplicate fields.
+
+#### Aggregate metric definitions
+
+- `final_cash` is the runtime portfolio cash at build time.
+- `total_market_value` is the sum of `quantity * last_price` for open rows.
+- `total_equity = final_cash + total_market_value`.
+- `realized_pnl` is the sum of every position's realized PnL, including closed
+  positions.
+- `unrealized_pnl` is the sum of open-position unrealized PnL only.
+- `total_return = total_equity - initial_cash`.
+- `total_return_pct` is `total_return / initial_cash`, or `None` when initial
+  cash is zero.
+- `open_position_count` counts rows with quantity greater than zero.
+- `order_count`, `fill_count`, and `rejection_count` are lengths of the
+  existing global trade-log collections, including accepted orders that remain
+  pending.
+- `audit_record_count` is the length of `SimulatedTradeLog.records`.
+
+Initial cash and all derived numeric values must remain finite and non-negative
+where the existing models require it. The builder retains full float precision;
+there is no display-oriented rounding in the result model.
+
+#### Trade Log and pending terminal state
+
+`orders`, `fills`, `rejections`, and `audit_log` are copied to tuples in
+their existing order. The audit tuple is the canonical global chronological
+sequence; it must not be regenerated, grouped by symbol, or reordered. No risk
+decision, skip, failure, or rejection may be fabricated or dropped.
+
+The result includes a deterministic tuple of pending-order snapshots sorted by
+`(symbol, order_id)`. A pending BUY exposes its existing reference price and
+reserved BUY notional; a pending SELL exposes zero reservation. Pending BUY
+reservation is not current holdings, so it is not included in
+`total_market_value` or `total_equity`; it remains visible in the pending
+snapshot. Pending orders are included in `order_count` because they are already
+accepted in the canonical order collection.
+
+The builder must not fill, cancel, clear, or append terminal events for pending
+orders. Phase 53.2 only reports coordinator terminal state and does not change
+runtime behavior or add a synthetic terminal audit event.
+
+#### Mutation, identity, and error policy
+
+The builder is read-only: it must not mutate runtime state, portfolio, position
+objects, pending mappings, trade-log lists, or caller-provided price mappings;
+it must not sort source collections in place. Portfolio identity remains the
+same object before and after building a result.
+
+Phase 53.2 should reuse `PaperTradingModelError`, matching current paper-trading
+model conventions. It should fail closed for invalid initial cash, wrong runtime
+state type, non-Mapping prices, non-string/blank symbol keys, missing open
+prices, boolean/string/non-finite/non-positive prices, invalid position state,
+pending key/order-symbol mismatches, and invalid pending-order state. No new
+exception hierarchy is justified.
+
+#### Single-symbol compatibility
+
+`SimulatedPaperTradingResult`, `build_simulated_paper_trading_result`, the
+single-symbol engine, schema v1/v2/v3 loading, schema v3 serialization, existing
+Markdown/CSV exporters, existing single-stock CLI flags, and current package
+exports remain unchanged. The aggregate model is independent rather than a
+subclass or widening of the single-symbol result. Phase 53.2 should initially
+be imported from its module; package-root exports can wait for a separately
+reviewed stable public API decision.
+
+### 12.4 Deferred serialization and CLI boundaries
+
+The aggregate result must not be inserted into the existing single-symbol JSON
+schema v3. A later serialization phase may define an independent
+`simulated_portfolio_trading_result` schema v1. The planned sequence remains:
+
+```text
+Phase 53.2  aggregate pure-Python result model and builder
+Phase 53.3  aggregate serialization/schema boundary
+Phase 53.4  offline artifact operations and Markdown/CSV exporters
+Phase 53.5  multi-symbol CLI orchestration
+Phase 53.6  portfolio-wide user-facing risk enforcement
+```
+
+The current CLI still accepts one `--stock`, builds one DataFrame, and calls the
+single-symbol engine. It does not build a DataFrame mapping or shared runtime
+state. No multi-symbol CLI flag and no `--max-total-exposure` option is exposed
+by this planning phase.
+
+### 12.5 Rejected designs
+
+| Design | Decision | Repository-based reason |
+| --- | --- | --- |
+| Widen `SimulatedPaperTradingResult` for many symbols | Reject | Its `symbol` and single-position fields are covered by existing tests and schema v1/v2/v3; widening would make compatibility and exporters ambiguous. |
+| Return only mutable `SimulatedPortfolio` | Reject | It leaks runtime mutation, has no explicit valuation contract, and forces callers to recompute metrics and terminal pending state. |
+| Build one single-symbol result per symbol | Reject | Cash, equity, counts, risk decisions, and the global chronology would be duplicated or split, making portfolio totals undefined. |
+| Implement JSON first | Reject | The current serializer is deliberately a strict single-symbol schema v3 boundary; a file format must follow a tested domain model, not perform domain calculations. |
+| Make the coordinator return the aggregate result directly | Reject | The coordinator currently owns chronological execution and returns reusable runtime state; reporting there would couple execution, valuation, and snapshot semantics and reduce state reuse. |
+
+### 12.6 Phase 53.2 exact scope and test matrix
+
+Proposed files:
+
+```text
+src/tw_stock_tool/paper_trading/portfolio_results.py
+tests/test_paper_trading_portfolio_results.py
+docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md
+docs/DEVELOPMENT_ROADMAP.md
+```
+
+The implementation scope is limited to the three immutable result snapshot
+types, a pure builder, deterministic ordering, final-price validation,
+aggregate metrics, pending-order snapshots, and read-only behavior tests.
+
+The Phase 53.2 test matrix must cover:
+
+- construction: empty/cash-only, one and many open positions, closed realized
+  positions, mixed open/closed positions, event preservation, pending BUY,
+  pending SELL, and pending orders on multiple symbols;
+- valuation: exact prices, one missing open price, extra prices, bool/string,
+  NaN/infinity/zero/negative prices, and closed positions without a price;
+- metrics: market value, equity, realized/unrealized PnL, total return,
+  zero-initial-cash percentage, open count, and deterministic ordering;
+- compatibility and immutability: unchanged single-symbol result/builder,
+  unchanged schema v1/v2/v3, unchanged exporters/CLI/coordinator behavior,
+  unchanged Trade Log order, runtime/portfolio identity, and no in-place
+  sorting or mutation of mappings/lists.
+
+Explicit Phase 53.1 and Phase 53.2 non-goals are JSON, Markdown, CSV,
+filesystem I/O, CLI/GUI changes, network fetching, coordinator behavior
+changes, Risk Manager or Kill Switch rule changes, `--max-total-exposure`,
+package-version changes, Broker Interface, Shioaji, live/real/auto trading,
+and investment advice or guaranteed returns.
+
+### 12.7 Decision log and phase status
+
+| Decision | Rationale | Follow-up |
+| --- | --- | --- |
+| Add an independent frozen/slotted aggregate result | Preserve the tested single-symbol boundary while providing an immutable snapshot | Phase 53.2 |
+| Require explicit finite positive final prices for open positions | Keep valuation pure, deterministic, and fail closed without data fetching | Phase 53.2 |
+| Include closed portfolio positions | Preserve per-symbol realized PnL without inventing symbols from rejected orders | Phase 53.2 |
+| Preserve global event ordering and terminal pending state | Maintain canonical audit chronology and avoid runtime mutation | Phase 53.2 |
+| Defer schema, exporters, CLI, and public exports | Avoid coupling an unimplemented domain boundary to user-facing surfaces | Phases 53.3-53.5 |
+| Use `PaperTradingModelError` | Match existing model validation and avoid a speculative exception hierarchy | Phase 53.2 |
+
+**Phase 53.1 status:** Planning and documentation are complete. This phase is
+`RESEARCH_ONLY`, `OFFLINE_ONLY`, and `PLANNING_AND_DOCS_ONLY`; no production code,
+test code, serialization, exporter, CLI, GUI, broker, or live-trading behavior
+was changed. Reviewer Gate is required and `MERGE_GATE: HOLD`.
+
+### 12.8 Phase 53.2 Implementation Record
+
+- **New Module**: `src/tw_stock_tool/paper_trading/portfolio_results.py`
+- **Result Dataclasses**: Added `SimulatedPortfolioPositionResult`, `SimulatedPortfolioPendingOrderResult`, and `SimulatedPortfolioTradingResult`.
+- **Builder Signature**: Implemented `build_simulated_portfolio_trading_result(runtime_state, *, initial_cash, last_prices)`.
+- **Valuation Policy**: Exact matching `last_prices` required for open positions; missing prices fail closed. Extra prices ignored. No DataFrame or network lookup.
+- **Position Inclusion**: All portfolio positions mapped, including zero-quantity positions with realized PnL. Rejected-only symbols not fabricated.
+- **Pending Snapshot**: `(symbol, order_id)` deterministic order. Pending BUY exposes reserved notional, SELL is zero.
+- **Trade Log Preservation**: Immutable snapshots of original global collections preserving source object references and chronology.
+- **Read-Only Constraints**: Source properties, trade log lists, state variables, and `last_prices` mapping remain strictly unmodified.
+- **Shallow Immutability**: Result dataclasses are `frozen=True` and slotted, but preserve underlying mutable event object references (e.g. `SimulatedOrder`, `SimulatedFill`) from the trade log.
+- **Tests**: Implemented full `test_paper_trading_portfolio_results.py` covering model constraints, construction rules, validation policies, identity limits, metric counts, and preservation logic.
+- **Deferred Scope**: explicitly deferred JSON/Markdown/CSV exporters, multi-symbol CLI flags, GUI, `--max-total-exposure`, and live trading.
+
+### 12.9 Phase 53.2 Reviewer Correction Record
+
+- **Mutable Runtime Re-Validation**: Added explicit `isinstance` checks for mutable `portfolio`, `portfolio.positions`, `portfolio.trade_log`, and its inner collections inside `build_simulated_portfolio_trading_result`.
+- **Numeric Overflow Validation**: Implemented private `_require_finite_number` helper to guarantee `float` extraction and catch `math.nan`, `math.inf`, `-math.inf` on inputs.
+- **Derived Value Protection**: Re-validated all intermediate derived values (`market_val`, `cost_basis`, `unrealized_pnl`, `total_equity`, `reserved_buy_notional`) to fail closed on float overflows instead of silently propagating `inf`/`nan`.
+- **Extended Test Matrix**: Expanded `test_paper_trading_portfolio_results.py` using `subTest` loop coverage for boundary type errors. Added regression tests to artificially induce numeric overflows on all derived metrics.
+
+**Phase 53.2 status:** Complete. `MERGE_GATE: HOLD`. Phase 53.3 has not started.
