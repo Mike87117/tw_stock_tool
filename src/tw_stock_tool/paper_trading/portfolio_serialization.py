@@ -1,6 +1,7 @@
 import json
 import math
 import numbers
+import typing
 from typing import Any
 
 from tw_stock_tool.paper_trading.models import (
@@ -8,7 +9,9 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedOrder,
     SimulatedFill,
     SimulatedOrderRejection,
+    SimulatedTradeEventType,
     SimulatedTradeLogRecord,
+    SimulatedTradeStatus,
 )
 from tw_stock_tool.paper_trading.portfolio_results import (
     SimulatedPortfolioPositionResult,
@@ -67,11 +70,8 @@ def _require_finite_float(
 
 
 def _require_optional_string(name: str, value: object) -> str | None:
-    if value is not None:
-        if type(value) is not str:
-            raise PaperTradingModelError(f"Field {name} must be a str or None.")
-        if value.strip() == "":
-            raise PaperTradingModelError(f"Field {name} cannot be empty or whitespace.")
+    if value is not None and type(value) is not str:
+        raise PaperTradingModelError(f"Field {name} must be a str or None.")
     return value
 
 
@@ -79,6 +79,72 @@ def _require_timestamp_string_or_none(name: str, value: object) -> str | None:
     if value is not None and type(value) is not str:
         raise PaperTradingModelError(f"Field {name} must be a str or None.")
     return value
+
+
+def _validate_simulated_trade_log_record_for_serialization(
+    record: object,
+    index: int,
+) -> SimulatedTradeLogRecord:
+    if type(record) is not SimulatedTradeLogRecord:
+        raise PaperTradingModelError(f"audit_log[{index}] must be SimulatedTradeLogRecord.")
+
+    _require_exact_int(f"audit_log[{index}].sequence", record.sequence, minimum=1)
+    _require_non_blank_string(f"audit_log[{index}].record_id", record.record_id)
+
+    if not isinstance(record.event_type, SimulatedTradeEventType):
+        raise PaperTradingModelError(f"audit_log[{index}].event_type must be SimulatedTradeEventType.")
+
+    if not isinstance(record.status, SimulatedTradeStatus):
+        raise PaperTradingModelError(f"audit_log[{index}].status must be SimulatedTradeStatus.")
+
+    _require_non_blank_string(f"audit_log[{index}].order_id", record.order_id)
+    _require_non_blank_string(f"audit_log[{index}].symbol", record.symbol)
+
+    side = _require_non_blank_string(f"audit_log[{index}].side", record.side)
+    if side not in ("BUY", "SELL"):
+        raise PaperTradingModelError(f"audit_log[{index}].side must be BUY or SELL.")
+
+    _require_exact_int(f"audit_log[{index}].quantity", record.quantity, minimum=1)
+
+    exec_model = record.expected_execution_model
+    if type(exec_model) is not str or exec_model != "next_bar_open":
+        raise PaperTradingModelError(f"audit_log[{index}].expected_execution_model must be 'next_bar_open'.")
+
+    if record.fill_price is not None:
+        _require_finite_float(f"audit_log[{index}].fill_price", record.fill_price, strictly_positive=True)
+
+    _require_finite_float(f"audit_log[{index}].fee", record.fee, non_negative=True)
+    _require_finite_float(f"audit_log[{index}].tax", record.tax, non_negative=True)
+    _require_finite_float(f"audit_log[{index}].slippage", record.slippage, non_negative=True)
+
+    _require_optional_string(f"audit_log[{index}].strategy_name", record.strategy_name)
+    _require_optional_string(f"audit_log[{index}].error_code", record.error_code)
+    _require_optional_string(f"audit_log[{index}].error_message", record.error_message)
+
+    risk_allowed = record.risk_allowed
+    if risk_allowed is not None and type(risk_allowed) is not bool:
+        raise PaperTradingModelError(f"audit_log[{index}].risk_allowed must be bool or None.")
+
+    if type(record.risk_rejection_reasons) is not tuple:
+        raise PaperTradingModelError(f"audit_log[{index}].risk_rejection_reasons must be tuple.")
+    for j, reason in enumerate(record.risk_rejection_reasons):
+        _require_non_blank_string(f"audit_log[{index}].risk_rejection_reasons[{j}]", reason)
+
+    if not isinstance(record.strategy_metadata, typing.Mapping):
+        raise PaperTradingModelError(f"audit_log[{index}].strategy_metadata must be a Mapping.")
+    try:
+        json.dumps(dict(record.strategy_metadata), allow_nan=False)
+    except (TypeError, ValueError) as e:
+        raise PaperTradingModelError(f"audit_log[{index}].strategy_metadata must be JSON serializable: {e}")
+
+    if not isinstance(record.guard_metadata, typing.Mapping):
+        raise PaperTradingModelError(f"audit_log[{index}].guard_metadata must be a Mapping.")
+    try:
+        json.dumps(dict(record.guard_metadata), allow_nan=False)
+    except (TypeError, ValueError) as e:
+        raise PaperTradingModelError(f"audit_log[{index}].guard_metadata must be JSON serializable: {e}")
+
+    return record
 
 
 def serialize_simulated_portfolio_trading_result(
@@ -253,9 +319,13 @@ def serialize_simulated_portfolio_trading_result(
 
     audit_log = []
     for i, record in enumerate(result.audit_log):
-        if type(record) is not SimulatedTradeLogRecord:
-            raise PaperTradingModelError(f"audit_log[{i}] must be SimulatedTradeLogRecord.")
-        audit_log.append(_serialize_trade_log_record(record, i))
+        validated_record = _validate_simulated_trade_log_record_for_serialization(record, i)
+        try:
+            audit_log.append(_serialize_trade_log_record(validated_record, i))
+        except PaperTradingModelError:
+            raise
+        except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+            raise PaperTradingModelError(f"audit_log[{i}] is invalid.") from None
 
     if _require_exact_int("order_count", result.order_count) != len(orders):
         raise PaperTradingModelError(f"order_count {result.order_count} != {len(orders)}.")
@@ -462,10 +532,41 @@ def deserialize_simulated_portfolio_trading_result(
         except Exception as e:
             raise PaperTradingModelError(f"Pending order {i} invalid: {e}")
 
-    parsed_orders = [_deserialize_simulated_order(o, i) for i, o in enumerate(data["orders"])]
-    parsed_fills = [_deserialize_simulated_fill(f, i) for i, f in enumerate(data["fills"])]
-    parsed_rejections = [_deserialize_simulated_rejection(r, i) for i, r in enumerate(data["rejections"])]
-    parsed_audit_log = [_deserialize_trade_log_record(record, i) for i, record in enumerate(data["audit_log"])]
+    parsed_orders = []
+    for i, o in enumerate(data["orders"]):
+        try:
+            parsed_orders.append(_deserialize_simulated_order(o, i))
+        except PaperTradingModelError:
+            raise
+        except (AttributeError, TypeError, ValueError, OverflowError, KeyError) as e:
+            raise PaperTradingModelError(f"orders[{i}] deserialization failed: {e}") from None
+
+    parsed_fills = []
+    for i, f in enumerate(data["fills"]):
+        try:
+            parsed_fills.append(_deserialize_simulated_fill(f, i))
+        except PaperTradingModelError:
+            raise
+        except (AttributeError, TypeError, ValueError, OverflowError, KeyError) as e:
+            raise PaperTradingModelError(f"fills[{i}] deserialization failed: {e}") from None
+
+    parsed_rejections = []
+    for i, r in enumerate(data["rejections"]):
+        try:
+            parsed_rejections.append(_deserialize_simulated_rejection(r, i))
+        except PaperTradingModelError:
+            raise
+        except (AttributeError, TypeError, ValueError, OverflowError, KeyError) as e:
+            raise PaperTradingModelError(f"rejections[{i}] deserialization failed: {e}") from None
+
+    parsed_audit_log = []
+    for i, record in enumerate(data["audit_log"]):
+        try:
+            parsed_audit_log.append(_deserialize_trade_log_record(record, i))
+        except PaperTradingModelError:
+            raise
+        except (AttributeError, TypeError, ValueError, OverflowError, KeyError) as e:
+            raise PaperTradingModelError(f"audit_log[{i}] deserialization failed: {e}") from None
 
     open_position_count = _require_exact_int("open_position_count", data["open_position_count"])
     if open_position_count != actual_open:

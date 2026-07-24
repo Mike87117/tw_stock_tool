@@ -93,7 +93,7 @@ def _deserialize_trade_log_record(data: Any, index: int) -> SimulatedTradeLogRec
             error_code=None if data["error_code"] is None else str(data["error_code"]),
             error_message=None if data["error_message"] is None else str(data["error_message"]),
         )
-    except (ValueError, TypeError) as exc:
+    except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
         raise PaperTradingModelError(f"Audit record {index} invalid: {exc}") from exc
 
 

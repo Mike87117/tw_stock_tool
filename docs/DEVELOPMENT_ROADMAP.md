@@ -358,6 +358,8 @@ Explicit non-goals:
 - no investment advice
 - no guaranteed return
 - no recommended stocks
+- no Broker Interface implementation
+- no Shioaji
 
 ## 12. Kill Switch
 
@@ -453,15 +455,18 @@ MERGE_GATE: HOLD
 
 v0.4.0 changelog 日期已校正為 2026-07-24。已重新驗證 package metadata、安裝與 console entrypoint。`v0.4.0` tag 與 GitHub Release 已由獨立 publication action 建立。本 Phase 不修改 tag、不修改 GitHub Release、不發布 PyPI。沒有開始 Phase 53。
 
-Phase 53.1：已完成，透過 cumulative Phase 53.2 PR 等待整合
-Phase 53.2：完成（Reviewer Corrections 已實作，等待下一輪 Gate，目前維持 HOLD）
-Phase 53.3: Portfolio Serialization Implementation (DONE)
+Phase 53.1–53.2: merged via PR #34
+MAIN_MERGE_COMMIT: b8d01b34527b50ea8b0248b0f86585a5f5681306
+Phase 53.3: implementation complete, awaiting Reviewer Gate
 PHASE_TYPE: PRODUCTION_CODE
 RESEARCH_ONLY: YES
 OFFLINE_ONLY: YES
 SERIALIZATION_CHANGED: YES
+SINGLE_SYMBOL_SCHEMA_CHANGED: NO
+FILESYSTEM_CHANGED: NO
+PACKAGE_EXPORTS_CHANGED: NO
 CLI_CHANGED: NO
-PHASE_53_3_STARTED: YES
+PHASE_53_4_STARTED: NO
 MERGE_GATE: HOLD
 
 
