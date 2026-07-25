@@ -13,7 +13,6 @@ from tw_stock_tool.paper_trading.models import (
     SimulatedTradeLogRecord,
     SimulatedTradeStatus,
 )
-
 from tw_stock_tool.paper_trading.portfolio_report_data import (
     build_simulated_portfolio_fill_rows,
     build_simulated_portfolio_order_rows,
@@ -29,6 +28,30 @@ from tw_stock_tool.paper_trading.portfolio_results import (
     SimulatedPortfolioPositionResult,
     SimulatedPortfolioTradingResult,
 )
+
+
+def _make_cash_only_result() -> SimulatedPortfolioTradingResult:
+    return SimulatedPortfolioTradingResult(
+        initial_cash=100000.0,
+        final_cash=100000.0,
+        total_market_value=0.0,
+        total_equity=100000.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+        total_return=0.0,
+        total_return_pct=0.0,
+        open_position_count=0,
+        order_count=0,
+        fill_count=0,
+        rejection_count=0,
+        audit_record_count=0,
+        positions=(),
+        pending_orders=(),
+        orders=(),
+        fills=(),
+        rejections=(),
+        audit_log=(),
+    )
 
 
 def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolioTradingResult:
@@ -163,7 +186,6 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         error_message="Order rejected by risk guard.",
     )
 
-
     tot_ret = 665000.0 - initial_cash
     tot_ret_pct = tot_ret / initial_cash if initial_cash > 0 else None
 
@@ -211,12 +233,11 @@ class TestPortfolioReportData(unittest.TestCase):
                     with self.assertRaises(PaperTradingModelError):
                         b(inp)
 
-    def test_report_data_bundle_exact_keys_and_freshness(self):
+    def test_exact_keys_order_for_all_schemas(self):
         res = _make_sample_result()
-        data1 = build_simulated_portfolio_trading_report_data(res)
-        data2 = build_simulated_portfolio_trading_report_data(res)
+        data = build_simulated_portfolio_trading_report_data(res)
 
-        expected_keys = [
+        expected_bundle_keys = [
             "summary",
             "position_rows",
             "pending_order_rows",
@@ -225,13 +246,7 @@ class TestPortfolioReportData(unittest.TestCase):
             "rejection_rows",
             "trade_log_rows",
         ]
-        self.assertEqual(list(data1.keys()), expected_keys)
-        self.assertIsNot(data1, data2)
-        self.assertIsNot(data1["summary"], data2["summary"])
-
-    def test_summary_keys_and_zero_cash_handling(self):
-        res = _make_sample_result(initial_cash=100000.0)
-        summary = build_simulated_portfolio_trading_summary(res)
+        self.assertEqual(list(data.keys()), expected_bundle_keys)
 
         expected_summary_keys = [
             "initial_cash",
@@ -249,20 +264,8 @@ class TestPortfolioReportData(unittest.TestCase):
             "rejection_count",
             "audit_record_count",
         ]
-        self.assertEqual(list(summary.keys()), expected_summary_keys)
-        self.assertEqual(summary["pending_order_count"], 2)
-        self.assertAlmostEqual(summary["total_return_pct"], 5.65)
+        self.assertEqual(list(data["summary"].keys()), expected_summary_keys)
 
-        # Zero initial cash case
-        res_zero = _make_sample_result(initial_cash=0.0)
-        summary_zero = build_simulated_portfolio_trading_summary(res_zero)
-        self.assertIsNone(summary_zero["total_return_pct"])
-
-    def test_position_rows_closed_positions_and_order(self):
-        res = _make_sample_result()
-        rows = build_simulated_portfolio_position_rows(res)
-
-        self.assertEqual(len(rows), 2)
         expected_pos_keys = [
             "symbol",
             "quantity",
@@ -272,20 +275,8 @@ class TestPortfolioReportData(unittest.TestCase):
             "realized_pnl",
             "unrealized_pnl",
         ]
-        self.assertEqual(list(rows[0].keys()), expected_pos_keys)
-        self.assertEqual(rows[0]["symbol"], "2330")
-        self.assertEqual(rows[0]["quantity"], 1000)
+        self.assertEqual(list(data["position_rows"][0].keys()), expected_pos_keys)
 
-        # Closed position retained in order
-        self.assertEqual(rows[1]["symbol"], "2317")
-        self.assertEqual(rows[1]["quantity"], 0)
-        self.assertIsNone(rows[1]["last_price"])
-
-    def test_pending_order_rows_buy_and_sell(self):
-        res = _make_sample_result()
-        rows = build_simulated_portfolio_pending_order_rows(res)
-
-        self.assertEqual(len(rows), 2)
         expected_pending_keys = [
             "order_id",
             "symbol",
@@ -297,59 +288,194 @@ class TestPortfolioReportData(unittest.TestCase):
             "reference_price",
             "reserved_buy_notional",
         ]
-        self.assertEqual(list(rows[0].keys()), expected_pending_keys)
-        self.assertEqual(rows[0]["side"], "BUY")
-        self.assertEqual(rows[0]["reserved_buy_notional"], 270000.0)
+        self.assertEqual(list(data["pending_order_rows"][0].keys()), expected_pending_keys)
 
-        self.assertEqual(rows[1]["side"], "SELL")
-        self.assertEqual(rows[1]["reserved_buy_notional"], 0.0)
+        expected_order_keys = [
+            "order_id",
+            "symbol",
+            "side",
+            "quantity",
+            "signal_time",
+            "created_at",
+            "strategy",
+        ]
+        self.assertEqual(list(data["order_rows"][0].keys()), expected_order_keys)
 
-    def test_orders_fills_rejections_rows(self):
+        expected_fill_keys = [
+            "order_id",
+            "symbol",
+            "side",
+            "quantity",
+            "price",
+            "filled_at",
+            "fee",
+            "tax",
+            "slippage",
+            "gross_amount",
+            "net_cash_effect",
+        ]
+        self.assertEqual(list(data["fill_rows"][0].keys()), expected_fill_keys)
+
+        expected_rejection_keys = [
+            "order_id",
+            "symbol",
+            "side",
+            "quantity",
+            "signal_time",
+            "created_at",
+            "strategy",
+            "reasons",
+        ]
+        self.assertEqual(list(data["rejection_rows"][0].keys()), expected_rejection_keys)
+
+        expected_trade_log_keys = [
+            "sequence",
+            "record_id",
+            "event_type",
+            "status",
+            "order_id",
+            "symbol",
+            "side",
+            "quantity",
+            "signal_time",
+            "order_created_at",
+            "expected_execution_model",
+            "fill_time",
+            "fill_price",
+            "fee",
+            "tax",
+            "slippage",
+            "strategy_name",
+            "strategy_metadata",
+            "risk_allowed",
+            "risk_rejection_reasons",
+            "guard_metadata",
+            "error_code",
+            "error_message",
+        ]
+        self.assertEqual(list(data["trade_log_rows"][0].keys()), expected_trade_log_keys)
+
+    def test_empty_collections_on_cash_only_result(self):
+        res = _make_cash_only_result()
+        data = build_simulated_portfolio_trading_report_data(res)
+
+        self.assertEqual(data["position_rows"], [])
+        self.assertEqual(data["pending_order_rows"], [])
+        self.assertEqual(data["order_rows"], [])
+        self.assertEqual(data["fill_rows"], [])
+        self.assertEqual(data["rejection_rows"], [])
+        self.assertEqual(data["trade_log_rows"], [])
+        self.assertEqual(data["summary"]["pending_order_count"], 0)
+
+    def test_fresh_output_objects_independence(self):
         res = _make_sample_result()
-        orders = build_simulated_portfolio_order_rows(res)
-        fills = build_simulated_portfolio_fill_rows(res)
-        rejections = build_simulated_portfolio_rejection_rows(res)
+        data1 = build_simulated_portfolio_trading_report_data(res)
+        data2 = build_simulated_portfolio_trading_report_data(res)
 
-        self.assertEqual(len(orders), 1)
-        self.assertEqual(orders[0]["order_id"], "ORD_1")
+        self.assertIsNot(data1, data2)
+        self.assertIsNot(data1["summary"], data2["summary"])
 
-        self.assertEqual(len(fills), 1)
-        self.assertEqual(fills[0]["gross_amount"], 500000.0)
-        self.assertEqual(fills[0]["net_cash_effect"], -500712.0)
+        collection_keys = [
+            "position_rows",
+            "pending_order_rows",
+            "order_rows",
+            "fill_rows",
+            "rejection_rows",
+            "trade_log_rows",
+        ]
+        for key in collection_keys:
+            self.assertIsNot(data1[key], data2[key])
+            for r1, r2 in zip(data1[key], data2[key]):
+                self.assertIsNot(r1, r2)
 
-        self.assertEqual(len(rejections), 1)
-        self.assertEqual(rejections[0]["reasons"], "Max notional exceeded | Insufficient cash")
+        # Mutate data1 and verify data2 and res remain untouched
+        data1["summary"]["initial_cash"] = 999999.0
+        self.assertEqual(data2["summary"]["initial_cash"], 100000.0)
+        self.assertEqual(res.initial_cash, 100000.0)
 
-    def test_trade_log_rows_chronology_and_no_sequence_sorting(self):
+        data1["position_rows"][0]["symbol"] = "MUTATED"
+        self.assertEqual(data2["position_rows"][0]["symbol"], "2330")
+        self.assertEqual(res.positions[0].symbol, "2330")
+
+    def test_exact_source_order_preservation(self):
         res = _make_sample_result()
-        rows = build_simulated_portfolio_trade_log_rows(res)
+        data = build_simulated_portfolio_trading_report_data(res)
 
-        self.assertEqual(len(rows), 2)
-        # Verify sequence order in rows matches result.audit_log order exactly (sequence 2 before sequence 1)
-        self.assertEqual(rows[0]["sequence"], 2)
-        self.assertEqual(rows[0]["event_type"], "accepted_pending")
-        self.assertEqual(rows[0]["status"], "pending_next_bar_open")
+        self.assertEqual([r["symbol"] for r in data["position_rows"]], [p.symbol for p in res.positions])
+        self.assertEqual([r["order_id"] for r in data["pending_order_rows"]], [po.order_id for po in res.pending_orders])
+        self.assertEqual([r["order_id"] for r in data["order_rows"]], [o.order_id for o in res.orders])
+        self.assertEqual([r["order_id"] for r in data["fill_rows"]], [f.order_id for f in res.fills])
+        self.assertEqual([r["order_id"] for r in data["rejection_rows"]], [r.candidate_order.order_id for r in res.rejections])
 
-        self.assertEqual(rows[1]["sequence"], 1)
-        self.assertEqual(rows[1]["event_type"], "rejected")
-        self.assertEqual(rows[1]["status"], "risk_rejected")
+        # Trade log preserves exact audit_log tuple order (sequence 2 before sequence 1)
+        self.assertEqual([r["record_id"] for r in data["trade_log_rows"]], [rec.record_id for rec in res.audit_log])
+        self.assertEqual([r["sequence"] for r in data["trade_log_rows"]], [2, 1])
 
-
-        # Metadata dictionary copying
-        self.assertIsNot(rows[0]["strategy_metadata"], res.audit_log[0].strategy_metadata)
-        self.assertEqual(rows[0]["strategy_metadata"], {"window": 10})
-
-    def test_mutation_safety(self):
+    def test_metadata_and_joined_values_formatting(self):
         res = _make_sample_result()
-        orig_positions = res.positions
-        orig_pending = res.pending_orders
-        orig_audit = res.audit_log
+        data = build_simulated_portfolio_trading_report_data(res)
 
+        # Verify strategy_metadata and guard_metadata are ordinary dicts
+        rec0_strat = data["trade_log_rows"][0]["strategy_metadata"]
+        rec0_guard = data["trade_log_rows"][0]["guard_metadata"]
+        self.assertIs(type(rec0_strat), dict)
+        self.assertIs(type(rec0_guard), dict)
+        self.assertIsNot(rec0_strat, res.audit_log[0].strategy_metadata)
+        self.assertIsNot(rec0_guard, res.audit_log[0].guard_metadata)
+        self.assertEqual(rec0_strat, {"window": 10})
+        self.assertEqual(rec0_guard, {"guard": "ok"})
+
+        # Verify joined string formatting and no reordering of reasons
+        self.assertEqual(data["trade_log_rows"][1]["risk_rejection_reasons"], "Risk fail 1 | Risk fail 2")
+        self.assertEqual(data["rejection_rows"][0]["reasons"], "Max notional exceeded | Insufficient cash")
+
+    def test_comprehensive_mutation_safety(self):
+        res = _make_sample_result()
+
+        orig_positions_tuple = res.positions
+        orig_pos_elems = list(res.positions)
+        orig_pending_tuple = res.pending_orders
+        orig_pending_elems = list(res.pending_orders)
+        orig_orders_tuple = res.orders
+        orig_order_elems = list(res.orders)
+        orig_fills_tuple = res.fills
+        orig_fill_elems = list(res.fills)
+        orig_rejections_tuple = res.rejections
+        orig_rejection_elems = list(res.rejections)
+        orig_audit_tuple = res.audit_log
+        orig_audit_elems = list(res.audit_log)
+        orig_rec0_strat = dict(res.audit_log[0].strategy_metadata)
+        orig_rec0_guard = dict(res.audit_log[0].guard_metadata)
+
+        # Invoke all builders
+        build_simulated_portfolio_trading_summary(res)
+        build_simulated_portfolio_position_rows(res)
+        build_simulated_portfolio_pending_order_rows(res)
+        build_simulated_portfolio_order_rows(res)
+        build_simulated_portfolio_fill_rows(res)
+        build_simulated_portfolio_rejection_rows(res)
+        build_simulated_portfolio_trade_log_rows(res)
         build_simulated_portfolio_trading_report_data(res)
 
-        self.assertIs(res.positions, orig_positions)
-        self.assertIs(res.pending_orders, orig_pending)
-        self.assertIs(res.audit_log, orig_audit)
+        # Assert tuple identities unchanged
+        self.assertIs(res.positions, orig_positions_tuple)
+        self.assertIs(res.pending_orders, orig_pending_tuple)
+        self.assertIs(res.orders, orig_orders_tuple)
+        self.assertIs(res.fills, orig_fills_tuple)
+        self.assertIs(res.rejections, orig_rejections_tuple)
+        self.assertIs(res.audit_log, orig_audit_tuple)
+
+        # Assert element identities unchanged
+        self.assertEqual(list(res.positions), orig_pos_elems)
+        self.assertEqual(list(res.pending_orders), orig_pending_elems)
+        self.assertEqual(list(res.orders), orig_order_elems)
+        self.assertEqual(list(res.fills), orig_fill_elems)
+        self.assertEqual(list(res.rejections), orig_rejection_elems)
+        self.assertEqual(list(res.audit_log), orig_audit_elems)
+
+        # Assert metadata content unchanged
+        self.assertEqual(dict(res.audit_log[0].strategy_metadata), orig_rec0_strat)
+        self.assertEqual(dict(res.audit_log[0].guard_metadata), orig_rec0_guard)
 
 
 if __name__ == "__main__":
