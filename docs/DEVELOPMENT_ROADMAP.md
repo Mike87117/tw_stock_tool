@@ -492,14 +492,30 @@ MERGE_GATE: HOLD
 2. **First-Version Stock Inputs**:
    - `--stocks 2330 2317 2454`
    - `--file stocks.txt`
-   - Rules: Must provide at least one of `--stocks` or `--file`. Combined if both provided. Symbols normalized using existing normalization logic, duplicates removed deterministically. Blank symbols fail closed. Final list must not be empty.
+   - Rules:
+     - Must provide at least one of `--stocks` or `--file`.
+     - `--stocks` CLI input: explicitly provided empty string (`""`) or whitespace-only items (`"   "`) MUST fail closed (exit code 1) and are not silently dropped before validation.
+     - `--file` input: uses `load_stock_ids_from_file(...)` semantics; blank lines and `#` comment lines are ignored.
+     - Combined inputs: `--stocks` and `--file` can be combined, deduplicated deterministically based on first-occurrence order.
+     - Final list: if final normalized stock symbol list is empty after processing, execution fails closed.
    - Non-goals for Phase 53.5B: `--auto-stock-list`, `--stock-limit`, and `--stock-sample` are explicitly deferred.
 
 3. **First-Version Execution Parameters**:
    - Parameters: `--stocks`, `--file`, `--strategy` (choices: `ma_cross`, `macd`, `rsi`), `--initial-cash`, `--quantity-per-trade` (default 1000), `--period`, `--fee-rate`, `--tax-rate`, `--slippage-per-share`, `--force-refresh`, `--output-json` (required), `--overwrite` (default False).
+   - `--initial-cash` contract: required finite non-negative float. Allows `0` (when `initial_cash == 0`, `total_return_pct` remains `None`). Rejects `bool`, `NaN`, `infinity`, negative values (`< 0`), and non-numeric values.
    - Uniform assumptions across all portfolio symbols (shared strategy, period, quantity, fee, tax, slippage). No per-symbol strategy or quantity overrides in Phase 53.5B.
 
-4. **Orchestration Layering Architecture**:
+4. **Canonical Resolved Symbol Policy**:
+   - `analyze_stock(stock_id=...)` returns `StockAnalysis` containing `stock_id` (input ID) and `symbol` (canonical resolved symbol, e.g. `2330.TW`, `8069.TWO`).
+   - Rules:
+     1. User input list is used ONLY for data retrieval and error messages.
+     2. After calling `analyze_stock(stock_id=...)`, `analysis.symbol` MUST be used as the canonical portfolio symbol.
+     3. All downstream mappings MUST use `analysis.symbol` as key: `dataframes`, `last_prices`, `coordinator` symbols, runtime `positions`, pending `orders`, aggregate artifact `symbols`.
+     4. Raw input `stock_id` MUST NOT be used as coordinator key.
+     5. Resolved symbol MUST be a non-blank string and MUST be unique across all portfolio symbols.
+     6. If two different input stock IDs resolve to the same canonical symbol (e.g. `2330` and `2330.TW` both resolving to `2330.TW`), the entire execution MUST fail closed immediately (no silent dictionary overwrite). Error message includes conflicting input stock IDs and resolved canonical symbol.
+
+5. **Orchestration Layering Architecture**:
    - Facade (`src/tw_stock_tool/paper_trading/portfolio_engine.py`):
      `run_simulated_portfolio_trading_result(dataframes, *, initial_cash, last_prices, quantity_per_trade=1000, fee_rate=0.0, tax_rate=0.0, slippage_per_share=0.0, guard_decision=None, guard_decision_provider=None, strategy=None, strategy_metadata=None) -> SimulatedPortfolioTradingResult`
      - Validates inputs, creates shared `SimulatedPortfolio` & `SimulatedPaperTradingRuntimeState`, calls `run_chronological_multi_symbol_simulated_paper_trading`, builds and returns `SimulatedPortfolioTradingResult`.
@@ -507,27 +523,32 @@ MERGE_GATE: HOLD
    - CLI Adapter (`src/tw_stock_tool/cli/simulated_portfolio_trading_cli.py`):
      1. Collect & normalize symbols.
      2. Fetch & analyze each stock via existing `analyze_stock(...)`.
-     3. Generate strategy signals & build `Mapping[str, pandas.DataFrame]`.
-     4. Validate DataFrames and build `last_prices: Mapping[str, float]`.
-     5. Call portfolio engine facade.
-     6. Export JSON artifact via `export_simulated_portfolio_trading_result_json_file(...)`.
-     7. Perform read-back validation via `load_simulated_portfolio_trading_result_json_file(...)`.
-     8. Output deterministic summary & clean exit code.
+     3. Extract `analysis.symbol` as canonical resolved symbol.
+     4. Generate strategy signals & build `Mapping[str, pandas.DataFrame]` using canonical symbols.
+     5. Validate DataFrames and build `last_prices: Mapping[str, float]` using canonical symbols.
+     6. Call portfolio engine facade.
+     7. Export JSON artifact via `export_simulated_portfolio_trading_result_json_file(...)`.
+     8. Perform read-back validation via `load_simulated_portfolio_trading_result_json_file(...)`.
+     9. Call `build_simulated_portfolio_trading_summary(read_back_result)` for terminal summary presentation.
+     10. Output deterministic summary & clean exit code.
 
-5. **Fail-Closed Policy**:
+6. **Fail-Closed Error Policy & Artifact Atomicity Boundary**:
    - Complete portfolio fail-closed: If any single stock fails data fetch, analysis, strategy execution, returns empty DataFrame, lacks `Open`/`Close`/signals, or has invalid/non-numeric/NaN/infinity/<=0 final close, the entire portfolio execution fails immediately (exit code 1).
-   - Rationale: Portfolio shares cash pool and exposure; omitting a stock distorts chronological fill order, reservation, and equity calculation.
+   - Pre-write failure contract: All data fetching, analysis, strategy signal generation, DataFrame validation, canonical resolved symbol checks, facade execution, and result building MUST succeed before artifact file writing is initiated. On pre-write failure, no artifact file is created or written.
+   - Filesystem atomicity contract: JSON filesystem helpers do NOT provide transactional atomicity. Mid-write filesystem failures or post-write read-back failures may leave partial/empty files on disk. Phase 53.5B does NOT claim transactional rollback, atomic replace, or ACID guarantees.
 
-6. **Artifact Output Contract**:
+7. **Artifact Output Contract**:
    - CLI requires `--output-json`, defaults `--overwrite` to False.
    - Writes JSON artifact via `export_simulated_portfolio_trading_result_json_file(...)`, re-loads via `load_simulated_portfolio_trading_result_json_file(...)`.
    - No `--output-markdown` or `--output-csv-dir` in execution CLI (handled separately by `simulated-portfolio-artifact`).
 
-7. **Deterministic Execution and Summary Output**:
+8. **Deterministic Execution and Terminal Summary Boundary**:
    - Preserves chronological timeline, deterministic symbol ordering, pending fill prioritization before new order evaluation, shared cash/portfolio/trade_log.
-   - Terminal summary displays 14 summary metrics (Initial Cash, Final Cash, Total Market Value, Total Equity, Realized PnL, Unrealized PnL, Total Return, Total Return Pct raw float, Open Position Count, Pending Order Count, Order Count, Fill Count, Rejection Count, Audit Record Count) and Output JSON Path.
+   - `build_simulated_portfolio_trading_summary(read_back_result)` is the SINGLE presentation boundary for terminal summary output.
+   - Execution CLI reads back written artifact and passes `read_back_result` to `build_simulated_portfolio_trading_summary(...)`. Execution CLI does NOT recompute domain metrics.
+   - Terminal summary displays 14 domain summary metrics (Initial Cash, Final Cash, Total Market Value, Total Equity, Realized PnL, Unrealized PnL, Total Return, Total Return Pct raw float, Open Position Count, Pending Order Count, Order Count, Fill Count, Rejection Count, Audit Record Count) plus Output JSON Path (printed separately).
 
-8. **Phase 53.5B Planned File Scope**:
+9. **Phase 53.5B Planned File Scope**:
    - `src/tw_stock_tool/paper_trading/portfolio_engine.py`
    - `src/tw_stock_tool/cli/simulated_portfolio_trading_cli.py`
    - `src/tw_stock_tool/cli/twstock_cli.py`
@@ -539,15 +560,16 @@ MERGE_GATE: HOLD
    - `docs/DEVELOPMENT_ROADMAP.md`
    - `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`
 
-9. **Phase 53.5B Planned Test Matrix**:
-   - Portfolio Engine Facade (16 tests planned): two-symbol execution, different trading dates, same-timestamp entry signals, deterministic symbol ordering, shared cash behavior, insufficient cash, open positions across symbols, realized PnL, terminal pending BUY/SELL, last-price mapping, missing last price fail closed, input mapping mutation protection, DataFrame mutation protection, coordinator invariance, single-symbol engine invariance.
-   - CLI Input (13 tests planned): `--stocks`, `--file`, combined `--stocks` & `--file`, duplicates, blank items, empty list, invalid strategy, invalid initial cash, invalid quantity, invalid rates, missing `--output-json`, existing output without `--overwrite`, existing output with `--overwrite`.
-   - CLI Execution (15 tests planned): successful two-symbol run, single analysis failure fails run, single strategy failure fails run, empty DataFrame, missing Open/Close, missing signals, invalid index, invalid final close, no partial artifact, successful JSON write, read-back validation, deterministic terminal summary, non-zero exit code, error output consistency.
-   - Integration (7 tests planned): `simulated-portfolio-trading` route registration, `--help`, artifact CLI compatibility (`validate`, `inspect`, `export-markdown`, `export-csv`), existing routes unchanged, single-symbol paper trading tests unchanged, clean subprocess import, Python 3.11/3.12 CI compatibility.
+10. **Phase 53.5B Planned Test Matrix**:
+    - Portfolio Engine Facade: two-symbol execution, different trading dates, same-timestamp entry signals, deterministic symbol ordering, shared cash behavior, insufficient cash, open positions across symbols, realized PnL, terminal pending BUY/SELL, last-price mapping, missing last price fail closed, input mapping mutation protection, DataFrame mutation protection, coordinator invariance, single-symbol engine invariance.
+    - CLI Input & Symbol Collection: `--stocks` input, `--file` input, combined `--stocks` & `--file`, duplicate symbol deduplication (first-occurrence order), blank CLI stock item fails closed, blank file line ignored, comment file line ignored, file containing only blanks/comments produces empty-list failure, bare TW stock resolves to `.TW` canonical symbol, bare TPEX stock fallback resolves to `.TWO` canonical symbol, explicit `.TW` input preserves resolved symbol, explicit `.TWO` input preserves resolved symbol, two inputs resolving to same canonical symbol fail closed, dataframes and last_prices use identical canonical keys, artifact symbols use canonical resolved symbols, invalid strategy choice, zero initial cash accepted (`total_return_pct is None`), negative initial cash rejected, bool initial cash rejected, NaN / infinity initial cash rejected, invalid quantity rejected, invalid fee/tax/slippage rates rejected, missing `--output-json` rejected, existing output without `--overwrite` rejected, existing output with `--overwrite` accepted.
+    - CLI Execution & Fail-Closed Semantics: successful two-symbol run, single analysis failure fails run (no artifact created pre-write), single strategy failure fails run (no artifact created pre-write), empty strategy DataFrame fails run, missing `Open`/`Close` column fails run, missing standard signals fails run, invalid index fails run, invalid final close fails run, no artifact created on pre-write execution or validation failure, successful JSON write, read-back validation, filesystem write or read-back failure does not claim transactional rollback, summary builder receives read-back result, CLI does not recompute domain metrics, output JSON path printed separately from 14 domain metrics, deterministic terminal summary output, non-zero exit code on failure, error output consistency.
+    - Integration & CLI Compatibility: `simulated-portfolio-trading` route registration in `twstock_cli.py`, `simulated-portfolio-trading --help`, produced JSON artifact passes `twstock simulated-portfolio-artifact validate/inspect/export-markdown/export-csv`, single-symbol CLI example includes required arguments (`--initial-cash`, `--quantity-per-trade`), no nonexistent single-symbol `--output-json`, existing unified commands unchanged, existing single-symbol paper trading tests unchanged, clean subprocess import, Python 3.11/3.12 CI compatibility.
 
-10. **Non-Goals & Deferred Scope**:
+11. **Non-Goals & Deferred Scope**:
     - Non-goals: No Broker Interface, No Shioaji, No live trading, No real orders, No semi-automatic/automatic trading, No stock recommendations, No investment advice, No guaranteed returns, No scheduler, No database, No GUI changes, No Excel exporter, No new schema version, No single-symbol schema changes, No coordinator/runtime/stepper semantic changes, No result model/report-data changes, No exporter changes, No generic writer changes, No package version bump, No release publication, No per-symbol strategy/quantity configuration, No scanner-to-portfolio pipeline.
     - Phase 53.6 Deferred Risk Flags: `--max-order-notional`, `--max-position-quantity`, `--max-position-notional`, `--max-total-exposure`.
+
 
 
 ## 14. Broker Interface

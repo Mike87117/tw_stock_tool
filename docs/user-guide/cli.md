@@ -21,7 +21,7 @@ twstock parameter-sweep --stock 2330 --strategy all --period 2y --output-excel
 twstock walk-forward --stock 2330 --strategy ma_cross --period 10y --output-excel
 twstock ai-report --stock 2330 --period 5y --horizon 5 --output-excel
 twstock ml-dataset --stock 2330 --period 5y --horizon 5 --output-csv
-twstock simulated-paper-trading --stock 2330 --strategy ma_cross
+twstock simulated-paper-trading --stock 2330 --strategy ma_cross --initial-cash 100000 --quantity-per-trade 1000
 twstock simulated-portfolio-artifact inspect output/portfolio.json
 twstock gui
 ~~~
