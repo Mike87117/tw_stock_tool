@@ -70,6 +70,7 @@ def _make_sample_portfolio_result() -> SimulatedPortfolioTradingResult:
         signal_time="2026-01-02",
         created_at="2026-01-02T09:00:00",
         strategy="ma_cross",
+        metadata={"order_meta": "val1"},
     )
     fill1 = SimulatedFill(
         order_id="ORD_1",
@@ -91,6 +92,7 @@ def _make_sample_portfolio_result() -> SimulatedPortfolioTradingResult:
             signal_time="2026-01-02",
             created_at="2026-01-02T09:00:00",
             strategy="rsi",
+            metadata={"candidate_meta": "val2"},
         ),
         reasons=("風控拒絕",),
     )
@@ -114,7 +116,7 @@ def _make_sample_portfolio_result() -> SimulatedPortfolioTradingResult:
         strategy_name="ma_cross",
         strategy_metadata={"window": 10},
         risk_allowed=True,
-        risk_rejection_reasons=(),
+        risk_rejection_reasons=("risk_reason_1",),
         guard_metadata={"guard": "ok"},
         error_code=None,
         error_message=None,
@@ -141,6 +143,143 @@ def _make_sample_portfolio_result() -> SimulatedPortfolioTradingResult:
         rejections=(rejection1,),
         audit_log=(rec1,),
     )
+
+
+def _snapshot_result(res: SimulatedPortfolioTradingResult) -> dict:
+    return {
+        "scalars": (
+            res.initial_cash,
+            res.final_cash,
+            res.total_market_value,
+            res.total_equity,
+            res.realized_pnl,
+            res.unrealized_pnl,
+            res.total_return,
+            res.total_return_pct,
+            res.open_position_count,
+            res.order_count,
+            res.fill_count,
+            res.rejection_count,
+            res.audit_record_count,
+        ),
+        "tuples_identities": {
+            "positions": res.positions,
+            "pending_orders": res.pending_orders,
+            "orders": res.orders,
+            "fills": res.fills,
+            "rejections": res.rejections,
+            "audit_log": res.audit_log,
+        },
+        "positions": [(p, (p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl)) for p in res.positions],
+        "pending_orders": [(po, (po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional)) for po in res.pending_orders],
+        "orders": [
+            (
+                o,
+                (o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy),
+                o.metadata,
+                dict(o.metadata) if o.metadata is not None else None,
+            )
+            for o in res.orders
+        ],
+        "fills": [(f, (f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage)) for f in res.fills],
+        "rejections": [
+            (
+                r,
+                r.candidate_order,
+                (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy),
+                r.candidate_order.metadata,
+                dict(r.candidate_order.metadata) if r.candidate_order.metadata is not None else None,
+                r.reasons,
+                tuple(r.reasons),
+            )
+            for r in res.rejections
+        ],
+        "audit_log": [
+            (
+                rec,
+                (rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, rec.risk_allowed, rec.error_code, rec.error_message),
+                rec.strategy_metadata,
+                dict(rec.strategy_metadata),
+                rec.risk_rejection_reasons,
+                tuple(rec.risk_rejection_reasons),
+                rec.guard_metadata,
+                dict(rec.guard_metadata),
+            )
+            for rec in res.audit_log
+        ],
+    }
+
+
+def _assert_snapshot_equal(tc: unittest.TestCase, res: SimulatedPortfolioTradingResult, snap: dict) -> None:
+    current_scalars = (
+        res.initial_cash,
+        res.final_cash,
+        res.total_market_value,
+        res.total_equity,
+        res.realized_pnl,
+        res.unrealized_pnl,
+        res.total_return,
+        res.total_return_pct,
+        res.open_position_count,
+        res.order_count,
+        res.fill_count,
+        res.rejection_count,
+        res.audit_record_count,
+    )
+    tc.assertEqual(current_scalars, snap["scalars"])
+
+    # Tuple identities
+    tc.assertIs(res.positions, snap["tuples_identities"]["positions"])
+    tc.assertIs(res.pending_orders, snap["tuples_identities"]["pending_orders"])
+    tc.assertIs(res.orders, snap["tuples_identities"]["orders"])
+    tc.assertIs(res.fills, snap["tuples_identities"]["fills"])
+    tc.assertIs(res.rejections, snap["tuples_identities"]["rejections"])
+    tc.assertIs(res.audit_log, snap["tuples_identities"]["audit_log"])
+
+    # Positions
+    for (p_obj, p_vals), (orig_obj, orig_vals) in zip([(p, (p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl)) for p in res.positions], snap["positions"]):
+        tc.assertIs(p_obj, orig_obj)
+        tc.assertEqual(p_vals, orig_vals)
+
+    # Pending orders
+    for (po_obj, po_vals), (orig_obj, orig_vals) in zip([(po, (po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional)) for po in res.pending_orders], snap["pending_orders"]):
+        tc.assertIs(po_obj, orig_obj)
+        tc.assertEqual(po_vals, orig_vals)
+
+    # Orders
+    for o, (orig_obj, orig_vals, orig_meta_id, orig_meta_dict) in zip(res.orders, snap["orders"]):
+        tc.assertIs(o, orig_obj)
+        tc.assertEqual((o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy), orig_vals)
+        tc.assertIs(o.metadata, orig_meta_id)
+        if o.metadata is not None:
+            tc.assertEqual(dict(o.metadata), orig_meta_dict)
+
+    # Fills
+    for (f_obj, f_vals), (orig_obj, orig_vals) in zip([(f, (f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage)) for f in res.fills], snap["fills"]):
+        tc.assertIs(f_obj, orig_obj)
+        tc.assertEqual(f_vals, orig_vals)
+
+    # Rejections
+    for r, (orig_rej_id, orig_cand_id, orig_cand_vals, orig_cand_meta_id, orig_cand_meta_dict, orig_reasons_id, orig_reasons_tuple) in zip(res.rejections, snap["rejections"]):
+        tc.assertIs(r, orig_rej_id)
+        tc.assertIs(r.candidate_order, orig_cand_id)
+        tc.assertEqual((r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), orig_cand_vals)
+        tc.assertIs(r.candidate_order.metadata, orig_cand_meta_id)
+        if r.candidate_order.metadata is not None:
+            tc.assertEqual(dict(r.candidate_order.metadata), orig_cand_meta_dict)
+        tc.assertIs(r.reasons, orig_reasons_id)
+        tc.assertEqual(r.reasons, orig_reasons_tuple)
+
+    # Audit log
+    for rec, (orig_rec_id, orig_rec_vals, orig_strat_meta_id, orig_strat_meta_dict, orig_risk_reasons_id, orig_risk_reasons_tuple, orig_guard_meta_id, orig_guard_meta_dict) in zip(res.audit_log, snap["audit_log"]):
+        tc.assertIs(rec, orig_rec_id)
+        tc.assertEqual((rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, rec.risk_allowed, rec.error_code, rec.error_message), orig_rec_vals)
+        tc.assertIs(rec.strategy_metadata, orig_strat_meta_id)
+        tc.assertEqual(dict(rec.strategy_metadata), orig_strat_meta_dict)
+        tc.assertIs(rec.risk_rejection_reasons, orig_risk_reasons_id)
+        tc.assertEqual(rec.risk_rejection_reasons, orig_risk_reasons_tuple)
+        tc.assertIs(rec.guard_metadata, orig_guard_meta_id)
+        tc.assertEqual(dict(rec.guard_metadata), orig_guard_meta_dict)
 
 
 class TestPaperTradingPortfolioSerializationFiles(unittest.TestCase):
@@ -222,60 +361,15 @@ class TestPaperTradingPortfolioSerializationFiles(unittest.TestCase):
     def test_export_source_mutation_safety(self) -> None:
         res = self.result
 
-        # Pre-export snapshots
-        orig_positions_tuple = res.positions
-        orig_pos_elems = list(res.positions)
-        orig_pending_tuple = res.pending_orders
-        orig_pending_elems = list(res.pending_orders)
-        orig_orders_tuple = res.orders
-        orig_order_elems = list(res.orders)
-        orig_fills_tuple = res.fills
-        orig_fill_elems = list(res.fills)
-        orig_rejections_tuple = res.rejections
-        orig_rejection_elems = list(res.rejections)
-        orig_audit_tuple = res.audit_log
-        orig_audit_elems = list(res.audit_log)
-
-        pos_snapshot = [(p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl) for p in res.positions]
-        pending_snapshot = [(po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional) for po in res.pending_orders]
-        order_snapshot = [(o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy) for o in res.orders]
-        fill_snapshot = [(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage) for f in res.fills]
-        rejection_snapshot = [(r.candidate_order, (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), r.reasons) for r in res.rejections]
-        audit_snapshot = [(rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, dict(rec.strategy_metadata), rec.risk_allowed, rec.risk_rejection_reasons, dict(rec.guard_metadata), rec.error_code, rec.error_message) for rec in res.audit_log]
+        # Pre-export full snapshot
+        snap = _snapshot_result(res)
 
         # Execute export
         target_path = self.temp_dir / "mutation_test.json"
         export_simulated_portfolio_trading_result_json_file(res, target_path)
 
-        # Assert tuple identities unchanged
-        self.assertIs(res.positions, orig_positions_tuple)
-        self.assertIs(res.pending_orders, orig_pending_tuple)
-        self.assertIs(res.orders, orig_orders_tuple)
-        self.assertIs(res.fills, orig_fills_tuple)
-        self.assertIs(res.rejections, orig_rejections_tuple)
-        self.assertIs(res.audit_log, orig_audit_tuple)
-
-        # Assert every single element identity unchanged via assertIs
-        for current, original in zip(res.positions, orig_pos_elems):
-            self.assertIs(current, original)
-        for current, original in zip(res.pending_orders, orig_pending_elems):
-            self.assertIs(current, original)
-        for current, original in zip(res.orders, orig_order_elems):
-            self.assertIs(current, original)
-        for current, original in zip(res.fills, orig_fill_elems):
-            self.assertIs(current, original)
-        for current, original in zip(res.rejections, orig_rejection_elems):
-            self.assertIs(current, original)
-        for current, original in zip(res.audit_log, orig_audit_elems):
-            self.assertIs(current, original)
-
-        # Compare field snapshots
-        self.assertEqual([(p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl) for p in res.positions], pos_snapshot)
-        self.assertEqual([(po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional) for po in res.pending_orders], pending_snapshot)
-        self.assertEqual([(o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy) for o in res.orders], order_snapshot)
-        self.assertEqual([(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage) for f in res.fills], fill_snapshot)
-        self.assertEqual([(r.candidate_order, (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), r.reasons) for r in res.rejections], rejection_snapshot)
-        self.assertEqual([(rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, dict(rec.strategy_metadata), rec.risk_allowed, rec.risk_rejection_reasons, dict(rec.guard_metadata), rec.error_code, rec.error_message) for rec in res.audit_log], audit_snapshot)
+        # Assert zero mutations on result, scalar fields, identities, metadata
+        _assert_snapshot_equal(self, res, snap)
 
     def test_permission_error_propagation(self) -> None:
         target_path = self.temp_dir / "perm.json"
@@ -288,7 +382,6 @@ class TestPaperTradingPortfolioSerializationFiles(unittest.TestCase):
             with self.assertRaises(PermissionError) as cm:
                 load_simulated_portfolio_trading_result_json_file(target_path)
             self.assertIn("Load read permission denied", str(cm.exception))
-
 
     def test_load_json_file_error_handling(self) -> None:
         missing_path = self.temp_dir / "missing.json"

@@ -4,7 +4,6 @@ Unit tests for offline simulated portfolio artifact CLI.
 
 import ast
 import io
-
 import json
 from pathlib import Path
 import shutil
@@ -214,7 +213,7 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
         with patch("sys.stdout", out_buf), patch("sys.stderr", err_buf):
             ret = simulated_portfolio_artifact_cli.main(["validate", str(self.valid_json_path)])
 
-        self.assertTrue(ret is None or ret == 0)
+        self.assertIsNone(ret)
         self.assertEqual(
             out_buf.getvalue(),
             f"Simulated Portfolio Trading artifact is valid: {self.valid_json_path}\n",
@@ -330,43 +329,43 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
             mock_builder.assert_called_once()
             self.assertIs(mock_builder.call_args[0][0], mock_loaded_result)
 
-        self.assertTrue(ret is None or ret == 0)
+        self.assertIsNone(ret)
         self.assertEqual(err_buf.getvalue(), "")
 
-        output = out_buf.getvalue()
-        expected_lines = [
-            "Simulated Portfolio Trading Artifact Summary",
-            "--------------------------------------------",
-            "Initial Cash: 1000000.0",
-            "Final Cash: 1000000.0",
-            "Total Market Value: 550000.0",
-            "Total Equity: 1550000.0",
-            "Realized PnL: 10000.0",
-            "Unrealized PnL: 50000.0",
-            "Total Return: 550000.0",
-            "Total Return Pct: 0.55",
-            "Open Position Count: 1",
-            "Pending Order Count: 1",
-            "Order Count: 1",
-            "Fill Count: 1",
-            "Rejection Count: 1",
-            "Audit Record Count: 1",
-        ]
-        self.assertEqual(output.splitlines(), expected_lines)
+        expected_stdout = (
+            "Simulated Portfolio Trading Artifact Summary\n"
+            "--------------------------------------------\n"
+            "Initial Cash: 1000000.0\n"
+            "Final Cash: 1000000.0\n"
+            "Total Market Value: 550000.0\n"
+            "Total Equity: 1550000.0\n"
+            "Realized PnL: 10000.0\n"
+            "Unrealized PnL: 50000.0\n"
+            "Total Return: 550000.0\n"
+            "Total Return Pct: 0.55\n"
+            "Open Position Count: 1\n"
+            "Pending Order Count: 1\n"
+            "Order Count: 1\n"
+            "Fill Count: 1\n"
+            "Rejection Count: 1\n"
+            "Audit Record Count: 1\n"
+        )
+        self.assertEqual(out_buf.getvalue(), expected_stdout)
 
         # Forbidden fields absent
         forbidden_strings = ["2330.TW", "ORD_P1", "ORD_1", "ORD_R1", "REC_1", "schema_version", "v1"]
         for s in forbidden_strings:
-            self.assertNotIn(s, output)
+            self.assertNotIn(s, out_buf.getvalue())
 
         # Raw total_return_pct string test
-        self.assertIn("Total Return Pct: 0.55", output)
-        self.assertNotIn("55%", output)
+        self.assertIn("Total Return Pct: 0.55", out_buf.getvalue())
+        self.assertNotIn("55%", out_buf.getvalue())
 
     def test_export_markdown_subcommand_call_contract_and_failures(self) -> None:
         mock_loaded_result = MagicMock(spec=SimulatedPortfolioTradingResult)
         returned_path = Path("/mock/dir/portfolio.md").resolve()
 
+        # 1. Default overwrite=False test
         out_buf = io.StringIO()
         err_buf = io.StringIO()
 
@@ -383,32 +382,55 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
                     str(self.valid_json_path),
                     "--output-markdown",
                     "out.md",
-                    "--overwrite",
                 ])
 
             mock_loader.assert_called_once_with(str(self.valid_json_path))
-            mock_exporter.assert_called_once_with(mock_loaded_result, "out.md", overwrite=True)
+            mock_exporter.assert_called_once_with(mock_loaded_result, "out.md", overwrite=False)
 
-        self.assertTrue(ret is None or ret == 0)
+        self.assertIsNone(ret)
         self.assertEqual(err_buf.getvalue(), "")
         self.assertEqual(
             out_buf.getvalue(),
             f"Simulated Portfolio Trading Markdown written: {returned_path}\n",
         )
 
+        # 2. Overwrite=True test
+        out_buf_ow = io.StringIO()
+        err_buf_ow = io.StringIO()
+
+        with patch(
+            "tw_stock_tool.cli.simulated_portfolio_artifact_cli.load_simulated_portfolio_trading_result_json_file",
+            return_value=mock_loaded_result,
+        ), patch(
+            "tw_stock_tool.cli.simulated_portfolio_artifact_cli.export_simulated_portfolio_trading_markdown_file",
+            return_value=returned_path,
+        ) as mock_exporter_ow:
+            with patch("sys.stdout", out_buf_ow), patch("sys.stderr", err_buf_ow):
+                ret_ow = simulated_portfolio_artifact_cli.main([
+                    "export-markdown",
+                    str(self.valid_json_path),
+                    "--output-markdown",
+                    "out.md",
+                    "--overwrite",
+                ])
+
+            mock_exporter_ow.assert_called_once_with(mock_loaded_result, "out.md", overwrite=True)
+
+        self.assertIsNone(ret_ow)
+
         # Real filesystem test: input JSON bytes preserved
         real_md_out = self.temp_dir / "real_out.md"
         input_bytes_before = self.valid_json_path.read_bytes()
         with patch("sys.stdout", io.StringIO()):
-            simulated_portfolio_artifact_cli.main([
+            ret_real = simulated_portfolio_artifact_cli.main([
                 "export-markdown",
                 str(self.valid_json_path),
                 "--output-markdown",
                 str(real_md_out),
             ])
+        self.assertIsNone(ret_real)
         self.assertEqual(self.valid_json_path.read_bytes(), input_bytes_before)
         self.assertTrue(real_md_out.is_file())
-
 
         # Failure cases: FileExistsError, PermissionError, PaperTradingModelError
         failure_mocks = [
@@ -419,23 +441,23 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
 
         for exc in failure_mocks:
             with self.subTest(exception=type(exc).__name__):
-                out_buf = io.StringIO()
-                err_buf = io.StringIO()
+                out_buf_fail = io.StringIO()
+                err_buf_fail = io.StringIO()
                 with patch(
                     "tw_stock_tool.cli.simulated_portfolio_artifact_cli.export_simulated_portfolio_trading_markdown_file",
                     side_effect=exc,
                 ):
-                    with patch("sys.stdout", out_buf), patch("sys.stderr", err_buf):
-                        ret = simulated_portfolio_artifact_cli.main([
+                    with patch("sys.stdout", out_buf_fail), patch("sys.stderr", err_buf_fail):
+                        ret_fail = simulated_portfolio_artifact_cli.main([
                             "export-markdown",
                             str(self.valid_json_path),
                             "--output-markdown",
                             str(real_md_out),
                         ])
 
-                self.assertEqual(ret, 1)
-                self.assertEqual(out_buf.getvalue(), "")
-                err_text = err_buf.getvalue()
+                self.assertEqual(ret_fail, 1)
+                self.assertEqual(out_buf_fail.getvalue(), "")
+                err_text = err_buf_fail.getvalue()
                 self.assertTrue(err_text.startswith("error: "))
                 self.assertNotIn("Traceback", err_text)
                 if isinstance(exc, FileExistsError):
@@ -454,6 +476,7 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
         )
         mock_paths_dict = {k: Path(f"/mock/dir/sim_{k}.csv").resolve() for k in expected_keys}
 
+        # 1. Defaults test (basename=simulated_portfolio_trading, overwrite=False)
         out_buf = io.StringIO()
         err_buf = io.StringIO()
 
@@ -470,27 +493,61 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
                     str(self.valid_json_path),
                     "--output-csv-dir",
                     "csv_dir",
-                    "--basename",
-                    "custom_base",
-                    "--overwrite",
                 ])
 
             mock_loader.assert_called_once_with(str(self.valid_json_path))
             mock_exporter.assert_called_once_with(
                 mock_loaded_result,
                 "csv_dir",
+                basename="simulated_portfolio_trading",
+                overwrite=False,
+            )
+
+        self.assertIsNone(ret)
+        self.assertEqual(err_buf.getvalue(), "")
+
+        expected_stdout = (
+            "Simulated Portfolio Trading CSV files written:\n"
+            f"summary: {mock_paths_dict['summary']}\n"
+            f"positions: {mock_paths_dict['positions']}\n"
+            f"pending_orders: {mock_paths_dict['pending_orders']}\n"
+            f"orders: {mock_paths_dict['orders']}\n"
+            f"fills: {mock_paths_dict['fills']}\n"
+            f"rejections: {mock_paths_dict['rejections']}\n"
+            f"trade_log: {mock_paths_dict['trade_log']}\n"
+        )
+        self.assertEqual(out_buf.getvalue(), expected_stdout)
+
+        # 2. Custom basename & overwrite=True test
+        out_buf_cust = io.StringIO()
+        err_buf_cust = io.StringIO()
+
+        with patch(
+            "tw_stock_tool.cli.simulated_portfolio_artifact_cli.load_simulated_portfolio_trading_result_json_file",
+            return_value=mock_loaded_result,
+        ), patch(
+            "tw_stock_tool.cli.simulated_portfolio_artifact_cli.export_simulated_portfolio_trading_csv_files",
+            return_value=mock_paths_dict,
+        ) as mock_exporter_cust:
+            with patch("sys.stdout", out_buf_cust), patch("sys.stderr", err_buf_cust):
+                ret_cust = simulated_portfolio_artifact_cli.main([
+                    "export-csv",
+                    str(self.valid_json_path),
+                    "--output-csv-dir",
+                    "csv_dir",
+                    "--basename",
+                    "custom_base",
+                    "--overwrite",
+                ])
+
+            mock_exporter_cust.assert_called_once_with(
+                mock_loaded_result,
+                "csv_dir",
                 basename="custom_base",
                 overwrite=True,
             )
 
-        self.assertTrue(ret is None or ret == 0)
-        self.assertEqual(err_buf.getvalue(), "")
-
-        expected_stdout_lines = [
-            "Simulated Portfolio Trading CSV files written:",
-            *[f"{k}: {mock_paths_dict[k]}" for k in expected_keys],
-        ]
-        self.assertEqual(out_buf.getvalue().splitlines(), expected_stdout_lines)
+        self.assertIsNone(ret_cust)
 
         # Failure cases: FileExistsError, ValueError, PermissionError, PaperTradingModelError
         failure_exceptions = [
@@ -504,23 +561,23 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
 
         for exc in failure_exceptions:
             with self.subTest(exception=type(exc).__name__):
-                out_buf = io.StringIO()
-                err_buf = io.StringIO()
+                out_buf_fail = io.StringIO()
+                err_buf_fail = io.StringIO()
                 with patch(
                     "tw_stock_tool.cli.simulated_portfolio_artifact_cli.export_simulated_portfolio_trading_csv_files",
                     side_effect=exc,
                 ):
-                    with patch("sys.stdout", out_buf), patch("sys.stderr", err_buf):
-                        ret = simulated_portfolio_artifact_cli.main([
+                    with patch("sys.stdout", out_buf_fail), patch("sys.stderr", err_buf_fail):
+                        ret_fail = simulated_portfolio_artifact_cli.main([
                             "export-csv",
                             str(self.valid_json_path),
                             "--output-csv-dir",
                             str(csv_out_dir),
                         ])
 
-                self.assertEqual(ret, 1)
-                self.assertEqual(out_buf.getvalue(), "")
-                err_text = err_buf.getvalue()
+                self.assertEqual(ret_fail, 1)
+                self.assertEqual(out_buf_fail.getvalue(), "")
+                err_text = err_buf_fail.getvalue()
                 self.assertTrue(err_text.startswith("error: "))
                 self.assertNotIn("Traceback", err_text)
                 if isinstance(exc, FileExistsError):
@@ -529,15 +586,15 @@ class TestSimulatedPortfolioArtifactCLI(unittest.TestCase):
         # Real filesystem export: input JSON bytes preserved
         input_bytes_before = self.valid_json_path.read_bytes()
         with patch("sys.stdout", io.StringIO()):
-            simulated_portfolio_artifact_cli.main([
+            ret_real_csv = simulated_portfolio_artifact_cli.main([
                 "export-csv",
                 str(self.valid_json_path),
                 "--output-csv-dir",
                 str(csv_out_dir),
             ])
+        self.assertIsNone(ret_real_csv)
         self.assertEqual(self.valid_json_path.read_bytes(), input_bytes_before)
         self.assertTrue((csv_out_dir / "simulated_portfolio_trading_summary.csv").is_file())
-
 
     def test_ast_and_subprocess_dependency_boundaries(self) -> None:
         cli_file = Path(simulated_portfolio_artifact_cli.__file__)
