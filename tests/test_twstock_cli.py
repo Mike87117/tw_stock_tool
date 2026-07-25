@@ -702,6 +702,83 @@ class DailyReportArtifactUnifiedCliTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
+    def test_simulated_portfolio_artifact_passthrough_routing(self):
+        cases = [
+            (
+                ["validate", "artifact.json"],
+                ["simulated_portfolio_artifact_cli.py", "validate", "artifact.json"],
+            ),
+            (
+                ["inspect", "artifact.json"],
+                ["simulated_portfolio_artifact_cli.py", "inspect", "artifact.json"],
+            ),
+            (
+                ["export-markdown", "artifact.json", "--output-markdown", "out.md"],
+                ["simulated_portfolio_artifact_cli.py", "export-markdown", "artifact.json", "--output-markdown", "out.md"],
+            ),
+            (
+                ["export-csv", "artifact.json", "--output-csv-dir", "dir"],
+                ["simulated_portfolio_artifact_cli.py", "export-csv", "artifact.json", "--output-csv-dir", "dir"],
+            ),
+        ]
+        for child_args, expected_argv in cases:
+            with self.subTest(child_args=child_args):
+                captured = []
+
+                def fake_main():
+                    captured.append(sys.argv[:])
+                    return 0
+
+                with patch.object(
+                    twstock_cli.simulated_portfolio_artifact_cli,
+                    "main",
+                    side_effect=fake_main,
+                ) as mocked:
+                    status = twstock_cli.main(["simulated-portfolio-artifact", *child_args])
+
+                self.assertEqual(status, 0)
+                mocked.assert_called_once_with()
+                self.assertEqual(captured, [expected_argv])
+
+    def test_simulated_portfolio_artifact_status_and_sys_argv_restoration(self):
+        original = sys.argv[:]
+        captured = []
+
+        def fake_main():
+            captured.append(sys.argv[:])
+            return 7
+
+        with patch.object(
+            twstock_cli.simulated_portfolio_artifact_cli,
+            "main",
+            side_effect=fake_main,
+        ) as mocked:
+            status = twstock_cli.main([
+                "simulated-portfolio-artifact", "validate", "artifact.json",
+            ])
+
+        self.assertEqual(status, 7)
+        mocked.assert_called_once_with()
+        self.assertEqual(
+            captured,
+            [["simulated_portfolio_artifact_cli.py", "validate", "artifact.json"]],
+        )
+        self.assertEqual(sys.argv, original)
+
+    def test_simulated_portfolio_artifact_help_registration_and_safety(self):
+        root = StringIO()
+        with redirect_stdout(root), self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("simulated-portfolio-artifact", root.getvalue())
+
+        artifact = StringIO()
+        with redirect_stdout(artifact), self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["simulated-portfolio-artifact", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        text = artifact.getvalue().lower()
+        self.assertIn("existing offline simulated portfolio trading json artifact", text)
+
 
 if __name__ == "__main__":
     unittest.main()

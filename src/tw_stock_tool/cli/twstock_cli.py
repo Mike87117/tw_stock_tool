@@ -27,7 +27,9 @@ from tw_stock_tool.cli import price_data_smoke_check
 from tw_stock_tool.cli import scan_stocks
 from tw_stock_tool.cli import stock_list_smoke_check
 from tw_stock_tool.cli import simulated_paper_trading_export_cli
+from tw_stock_tool.cli import simulated_portfolio_artifact_cli
 from tw_stock_tool.cli import backtest_artifact_cli
+
 from tw_stock_tool.data import cache_manager
 from tw_stock_tool.data import stock_list_updater
 
@@ -195,6 +197,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "Export a structured BacktestResult JSON artifact from a historical backtest execution.\n"
         "This is a historical backtest artifact for offline research only. Not investment advice.",
     )
+
+    _add_passthrough_parser(
+        subparsers,
+        "simulated-portfolio-artifact",
+        simulated_portfolio_artifact_cli.main,
+        "simulated_portfolio_artifact_cli.py",
+        "Validate, inspect, or export a simulated portfolio trading JSON artifact",
+        "Operate on an existing offline simulated portfolio trading JSON artifact.\n"
+        "Does not fetch market data, run analysis, execute strategies or backtests,\n"
+        "execute simulated trading, run the portfolio coordinator, connect to brokers,\n"
+        "place orders, produce live signals, recommend stocks, or provide investment advice.",
+    )
+
 
     args, passthrough_args = parser.parse_known_args(argv)
     args.args = passthrough_args
