@@ -56,7 +56,7 @@ def _make_cash_only_result() -> SimulatedPortfolioTradingResult:
 
 def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolioTradingResult:
     pos_open = SimulatedPortfolioPositionResult(
-        symbol="2330",
+        symbol="ZZZ",
         quantity=1000,
         average_cost=500.0,
         last_price=550.0,
@@ -65,7 +65,7 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         unrealized_pnl=50000.0,
     )
     pos_closed = SimulatedPortfolioPositionResult(
-        symbol="2317",
+        symbol="AAA",
         quantity=0,
         average_cost=0.0,
         last_price=None,
@@ -74,9 +74,9 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         unrealized_pnl=0.0,
     )
 
-    pending_buy = SimulatedPortfolioPendingOrderResult(
-        order_id="ORD_P1",
-        symbol="2330",
+    pending_p2 = SimulatedPortfolioPendingOrderResult(
+        order_id="ORD_P2",
+        symbol="ZZZ",
         side="BUY",
         quantity=500,
         signal_time="2026-01-02",
@@ -85,9 +85,9 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         reference_price=540.0,
         reserved_buy_notional=270000.0,
     )
-    pending_sell = SimulatedPortfolioPendingOrderResult(
-        order_id="ORD_P2",
-        symbol="2454",
+    pending_p1 = SimulatedPortfolioPendingOrderResult(
+        order_id="ORD_P1",
+        symbol="AAA",
         side="SELL",
         quantity=200,
         signal_time="2026-01-02",
@@ -97,19 +97,28 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         reserved_buy_notional=0.0,
     )
 
-    order1 = SimulatedOrder(
-        order_id="ORD_1",
-        symbol="2330",
+    order_o2 = SimulatedOrder(
+        order_id="ORD_O2",
+        symbol="ZZZ",
         side="BUY",
         quantity=1000,
         signal_time="2026-01-02",
         created_at="2026-01-02T09:00:00",
         strategy="ma_cross",
     )
+    order_o1 = SimulatedOrder(
+        order_id="ORD_O1",
+        symbol="AAA",
+        side="SELL",
+        quantity=200,
+        signal_time="2026-01-02",
+        created_at="2026-01-02T09:00:00",
+        strategy="rsi",
+    )
 
-    fill1 = SimulatedFill(
-        order_id="ORD_1",
-        symbol="2330",
+    fill_f2 = SimulatedFill(
+        order_id="ORD_F2",
+        symbol="ZZZ",
         side="BUY",
         quantity=1000,
         price=500.0,
@@ -118,29 +127,53 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         tax=0.0,
         slippage=0.0,
     )
+    fill_f1 = SimulatedFill(
+        order_id="ORD_F1",
+        symbol="AAA",
+        side="SELL",
+        quantity=200,
+        price=100.0,
+        filled_at="2026-01-02T09:00:02",
+        fee=28.0,
+        tax=60.0,
+        slippage=0.0,
+    )
 
-    candidate = SimulatedOrder(
-        order_id="ORD_R1",
-        symbol="2454",
+    candidate_r2 = SimulatedOrder(
+        order_id="ORD_R2",
+        symbol="ZZZ",
         side="BUY",
         quantity=100,
         signal_time="2026-01-02",
         created_at="2026-01-02T09:00:00",
         strategy="rsi",
     )
-
-    rejection1 = SimulatedOrderRejection(
-        candidate_order=candidate,
+    rejection_r2 = SimulatedOrderRejection(
+        candidate_order=candidate_r2,
         reasons=("Max notional exceeded", "Insufficient cash"),
     )
 
-    rec1 = SimulatedTradeLogRecord(
+    candidate_r1 = SimulatedOrder(
+        order_id="ORD_R1",
+        symbol="AAA",
+        side="SELL",
+        quantity=50,
+        signal_time="2026-01-02",
+        created_at="2026-01-02T09:00:00",
+        strategy="macd",
+    )
+    rejection_r1 = SimulatedOrderRejection(
+        candidate_order=candidate_r1,
+        reasons=("Reason B", "Reason A"),
+    )
+
+    rec2 = SimulatedTradeLogRecord(
         sequence=2,
         record_id="REC_2",
         event_type=SimulatedTradeEventType.ACCEPTED_PENDING,
         status=SimulatedTradeStatus.PENDING_NEXT_BAR_OPEN,
-        order_id="ORD_1",
-        symbol="2330",
+        order_id="ORD_O2",
+        symbol="ZZZ",
         side="BUY",
         quantity=1000,
         signal_time="2026-01-02",
@@ -160,13 +193,13 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         error_message=None,
     )
 
-    rec2 = SimulatedTradeLogRecord(
+    rec1 = SimulatedTradeLogRecord(
         sequence=1,
         record_id="REC_1",
         event_type=SimulatedTradeEventType.REJECTED,
         status=SimulatedTradeStatus.RISK_REJECTED,
-        order_id="ORD_R1",
-        symbol="2454",
+        order_id="ORD_R2",
+        symbol="ZZZ",
         side="BUY",
         quantity=100,
         signal_time="2026-01-02",
@@ -199,16 +232,16 @@ def _make_sample_result(*, initial_cash: float = 100000.0) -> SimulatedPortfolio
         total_return=tot_ret,
         total_return_pct=tot_ret_pct,
         open_position_count=1,
-        order_count=1,
-        fill_count=1,
-        rejection_count=1,
+        order_count=2,
+        fill_count=2,
+        rejection_count=2,
         audit_record_count=2,
         positions=(pos_open, pos_closed),
-        pending_orders=(pending_buy, pending_sell),
-        orders=(order1,),
-        fills=(fill1,),
-        rejections=(rejection1,),
-        audit_log=(rec1, rec2),
+        pending_orders=(pending_p2, pending_p1),
+        orders=(order_o2, order_o1),
+        fills=(fill_f2, fill_f1),
+        rejections=(rejection_r2, rejection_r1),
+        audit_log=(rec2, rec1),
     )
 
 
@@ -394,22 +427,37 @@ class TestPortfolioReportData(unittest.TestCase):
         self.assertEqual(res.initial_cash, 100000.0)
 
         data1["position_rows"][0]["symbol"] = "MUTATED"
-        self.assertEqual(data2["position_rows"][0]["symbol"], "2330")
-        self.assertEqual(res.positions[0].symbol, "2330")
+        self.assertEqual(data2["position_rows"][0]["symbol"], "ZZZ")
+        self.assertEqual(res.positions[0].symbol, "ZZZ")
 
     def test_exact_source_order_preservation(self):
         res = _make_sample_result()
         data = build_simulated_portfolio_trading_report_data(res)
 
+        # Positions tuple: ZZZ, AAA (natural sort would be AAA, ZZZ)
+        self.assertEqual([r["symbol"] for r in data["position_rows"]], ["ZZZ", "AAA"])
         self.assertEqual([r["symbol"] for r in data["position_rows"]], [p.symbol for p in res.positions])
+
+        # Pending orders tuple: ORD_P2, ORD_P1 (natural sort would be ORD_P1, ORD_P2)
+        self.assertEqual([r["order_id"] for r in data["pending_order_rows"]], ["ORD_P2", "ORD_P1"])
         self.assertEqual([r["order_id"] for r in data["pending_order_rows"]], [po.order_id for po in res.pending_orders])
+
+        # Orders tuple: ORD_O2, ORD_O1
+        self.assertEqual([r["order_id"] for r in data["order_rows"]], ["ORD_O2", "ORD_O1"])
         self.assertEqual([r["order_id"] for r in data["order_rows"]], [o.order_id for o in res.orders])
+
+        # Fills tuple: ORD_F2, ORD_F1
+        self.assertEqual([r["order_id"] for r in data["fill_rows"]], ["ORD_F2", "ORD_F1"])
         self.assertEqual([r["order_id"] for r in data["fill_rows"]], [f.order_id for f in res.fills])
+
+        # Rejections tuple: ORD_R2, ORD_R1
+        self.assertEqual([r["order_id"] for r in data["rejection_rows"]], ["ORD_R2", "ORD_R1"])
         self.assertEqual([r["order_id"] for r in data["rejection_rows"]], [r.candidate_order.order_id for r in res.rejections])
 
-        # Trade log preserves exact audit_log tuple order (sequence 2 before sequence 1)
-        self.assertEqual([r["record_id"] for r in data["trade_log_rows"]], [rec.record_id for rec in res.audit_log])
+        # Trade log tuple: sequence 2 (REC_2) before sequence 1 (REC_1)
+        self.assertEqual([r["record_id"] for r in data["trade_log_rows"]], ["REC_2", "REC_1"])
         self.assertEqual([r["sequence"] for r in data["trade_log_rows"]], [2, 1])
+        self.assertEqual([r["record_id"] for r in data["trade_log_rows"]], [rec.record_id for rec in res.audit_log])
 
     def test_metadata_and_joined_values_formatting(self):
         res = _make_sample_result()
@@ -429,7 +477,10 @@ class TestPortfolioReportData(unittest.TestCase):
         self.assertEqual(data["trade_log_rows"][1]["risk_rejection_reasons"], "Risk fail 1 | Risk fail 2")
         self.assertEqual(data["rejection_rows"][0]["reasons"], "Max notional exceeded | Insufficient cash")
 
-    def test_comprehensive_mutation_safety(self):
+        # Second rejection with non-alphabetical reasons ("Reason B", "Reason A")
+        self.assertEqual(data["rejection_rows"][1]["reasons"], "Reason B | Reason A")
+
+    def test_comprehensive_mutation_safety_and_element_identities(self):
         res = _make_sample_result()
 
         orig_positions_tuple = res.positions
@@ -446,6 +497,14 @@ class TestPortfolioReportData(unittest.TestCase):
         orig_audit_elems = list(res.audit_log)
         orig_rec0_strat = dict(res.audit_log[0].strategy_metadata)
         orig_rec0_guard = dict(res.audit_log[0].guard_metadata)
+
+        # Take full snapshot of fields
+        pos_snapshot = [(p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl) for p in res.positions]
+        pending_snapshot = [(po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional) for po in res.pending_orders]
+        order_snapshot = [(o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy) for o in res.orders]
+        fill_snapshot = [(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage) for f in res.fills]
+        rejection_snapshot = [(r.candidate_order, (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), r.reasons) for r in res.rejections]
+        audit_snapshot = [(rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, dict(rec.strategy_metadata), rec.risk_allowed, rec.risk_rejection_reasons, dict(rec.guard_metadata), rec.error_code, rec.error_message) for rec in res.audit_log]
 
         # Invoke all builders
         build_simulated_portfolio_trading_summary(res)
@@ -465,13 +524,27 @@ class TestPortfolioReportData(unittest.TestCase):
         self.assertIs(res.rejections, orig_rejections_tuple)
         self.assertIs(res.audit_log, orig_audit_tuple)
 
-        # Assert element identities unchanged
-        self.assertEqual(list(res.positions), orig_pos_elems)
-        self.assertEqual(list(res.pending_orders), orig_pending_elems)
-        self.assertEqual(list(res.orders), orig_order_elems)
-        self.assertEqual(list(res.fills), orig_fill_elems)
-        self.assertEqual(list(res.rejections), orig_rejection_elems)
-        self.assertEqual(list(res.audit_log), orig_audit_elems)
+        # Assert every single element identity unchanged via assertIs
+        for current, original in zip(res.positions, orig_pos_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.pending_orders, orig_pending_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.orders, orig_order_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.fills, orig_fill_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.rejections, orig_rejection_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.audit_log, orig_audit_elems):
+            self.assertIs(current, original)
+
+        # Compare field snapshots
+        self.assertEqual([(p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl) for p in res.positions], pos_snapshot)
+        self.assertEqual([(po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional) for po in res.pending_orders], pending_snapshot)
+        self.assertEqual([(o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy) for o in res.orders], order_snapshot)
+        self.assertEqual([(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage) for f in res.fills], fill_snapshot)
+        self.assertEqual([(r.candidate_order, (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), r.reasons) for r in res.rejections], rejection_snapshot)
+        self.assertEqual([(rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, dict(rec.strategy_metadata), rec.risk_allowed, rec.risk_rejection_reasons, dict(rec.guard_metadata), rec.error_code, rec.error_message) for rec in res.audit_log], audit_snapshot)
 
         # Assert metadata content unchanged
         self.assertEqual(dict(res.audit_log[0].strategy_metadata), orig_rec0_strat)

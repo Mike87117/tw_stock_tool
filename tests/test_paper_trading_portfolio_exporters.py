@@ -3,7 +3,9 @@ Unit tests for portfolio report exporters (Markdown and CSV bundle).
 """
 
 import csv
+from datetime import datetime
 import io
+import json
 import unittest
 
 from tw_stock_tool.paper_trading.models import (
@@ -52,8 +54,10 @@ def _make_empty_result() -> SimulatedPortfolioTradingResult:
 
 
 def _make_full_result() -> SimulatedPortfolioTradingResult:
+    dt_ts = datetime(2026, 1, 2, 9, 0, 1)
+
     pos_open = SimulatedPortfolioPositionResult(
-        symbol="2330.TW",
+        symbol="ZZZ.TW",
         quantity=1000,
         average_cost=1234.5,
         last_price=1500.0,
@@ -61,41 +65,85 @@ def _make_full_result() -> SimulatedPortfolioTradingResult:
         realized_pnl=10000.0,
         unrealized_pnl=265500.0,
     )
-    pending_buy = SimulatedPortfolioPendingOrderResult(
-        order_id="ORD_P1",
-        symbol="2330.TW",
+    pos_closed = SimulatedPortfolioPositionResult(
+        symbol="AAA.TW",
+        quantity=0,
+        average_cost=0.0,
+        last_price=None,
+        market_value=0.0,
+        realized_pnl=5000.0,
+        unrealized_pnl=0.0,
+    )
+
+    pending_p2 = SimulatedPortfolioPendingOrderResult(
+        order_id="ORD_P2",
+        symbol="ZZZ.TW",
         side="BUY",
         quantity=500,
-        signal_time="2026-01-02",
+        signal_time=dt_ts,
         created_at="2026-01-02T09:00:00",
         strategy="ma_cross",
         reference_price=1400.0,
         reserved_buy_notional=700000.0,
     )
-    order1 = SimulatedOrder(
-        order_id="ORD_1",
-        symbol="2330.TW",
+    pending_p1 = SimulatedPortfolioPendingOrderResult(
+        order_id="ORD_P1",
+        symbol="AAA.TW",
+        side="SELL",
+        quantity=200,
+        signal_time="2026-01-02",
+        created_at=None,
+        strategy=None,
+        reference_price=100.0,
+        reserved_buy_notional=0.0,
+    )
+
+    order_o2 = SimulatedOrder(
+        order_id="ORD_O2",
+        symbol="ZZZ.TW",
         side="BUY",
         quantity=1000,
+        signal_time=dt_ts,
+        created_at=None,
+        strategy=None,
+    )
+    order_o1 = SimulatedOrder(
+        order_id="ORD_O1",
+        symbol="AAA.TW",
+        side="SELL",
+        quantity=200,
         signal_time="2026-01-02",
         created_at="2026-01-02T09:00:00",
-        strategy="ma_cross",
+        strategy="rsi",
     )
-    fill1 = SimulatedFill(
-        order_id="ORD_1",
-        symbol="2330.TW",
+
+    fill_f2 = SimulatedFill(
+        order_id="ORD_F2",
+        symbol="ZZZ.TW",
         side="BUY",
         quantity=1000,
         price=1234.5,
-        filled_at="2026-01-02T09:00:01",
+        filled_at=dt_ts,
         fee=1758.0,
         tax=0.0,
         slippage=0.0,
     )
-    rejection1 = SimulatedOrderRejection(
+    fill_f1 = SimulatedFill(
+        order_id="ORD_F1",
+        symbol="AAA.TW",
+        side="SELL",
+        quantity=200,
+        price=100.0,
+        filled_at="2026-01-02T09:00:02",
+        fee=28.0,
+        tax=60.0,
+        slippage=0.0,
+    )
+
+    rejection_r2 = SimulatedOrderRejection(
         candidate_order=SimulatedOrder(
-            order_id="ORD_R1",
-            symbol="2454",
+            order_id="ORD_R2",
+            symbol="ZZZ.TW",
             side="BUY",
             quantity=100,
             signal_time="2026-01-02\nline2|cell",
@@ -104,38 +152,51 @@ def _make_full_result() -> SimulatedPortfolioTradingResult:
         ),
         reasons=("風控拒絕|高風險", "額度不足\n超限"),
     )
-    rec1 = SimulatedTradeLogRecord(
+    rejection_r1 = SimulatedOrderRejection(
+        candidate_order=SimulatedOrder(
+            order_id="ORD_R1",
+            symbol="AAA.TW",
+            side="SELL",
+            quantity=50,
+            signal_time="2026-01-02",
+            created_at="2026-01-02T09:00:00",
+            strategy="macd",
+        ),
+        reasons=("Reason B", "Reason A"),
+    )
+
+    rec2 = SimulatedTradeLogRecord(
         sequence=2,
         record_id="REC_2",
         event_type=SimulatedTradeEventType.ACCEPTED_PENDING,
         status=SimulatedTradeStatus.PENDING_NEXT_BAR_OPEN,
-        order_id="ORD_1",
-        symbol="2330.TW",
+        order_id="ORD_O2",
+        symbol="ZZZ.TW",
         side="BUY",
         quantity=1000,
-        signal_time="2026-01-02",
-        order_created_at="2026-01-02T09:00:00",
+        signal_time=dt_ts,
+        order_created_at=dt_ts,
         expected_execution_model="next_bar_open",
-        fill_time=None,
-        fill_price=None,
-        fee=0.0,
+        fill_time=dt_ts,
+        fill_price=1234.5,
+        fee=1758.0,
         tax=0.0,
         slippage=0.0,
         strategy_name="ma_cross",
-        strategy_metadata={"z_key": "val", "a_key": 10},
+        strategy_metadata={"tag": "測試", "a_key": 10},
         risk_allowed=True,
         risk_rejection_reasons=(),
         guard_metadata={"guard": "ok"},
         error_code=None,
         error_message=None,
     )
-    rec2 = SimulatedTradeLogRecord(
+    rec1 = SimulatedTradeLogRecord(
         sequence=1,
         record_id="REC_1",
         event_type=SimulatedTradeEventType.REJECTED,
         status=SimulatedTradeStatus.RISK_REJECTED,
-        order_id="ORD_R1",
-        symbol="2454",
+        order_id="ORD_R2",
+        symbol="ZZZ.TW",
         side="BUY",
         quantity=100,
         signal_time="2026-01-02",
@@ -149,33 +210,32 @@ def _make_full_result() -> SimulatedPortfolioTradingResult:
         strategy_name="rsi",
         strategy_metadata={"period": 14},
         risk_allowed=False,
-        risk_rejection_reasons=("Risk fail 1", "Risk fail 2"),
+        risk_rejection_reasons=("Risk fail",),
         guard_metadata={"limit": 50000},
-        error_code="RISK_REJECTED",
-        error_message="Error msg | test\nline2",
+        error_code=None,
+        error_message=None,
     )
-
 
     return SimulatedPortfolioTradingResult(
         initial_cash=100000.0,
         final_cash=115000.0,
         total_market_value=1500000.0,
         total_equity=1615000.0,
-        realized_pnl=10000.0,
+        realized_pnl=15000.0,
         unrealized_pnl=265500.0,
         total_return=1515000.0,
         total_return_pct=0.125,
         open_position_count=1,
-        order_count=1,
-        fill_count=1,
-        rejection_count=1,
+        order_count=2,
+        fill_count=2,
+        rejection_count=2,
         audit_record_count=2,
-        positions=(pos_open,),
-        pending_orders=(pending_buy,),
-        orders=(order1,),
-        fills=(fill1,),
-        rejections=(rejection1,),
-        audit_log=(rec1, rec2),
+        positions=(pos_open, pos_closed),
+        pending_orders=(pending_p2, pending_p1),
+        orders=(order_o2, order_o1),
+        fills=(fill_f2, fill_f1),
+        rejections=(rejection_r2, rejection_r1),
+        audit_log=(rec2, rec1),
     )
 
 
@@ -273,13 +333,13 @@ class TestPortfolioExporters(unittest.TestCase):
         # Escaped pipe and linebreaks in cell content
         self.assertIn(r"2026-01-02<br>line2\|cell", md)
         self.assertIn(r"風控拒絕\|高風險 \| 額度不足<br>超限", md)
-        self.assertIn(r"Error msg \| test<br>line2", md)
 
         # No residual \r characters
         self.assertNotIn("\r", md)
 
-        # Stable timestamp string (None renders empty string cell)
-        self.assertIn("|  |  | 0.00 | 0.00 | 0.00 |", md)  # Fill time / fill price empty string cells in trade log
+        # Stable timestamp string test with actual datetime object
+        dt_str = str(datetime(2026, 1, 2, 9, 0, 1))
+        self.assertIn(dt_str, md)
 
     def test_markdown_crlf_cr_lf_linebreaks_and_pipe_escaping(self):
         res = _make_empty_result()
@@ -318,22 +378,46 @@ class TestPortfolioExporters(unittest.TestCase):
         self.assertNotIn("\r", md)
 
     def test_markdown_metadata_deterministic_json(self):
-
         res = _make_full_result()
         md = export_simulated_portfolio_trading_markdown(res)
 
-        # Sorted JSON keys
-        self.assertIn('{"a_key": 10, "z_key": "val"}', md)
+        # Sorted JSON keys and ensure_ascii=False
+        self.assertIn('{"a_key": 10, "tag": "測試"}', md)
         self.assertIn('{"guard": "ok"}', md)
 
-    def test_markdown_ordering_and_mutation_safety(self):
+    def test_markdown_all_collections_ordering_and_mutation_safety(self):
         res = _make_full_result()
         orig_audit_log = res.audit_log
         orig_rec0_strat = dict(res.audit_log[0].strategy_metadata)
 
         md = export_simulated_portfolio_trading_markdown(res)
 
-        # REC_2 sequence 2 appears before REC_1 sequence 1
+        # Positions table: ZZZ.TW before AAA.TW
+        pos_zzz = md.find("ZZZ.TW")
+        pos_aaa = md.find("AAA.TW")
+        self.assertGreater(pos_aaa, pos_zzz)
+
+        # Pending orders table: ORD_P2 before ORD_P1
+        p2_idx = md.find("ORD_P2")
+        p1_idx = md.find("ORD_P1")
+        self.assertGreater(p1_idx, p2_idx)
+
+        # Orders table: ORD_O2 before ORD_O1
+        o2_idx = md.find("ORD_O2")
+        o1_idx = md.find("ORD_O1")
+        self.assertGreater(o1_idx, o2_idx)
+
+        # Fills table: ORD_F2 before ORD_F1
+        f2_idx = md.find("ORD_F2")
+        f1_idx = md.find("ORD_F1")
+        self.assertGreater(f1_idx, f2_idx)
+
+        # Rejections table: ORD_R2 before ORD_R1
+        r2_idx = md.find("ORD_R2")
+        r1_idx = md.find("ORD_R1")
+        self.assertGreater(r1_idx, r2_idx)
+
+        # Trade Log table: REC_2 before REC_1
         rec2_idx = md.find("REC_2")
         rec1_idx = md.find("REC_1")
         self.assertGreater(rec1_idx, rec2_idx)
@@ -383,22 +467,57 @@ class TestPortfolioExporters(unittest.TestCase):
             else:
                 self.assertEqual(len(rows), 1, f"Empty CSV {key} must contain header row only.")
 
-    def test_csv_raw_values_and_formatting(self):
+    def test_csv_raw_values_formatting_none_cells_and_unicode(self):
         res = _make_full_result()
         bundle = export_simulated_portfolio_trading_csv_bundle(res)
 
+        # Summary raw ratio
         summary_rows = list(csv.reader(io.StringIO(bundle["summary"])))
         summary_dict = dict(summary_rows[1:])
-        self.assertEqual(summary_dict["total_return_pct"], "0.125")  # Raw ratio, no % sign
+        self.assertEqual(summary_dict["total_return_pct"], "0.125")
         self.assertEqual(summary_dict["initial_cash"], "100000.0")
 
+        # Positions: raw float 1234.5 (no comma) & None last_price -> empty cell ""
         pos_rows = list(csv.reader(io.StringIO(bundle["positions"])))
-        self.assertEqual(pos_rows[1][2], "1234.5")  # Raw float, no comma separator
+        self.assertEqual(pos_rows[1][2], "1234.5")
+        self.assertEqual(pos_rows[2][0], "AAA.TW")
+        self.assertEqual(pos_rows[2][3], "")  # last_price=None -> ""
 
+        # Pending orders: None created_at and strategy -> empty cells ""
+        pending_rows = list(csv.reader(io.StringIO(bundle["pending_orders"])))
+        self.assertEqual(pending_rows[2][0], "ORD_P1")
+        self.assertEqual(pending_rows[2][5], "")  # created_at=None
+        self.assertEqual(pending_rows[2][6], "")  # strategy=None
+
+        # Orders: datetime stable string & None created_at/strategy -> empty cell ""
+        order_rows = list(csv.reader(io.StringIO(bundle["orders"])))
+        dt_str = str(datetime(2026, 1, 2, 9, 0, 1))
+        self.assertEqual(order_rows[1][4], dt_str)
+        self.assertEqual(order_rows[1][5], "")
+        self.assertEqual(order_rows[1][6], "")
+
+        # Fills: datetime stable string
+        fill_rows = list(csv.reader(io.StringIO(bundle["fills"])))
+        self.assertEqual(fill_rows[1][5], dt_str)
+
+        # Rejections: Unicode round-trip with pipe (un-escaped) and newline (restored)
+        rejection_rows = list(csv.reader(io.StringIO(bundle["rejections"])))
+        self.assertEqual(rejection_rows[1][7], "風控拒絕|高風險 | 額度不足\n超限")
+
+        # Trade log: None fill_time, fill_price, error_code, error_message -> empty cells ""
         trade_log_rows = list(csv.reader(io.StringIO(bundle["trade_log"])))
-        # Metadata column is index 17
-        self.assertEqual(trade_log_rows[1][17], '{"a_key": 10, "z_key": "val"}')
-        self.assertEqual(trade_log_rows[1][18], "True")  # bool as string
+
+        # Row 1 (REC_2): datetime stable string, Unicode metadata JSON
+        self.assertEqual(trade_log_rows[1][8], dt_str)
+        self.assertEqual(trade_log_rows[1][9], dt_str)
+        self.assertEqual(trade_log_rows[1][11], dt_str)
+        self.assertEqual(json.loads(trade_log_rows[1][17]), {"a_key": 10, "tag": "測試"})
+        self.assertEqual(trade_log_rows[1][21], "")  # error_code=None
+        self.assertEqual(trade_log_rows[1][22], "")  # error_message=None
+
+        # Row 2 (REC_1): fill_time=None, fill_price=None
+        self.assertEqual(trade_log_rows[2][11], "")
+        self.assertEqual(trade_log_rows[2][12], "")
 
     def test_csv_newline_policy(self):
         res = _make_full_result()
@@ -410,17 +529,68 @@ class TestPortfolioExporters(unittest.TestCase):
             self.assertNotIn("\r\n", text, f"CSV {k} contains CRLF line endings.")
             self.assertNotIn("\r", text, f"CSV {k} contains CR line endings.")
 
-    def test_csv_ordering_and_mutation_safety(self):
+    def test_csv_all_collections_ordering_and_mutation_safety(self):
         res = _make_full_result()
         orig_audit_log = res.audit_log
 
+        # Take full snapshot of fields & identities
+        orig_pos_elems = list(res.positions)
+        orig_pending_elems = list(res.pending_orders)
+        orig_order_elems = list(res.orders)
+        orig_fill_elems = list(res.fills)
+        orig_rejection_elems = list(res.rejections)
+        orig_audit_elems = list(res.audit_log)
+
+        pos_snapshot = [(p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl) for p in res.positions]
+        pending_snapshot = [(po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional) for po in res.pending_orders]
+        order_snapshot = [(o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy) for o in res.orders]
+        fill_snapshot = [(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage) for f in res.fills]
+        rejection_snapshot = [(r.candidate_order, (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), r.reasons) for r in res.rejections]
+        audit_snapshot = [(rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, dict(rec.strategy_metadata), rec.risk_allowed, rec.risk_rejection_reasons, dict(rec.guard_metadata), rec.error_code, rec.error_message) for rec in res.audit_log]
+
+        # Execute exporters
+        export_simulated_portfolio_trading_markdown(res)
         bundle = export_simulated_portfolio_trading_csv_bundle(res)
 
-        trade_log_rows = list(csv.reader(io.StringIO(bundle["trade_log"])))
-        self.assertEqual(trade_log_rows[1][0], "2")  # sequence 2 (REC_2) before sequence 1 (REC_1)
-        self.assertEqual(trade_log_rows[2][0], "1")
+        # Verify parsed CSV rows match source tuple order exactly
+        pos_rows = list(csv.reader(io.StringIO(bundle["positions"])))
+        self.assertEqual([r[0] for r in pos_rows[1:]], ["ZZZ.TW", "AAA.TW"])
 
-        self.assertIs(res.audit_log, orig_audit_log)
+        pending_rows = list(csv.reader(io.StringIO(bundle["pending_orders"])))
+        self.assertEqual([r[0] for r in pending_rows[1:]], ["ORD_P2", "ORD_P1"])
+
+        order_rows = list(csv.reader(io.StringIO(bundle["orders"])))
+        self.assertEqual([r[0] for r in order_rows[1:]], ["ORD_O2", "ORD_O1"])
+
+        fill_rows = list(csv.reader(io.StringIO(bundle["fills"])))
+        self.assertEqual([r[0] for r in fill_rows[1:]], ["ORD_F2", "ORD_F1"])
+
+        rejection_rows = list(csv.reader(io.StringIO(bundle["rejections"])))
+        self.assertEqual([r[0] for r in rejection_rows[1:]], ["ORD_R2", "ORD_R1"])
+
+        trade_log_rows = list(csv.reader(io.StringIO(bundle["trade_log"])))
+        self.assertEqual([r[1] for r in trade_log_rows[1:]], ["REC_2", "REC_1"])
+
+        # Verify tuple element identities & field snapshots unchanged
+        for current, original in zip(res.positions, orig_pos_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.pending_orders, orig_pending_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.orders, orig_order_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.fills, orig_fill_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.rejections, orig_rejection_elems):
+            self.assertIs(current, original)
+        for current, original in zip(res.audit_log, orig_audit_elems):
+            self.assertIs(current, original)
+
+        self.assertEqual([(p.symbol, p.quantity, p.average_cost, p.last_price, p.market_value, p.realized_pnl, p.unrealized_pnl) for p in res.positions], pos_snapshot)
+        self.assertEqual([(po.order_id, po.symbol, po.side, po.quantity, po.signal_time, po.created_at, po.strategy, po.reference_price, po.reserved_buy_notional) for po in res.pending_orders], pending_snapshot)
+        self.assertEqual([(o.order_id, o.symbol, o.side, o.quantity, o.signal_time, o.created_at, o.strategy) for o in res.orders], order_snapshot)
+        self.assertEqual([(f.order_id, f.symbol, f.side, f.quantity, f.price, f.filled_at, f.fee, f.tax, f.slippage) for f in res.fills], fill_snapshot)
+        self.assertEqual([(r.candidate_order, (r.candidate_order.order_id, r.candidate_order.symbol, r.candidate_order.side, r.candidate_order.quantity, r.candidate_order.signal_time, r.candidate_order.created_at, r.candidate_order.strategy), r.reasons) for r in res.rejections], rejection_snapshot)
+        self.assertEqual([(rec.sequence, rec.record_id, rec.event_type, rec.status, rec.order_id, rec.symbol, rec.side, rec.quantity, rec.signal_time, rec.order_created_at, rec.expected_execution_model, rec.fill_time, rec.fill_price, rec.fee, rec.tax, rec.slippage, rec.strategy_name, dict(rec.strategy_metadata), rec.risk_allowed, rec.risk_rejection_reasons, dict(rec.guard_metadata), rec.error_code, rec.error_message) for rec in res.audit_log], audit_snapshot)
 
     def test_error_normalization_invalid_result_type(self):
         invalid_inputs = [None, {}, "not_a_result", 123]
