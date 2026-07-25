@@ -895,7 +895,7 @@ Preserves canonical `(symbol, order_id)` order from `result.pending_orders`. Pen
 - **Order rows**: `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `created_at`, `strategy`
 - **Fill rows**: `order_id`, `symbol`, `side`, `quantity`, `price`, `filled_at`, `fee`, `tax`, `slippage`, `gross_amount`, `net_cash_effect`
 - **Rejection rows**: `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `created_at`, `strategy`, `reasons` (`" | ".join(rejection.reasons)`)
-- **Trade-log rows**: `sequence`, `record_id`, `event_type`, `status`, `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `order_created_at`, `expected_execution_model`, `fill_time`, `fill_price`, `fee`, `tax`, `slippage`, `strategy_name`, `strategy_metadata`, `risk_allowed`, `risk_rejection_reasons`, `guard_metadata`, `error_code`, `error_message`. Preserves global chronological audit order.
+- **Trade-log rows**: `sequence`, `record_id`, `event_type`, `status`, `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `order_created_at`, `expected_execution_model`, `fill_time`, `fill_price`, `fee`, `tax`, `slippage`, `strategy_name`, `strategy_metadata`, `risk_allowed`, `risk_rejection_reasons`, `guard_metadata`, `error_code`, `error_message`. Output row order exactly matches `result.audit_log` order to preserve the global chronological audit order (`sequence` is an output field and verifiable data item, not an exporter sorting instruction; the builder must not sort by `sequence`, symbol, order ID, or event type).
 
 ### 14.3 Mutation and Responsibility Policy
 
@@ -975,7 +975,7 @@ CSV formatting policy:
 - `None` outputs as empty cell `""`.
 - Numeric values output raw unformatted string values (no thousand separator commas).
 - Dictionary metadata outputs deterministic JSON string.
-- Row order matches report-data collection order.
+- Row order matches report-data collection order (`trade_log` row order exactly matches `result.audit_log`).
 
 ### 14.6 Filesystem Boundary & CSV Preflight Policy
 
@@ -1004,12 +1004,12 @@ Functions:
 - This phase does NOT introduce temporary-file transaction staging, rollback mechanisms, or database transactions.
 
 #### Exact Basename Policy
-- `basename` must be an exact `str` instance; it must reject `Path`, `bytes`, integers, or other string-convertible types with `PaperTradingModelError` or `ValueError`.
+- `basename` must be an exact `str` instance (`type(basename) is str`); it must reject `Path`, `bytes`, integers, or `str` subclasses with `ValueError` (no implicit type coercion or subclass tolerance).
 - `basename` must not be an empty string `""` or contain whitespace only `"   "`.
 - `basename` must not be `.` or `..`.
 - `basename` must not contain forward slash `/` or backslash `\`.
 - `basename` must not alter or escape the caller-specified output directory.
-- If any basename rule is violated, the helper fails closed immediately without creating or writing any files.
+- If any basename rule is violated, the helper fails closed immediately with `ValueError` without creating or writing any files.
 
 ### 14.7 Offline Artifact CLI Boundary
 
@@ -1046,7 +1046,9 @@ The `simulated-portfolio-artifact` CLI:
 
 ### 14.8 Error Policy
 
-- Domain, schema, and rendering input errors raise `PaperTradingModelError`.
+- Domain, schema, artifact content, and contract violation errors raise `PaperTradingModelError` (e.g. unsupported schema version, wrong result type, missing/extra schema fields, invalid domain values, malformed valid-UTF-8 JSON artifact content, serializer/deserializer contract violations).
+- Malformed UTF-8 file reads raise `UnicodeDecodeError` (filesystem decoding errors are NOT wrapped in `PaperTradingModelError`).
+- Basename validation failures raise `ValueError` (NOT wrapped in `PaperTradingModelError`).
 - Filesystem I/O preserves `FileNotFoundError`, `FileExistsError`, `IsADirectoryError`, `PermissionError`, and `UnicodeDecodeError`.
 - CLI outputs error messages to `sys.stderr` and returns a non-zero exit code. `FileExistsError` suggests using `--overwrite`.
 
@@ -1086,7 +1088,7 @@ Preserves single-symbol models, builders, schemas v1/v2/v3, single-symbol Markdo
 - exact row keys
 - canonical position order preservation (sorted by `symbol`)
 - canonical pending-order order preservation (sorted by `(symbol, order_id)`)
-- global audit chronology preservation (sorted by `sequence`)
+- global audit chronology preservation: output row order exactly matches `result.audit_log` order; the report-data builder must not sort by `sequence`, symbol, order ID, event type, or any other field
 - derived `pending_order_count`
 - invalid result input type fails closed (`PaperTradingModelError`)
 - no source tuple mutation
@@ -1133,7 +1135,7 @@ Preserves single-symbol models, builders, schemas v1/v2/v3, single-symbol Markdo
 - UTF-8 JSON file round trip
 - missing JSON file (`FileNotFoundError`)
 - directory passed as JSON file (`IsADirectoryError`)
-- malformed UTF-8 (`UnicodeDecodeError` / `PaperTradingModelError`)
+- malformed UTF-8 (`UnicodeDecodeError`)
 - invalid schema (`PaperTradingModelError`)
 - parent directory creation
 - Markdown overwrite default refusal (`FileExistsError`)
@@ -1142,13 +1144,13 @@ Preserves single-symbol models, builders, schemas v1/v2/v3, single-symbol Markdo
 - all seven CSV paths
 - default basename (`simulated_portfolio_trading`)
 - custom basename
-- non-string basename (`PaperTradingModelError` / `ValueError`)
-- blank basename
-- `.` basename
-- `..` basename
-- forward-slash basename
-- backslash basename
-- basename cannot escape output directory
+- non-string basename (`ValueError`)
+- blank basename (`ValueError`)
+- `.` basename (`ValueError`)
+- `..` basename (`ValueError`)
+- forward-slash basename (`ValueError`)
+- backslash basename (`ValueError`)
+- basename cannot escape output directory (`ValueError`)
 - one existing target causes preflight failure (`FileExistsError`)
 - preflight failure creates no new files (zero partial files written)
 - permission errors (`PermissionError`)
@@ -1163,11 +1165,13 @@ Preserves single-symbol models, builders, schemas v1/v2/v3, single-symbol Markdo
 - `export-markdown` overwrite refusal
 - `export-csv` success
 - `export-csv` overwrite/preflight refusal
-- invalid basename error
+- invalid basename error (`ValueError`)
 - filesystem errors write to stderr
 - non-zero failure exit code
 - unified CLI passthrough (`twstock simulated-portfolio-artifact`)
 - clean-subprocess import boundaries
+- existing unified commands remain unchanged
+
 - existing unified commands remain unchanged
 
 ### 14.13 Explicit Non-Goals

@@ -453,7 +453,10 @@ TARGET_VERSION: 0.4.0
 TARGET_TAG: v0.4.0
 MERGE_GATE: HOLD
 
+v0.4.0 changelog 日期已校正為 2026-07-24。已重新驗證 package metadata、安裝與 console entrypoint。`v0.4.0` tag 與 GitHub Release 已由獨立 publication action 建立。本 Phase 不修改 tag、不修改 GitHub Release、不發布 PyPI。沒有開始 Phase 53。
+
 Phase 53.1–53.2: merged via PR #34
+
 MAIN_MERGE_COMMIT: b8d01b34527b50ea8b0248b0f86585a5f5681306
 
 Phase 53.3: merged via PR #35
