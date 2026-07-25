@@ -807,4 +807,406 @@ Phase 53.3 added the `simulated_portfolio_trading_result` schema v1 boundary via
 - **Unchanged Single-Symbol Schema**: Single-symbol schemas v1/v2/v3 remain unchanged.
 - **Deferred Scope**: Filesystem operations, package-root exports, exporters, CLI, GUI, and Phase 53.4 are not started.
 
-**Phase 53.3 status:** implementation complete, awaiting Reviewer Gate. `MERGE_GATE: HOLD`. Phase 53.4 not started.
+**Phase 53.3 status:** Merged via PR #35 (main merge commit `907a38d907d760a66d05bbeeaeb0ec0d63bb11de`). PHASE_53_3_REVIEWER_GATE: PASS.
+
+## 14. Phase 53.4A Aggregate Portfolio Artifact and Exporter Planning
+
+### 14.1 Baseline and LLM Wiki Check
+
+Phase 53.4A planning was conducted from repository `Mike87117/tw_stock_tool` on branch `phase-53-4a-portfolio-artifact-planning` at `main` merge commit `907a38d907d760a66d05bbeeaeb0ec0d63bb11de`.
+
+- **LLM Wiki Check**:
+  - `health` endpoint: unavailable (`<urlopen error timed out>`)
+  - `projects` endpoint: unavailable
+  - `current project search` endpoint: unavailable
+  - **Decision**: Repository source code, tests, and documentation are authoritative. LLM Wiki is unavailable and does not expand or replace repository evidence.
+
+### 14.2 Report-Data Contract
+
+Phase 53.4B will introduce a pure report-data module:
+`src/tw_stock_tool/paper_trading/portfolio_report_data.py` (planned, not created in 53.4A).
+
+Functions to be defined:
+- `build_simulated_portfolio_trading_summary(result)`
+- `build_simulated_portfolio_position_rows(result)`
+- `build_simulated_portfolio_pending_order_rows(result)`
+- `build_simulated_portfolio_order_rows(result)`
+- `build_simulated_portfolio_fill_rows(result)`
+- `build_simulated_portfolio_rejection_rows(result)`
+- `build_simulated_portfolio_trade_log_rows(result)`
+- `build_simulated_portfolio_trading_report_data(result)`
+
+`build_simulated_portfolio_trading_report_data(result)` exact top-level keys:
+```python
+{
+    "summary": ...,
+    "position_rows": ...,
+    "pending_order_rows": ...,
+    "order_rows": ...,
+    "fill_rows": ...,
+    "rejection_rows": ...,
+    "trade_log_rows": ...,
+}
+```
+
+#### Summary Keys
+- `initial_cash`
+- `final_cash`
+- `total_market_value`
+- `total_equity`
+- `realized_pnl`
+- `unrealized_pnl`
+- `total_return`
+- `total_return_pct`
+- `open_position_count`
+- `pending_order_count` (`len(result.pending_orders)` as a presentation derived value)
+- `order_count`
+- `fill_count`
+- `rejection_count`
+- `audit_record_count`
+
+All metrics except `pending_order_count` directly reflect `SimulatedPortfolioTradingResult` fields without recomputing portfolio valuation.
+
+#### Position Row Keys
+- `symbol`
+- `quantity`
+- `average_cost`
+- `last_price`
+- `market_value`
+- `realized_pnl`
+- `unrealized_pnl`
+
+Preserves canonical symbol order from `result.positions`. Closed positions (`quantity == 0`) are retained.
+
+#### Pending Order Row Keys
+- `order_id`
+- `symbol`
+- `side`
+- `quantity`
+- `signal_time`
+- `created_at`
+- `strategy`
+- `reference_price`
+- `reserved_buy_notional`
+
+Preserves canonical `(symbol, order_id)` order from `result.pending_orders`. Pending BUY displays reservation; pending SELL exposes `0.0`.
+
+#### Orders, Fills, Rejections, and Trade Log Rows
+- **Order rows**: `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `created_at`, `strategy`
+- **Fill rows**: `order_id`, `symbol`, `side`, `quantity`, `price`, `filled_at`, `fee`, `tax`, `slippage`, `gross_amount`, `net_cash_effect`
+- **Rejection rows**: `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `created_at`, `strategy`, `reasons` (`" | ".join(rejection.reasons)`)
+- **Trade-log rows**: `sequence`, `record_id`, `event_type`, `status`, `order_id`, `symbol`, `side`, `quantity`, `signal_time`, `order_created_at`, `expected_execution_model`, `fill_time`, `fill_price`, `fee`, `tax`, `slippage`, `strategy_name`, `strategy_metadata`, `risk_allowed`, `risk_rejection_reasons`, `guard_metadata`, `error_code`, `error_message`. Output row order exactly matches `result.audit_log` order to preserve the global chronological audit order (`sequence` is an output field and verifiable data item, not an exporter sorting instruction; the builder must not sort by `sequence`, symbol, order ID, or event type).
+
+### 14.3 Mutation and Responsibility Policy
+
+- Builders perform pure read-only transformations.
+- No mutation of `SimulatedPortfolioTradingResult`, tuple collections, or inner mutable event objects.
+- No recomputation of domain valuations or PnL.
+- No network access, coordinator calls, strategy/backtest execution, or simulated trading runs.
+- No pending order creation, filling, cancellation, or clearing.
+- Schema v1 contract remains unchanged.
+- Presentation formatting is never written back into domain models.
+
+### 14.4 Markdown Contract
+
+Phase 53.4B will introduce:
+`src/tw_stock_tool/paper_trading/portfolio_exporters.py` (planned, not created in 53.4A).
+
+Function: `export_simulated_portfolio_trading_markdown(result)`
+
+Title and section headers in exact order:
+```markdown
+# Simulated Portfolio Trading Report
+
+## Summary
+## Positions
+## Pending Orders
+## Orders
+## Fills
+## Rejected Simulated Order Intents
+## Trade Log
+```
+
+Empty-section messages:
+- `*No positions to display.*`
+- `*No pending orders to display.*`
+- `*No orders to display.*`
+- `*No fills to display.*`
+- `*No rejected simulated order intents.*`
+- `*No audit events to display.*`
+
+Formatting policy:
+- `None` renders as empty string `""`.
+- Floating point values render formatted with thousands separators and 2 decimal places (`:,.2f`).
+- `total_return_pct` renders as percentage (`{value * 100:,.2f}%`).
+- Table cell pipe characters `|` are escaped to `\|`.
+- Line breaks (CRLF, CR, LF) in cell text are converted to `<br>`.
+- Timestamps render using stable string representation without re-parsing.
+- Dictionary metadata uses deterministic JSON: `json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)`.
+
+### 14.5 CSV Bundle Contract
+
+Function: `export_simulated_portfolio_trading_csv_bundle(result)`
+
+Exact 7 bundle keys:
+- `"summary"`
+- `"positions"`
+- `"pending_orders"`
+- `"orders"`
+- `"fills"`
+- `"rejections"`
+- `"trade_log"`
+
+Empty datasets still emit headers.
+
+CSV filenames:
+- `<basename>_summary.csv`
+- `<basename>_positions.csv`
+- `<basename>_pending_orders.csv`
+- `<basename>_orders.csv`
+- `<basename>_fills.csv`
+- `<basename>_rejections.csv`
+- `<basename>_trade_log.csv`
+
+Default basename: `simulated_portfolio_trading`
+
+CSV formatting policy:
+- Standard Python `csv.writer` with `lineterminator="\n"`.
+- `None` outputs as empty cell `""`.
+- Numeric values output raw unformatted string values (no thousand separator commas).
+- Dictionary metadata outputs deterministic JSON string.
+- Row order matches report-data collection order (`trade_log` row order exactly matches `result.audit_log`).
+
+### 14.6 Filesystem Boundary & CSV Preflight Policy
+
+Phase 53.4C will introduce:
+- `src/tw_stock_tool/paper_trading/portfolio_serialization_files.py` (planned)
+- `src/tw_stock_tool/paper_trading/portfolio_export_files.py` (planned)
+
+Functions:
+- `export_simulated_portfolio_trading_result_json_file(result, path, *, overwrite=False)`
+- `load_simulated_portfolio_trading_result_json_file(path)`
+- `export_simulated_portfolio_trading_markdown_file(result, path, *, overwrite=False)`
+- `export_simulated_portfolio_trading_csv_files(result, output_dir, *, basename="simulated_portfolio_trading", overwrite=False)`
+
+#### Encoding and Schema Reuse
+- JSON, Markdown, and CSV text files strictly use UTF-8 encoding.
+- `export_simulated_portfolio_trading_result_json_file(...)` must call the existing `export_simulated_portfolio_trading_result_json(...)`.
+- `load_simulated_portfolio_trading_result_json_file(...)` must call the existing `load_simulated_portfolio_trading_result_json(...)`.
+- File helpers must NOT duplicate, fork, or re-implement schema v1 validation.
+- File helpers are solely responsible for path resolution, encoding, read/write execution, and overwrite boundary enforcement.
+
+#### CSV Preflight Limitations
+- All 7 target paths (`<basename>_summary.csv`, `<basename>_positions.csv`, `<basename>_pending_orders.csv`, `<basename>_orders.csv`, `<basename>_fills.csv`, `<basename>_rejections.csv`, `<basename>_trade_log.csv`) must be resolved prior to any write operation.
+- When `overwrite=False`, if any single target file already exists, the function must fail with `FileExistsError` immediately before creating or writing any output files (preflight check prevents partial bundle creation).
+- This guarantee covers preflight existence checking only.
+- The 7-file output does NOT provide full transactional atomicity; mid-write disk space exhaustion, permission changes, filesystem failures, or OS I/O errors may still result in partial writes.
+- This phase does NOT introduce temporary-file transaction staging, rollback mechanisms, or database transactions.
+
+#### Exact Basename Policy
+- `basename` must be an exact `str` instance (`type(basename) is str`); it must reject `Path`, `bytes`, integers, or `str` subclasses with `ValueError` (no implicit type coercion or subclass tolerance).
+- `basename` must not be an empty string `""` or contain whitespace only `"   "`.
+- `basename` must not be `.` or `..`.
+- `basename` must not contain forward slash `/` or backslash `\`.
+- `basename` must not alter or escape the caller-specified output directory.
+- If any basename rule is violated, the helper fails closed immediately with `ValueError` without creating or writing any files.
+
+### 14.7 Offline Artifact CLI Boundary
+
+Phase 53.4C will introduce:
+`src/tw_stock_tool/cli/simulated_portfolio_artifact_cli.py` (planned)
+
+Unified CLI command:
+`twstock simulated-portfolio-artifact`
+
+Subcommands:
+- `validate INPUT_JSON`
+- `inspect INPUT_JSON`
+- `export-markdown INPUT_JSON --output-markdown PATH [--overwrite]`
+- `export-csv INPUT_JSON --output-csv-dir DIRECTORY [--basename NAME] [--overwrite]`
+
+#### Prohibited Behaviors & Offline Non-Goals
+The `simulated-portfolio-artifact` CLI:
+- Operates strictly on existing schema v1 JSON artifacts.
+- Does NOT download market data.
+- Does NOT run analysis.
+- Does NOT execute strategies.
+- Does NOT run backtests.
+- Does NOT execute simulated trading.
+- Does NOT run the multi-symbol coordinator.
+- Does NOT create, accept, fill, reject, cancel, or clear orders.
+- Does NOT call the Risk Manager.
+- Does NOT call the Kill Switch.
+- Does NOT connect to brokers.
+- Does NOT perform real order placement.
+- Does NOT generate live signals.
+- Does NOT provide investment advice.
+- Does NOT recommend stocks.
+- Does NOT guarantee returns.
+
+### 14.8 Error Policy
+
+- Domain, schema, artifact content, and contract violation errors raise `PaperTradingModelError` (e.g. unsupported schema version, wrong result type, missing/extra schema fields, invalid domain values, malformed valid-UTF-8 JSON artifact content, serializer/deserializer contract violations).
+- Malformed UTF-8 file reads raise `UnicodeDecodeError` (filesystem decoding errors are NOT wrapped in `PaperTradingModelError`).
+- Basename validation failures raise `ValueError` (NOT wrapped in `PaperTradingModelError`).
+- Filesystem I/O preserves `FileNotFoundError`, `FileExistsError`, `IsADirectoryError`, `PermissionError`, and `UnicodeDecodeError`.
+- CLI outputs error messages to `sys.stderr` and returns a non-zero exit code. `FileExistsError` suggests using `--overwrite`.
+
+### 14.9 Implementation Phase Split
+
+- **Phase 53.4A**: Planning & docs lock (current phase).
+- **Phase 53.4B**: Pure report-data and string exporters (`portfolio_report_data.py`, `portfolio_exporters.py`, unit tests). No filesystem, CLI, or package exports.
+- **Phase 53.4C**: Filesystem operations and offline artifact CLI (`portfolio_serialization_files.py`, `portfolio_export_files.py`, `simulated_portfolio_artifact_cli.py`, unified CLI routing, unit tests). No multi-symbol historical trading execution.
+- **Phase 53.5**: Multi-symbol historical execution CLI orchestration.
+- **Phase 53.6**: Portfolio-wide user-facing risk enforcement (`--max-total-exposure`).
+
+### 14.10 Package Export Policy
+
+- `tw_stock_tool.paper_trading.__init__` is NOT modified in Phase 53.4A or 53.4B.
+- Package-root exports remain unchanged; callers import directly from specific modules until an independent public package API review.
+
+### 14.11 Compatibility Guarantees
+
+Preserves single-symbol models, builders, schemas v1/v2/v3, single-symbol Markdown/CSV exporters, file helpers, CLIs, coordinator, stepper, risk manager, kill switch, guard adapter, GUI, backtest/daily report artifacts, package version, `twstock` commands, and broker interface state.
+
+### 14.12 Planned Test Matrix
+
+#### Phase 53.4B Report-Data Tests (`test_paper_trading_portfolio_report_data.py`)
+- cash-only empty portfolio
+- one open position
+- multiple positions
+- mixed open and closed positions
+- pending BUY
+- pending SELL
+- multiple pending orders
+- orders
+- fills
+- rejections
+- audit events
+- exact report-data top-level keys
+- exact summary keys
+- exact row keys
+- canonical position order preservation (sorted by `symbol`)
+- canonical pending-order order preservation (sorted by `(symbol, order_id)`)
+- global audit chronology preservation: output row order exactly matches `result.audit_log` order; the report-data builder must not sort by `sequence`, symbol, order ID, event type, or any other field
+- derived `pending_order_count`
+- invalid result input type fails closed (`PaperTradingModelError`)
+- no source tuple mutation
+- no inner event-object mutation
+- no source reordering
+
+#### Phase 53.4B Markdown Exporter Tests (`test_paper_trading_portfolio_exporters.py`)
+- exact title (`# Simulated Portfolio Trading Report`)
+- exact section order (Summary, Positions, Pending Orders, Orders, Fills, Rejected Simulated Order Intents, Trade Log)
+- exact summary labels
+- exact empty-section messages (`*No positions to display.*`, `*No pending orders to display.*`, `*No orders to display.*`, `*No fills to display.*`, `*No rejected simulated order intents.*`, `*No audit events to display.*`)
+- `None` renders as empty string `""`
+- general float `:,.2f` formatting
+- `total_return_pct` percentage formatting (`{value * 100:,.2f}%`)
+- pipe escaping (`|` -> `\|`)
+- CRLF conversion (`\r\n` -> `<br>`)
+- CR conversion (`\r` -> `<br>`)
+- LF conversion (`\n` -> `<br>`)
+- deterministic metadata JSON (`json.dumps(..., ensure_ascii=False, sort_keys=True, allow_nan=False)`)
+- timestamp stable string rendering
+- trailing newline
+- Unicode content
+- no source mutation
+
+#### Phase 53.4B CSV Bundle Exporter Tests (`test_paper_trading_portfolio_exporters.py`)
+- exact seven bundle keys (`summary`, `positions`, `pending_orders`, `orders`, `fills`, `rejections`, `trade_log`)
+- exact summary header
+- exact positions header
+- exact pending-orders header
+- exact orders header
+- exact fills header
+- exact rejections header
+- exact trade-log header
+- empty datasets still emit headers
+- deterministic collection row order
+- deterministic metadata JSON
+- `None` outputs as empty cell `""`
+- raw unformatted numeric strings
+- `lineterminator="\n"`
+- Unicode content
+- no source mutation
+
+#### Phase 53.4C Filesystem Tests (`test_paper_trading_portfolio_serialization_files.py` & `test_paper_trading_portfolio_export_files.py`)
+- UTF-8 JSON file round trip
+- missing JSON file (`FileNotFoundError`)
+- directory passed as JSON file (`IsADirectoryError`)
+- malformed UTF-8 (`UnicodeDecodeError`)
+- invalid schema (`PaperTradingModelError`)
+- parent directory creation
+- Markdown overwrite default refusal (`FileExistsError`)
+- Markdown overwrite opt-in
+- Markdown UTF-8 output
+- all seven CSV paths
+- default basename (`simulated_portfolio_trading`)
+- custom basename
+- non-string basename (`ValueError`)
+- blank basename (`ValueError`)
+- `.` basename (`ValueError`)
+- `..` basename (`ValueError`)
+- forward-slash basename (`ValueError`)
+- backslash basename (`ValueError`)
+- basename cannot escape output directory (`ValueError`)
+- one existing target causes preflight failure (`FileExistsError`)
+- preflight failure creates no new files (zero partial files written)
+- permission errors (`PermissionError`)
+- no claim of transactional atomicity
+
+#### Phase 53.4C CLI Tests (`test_simulated_portfolio_artifact_cli.py`)
+- `validate` success
+- `validate` invalid schema failure
+- `validate` missing-file failure
+- `inspect` output and counts
+- `export-markdown` success
+- `export-markdown` overwrite refusal
+- `export-csv` success
+- `export-csv` overwrite/preflight refusal
+- invalid basename error (`ValueError`)
+- filesystem errors write to stderr
+- non-zero failure exit code
+- unified CLI passthrough (`twstock simulated-portfolio-artifact`)
+- clean-subprocess import boundaries
+- existing unified commands remain unchanged
+
+- existing unified commands remain unchanged
+
+### 14.13 Explicit Non-Goals
+
+- No production code in 53.4A
+- No test code in 53.4A
+- No schema v1 changes
+- No single-symbol schema changes
+- No report-data implementation in 53.4A
+- No Markdown exporter implementation in 53.4A
+- No CSV exporter implementation in 53.4A
+- No filesystem implementation in 53.4A
+- No CLI implementation in 53.4A
+- No unified CLI routing in 53.4A
+- No package exports in 53.4A
+- No coordinator changes
+- No runtime state changes
+- No stepper changes
+- No strategy execution
+- No market data fetching
+- No Risk Manager changes
+- No Kill Switch changes
+- No `--max-total-exposure` flag
+- No GUI
+- No database
+- No scheduler
+- No Broker Interface implementation
+- No Shioaji
+- No live trading
+- No real order placement
+- No semi-automatic trading
+- No automatic trading
+- No investment advice
+- No stock recommendations
+- No guaranteed returns
+- No Phase 53.4B implementation in Phase 53.4A
+**Phase 53.4A status:** Reviewer Gate PASS.
+**Phase 53.4B status:** final test corrections complete, awaiting Reviewer Gate (`PHASE_53_4B_REVIEWER_GATE: PENDING_REVIEW`). Phase 53.4C not started. `MERGE_GATE: HOLD`.
