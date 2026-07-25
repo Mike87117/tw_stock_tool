@@ -470,19 +470,85 @@ PHASE_53_4A_REVIEWER_GATE: PASS
 PHASE_53_4B_REVIEWER_GATE: PASS
 MERGE_GATE: PASS
 
-Phase 53.4C final test corrections complete, awaiting Reviewer Gate
-PHASE_TYPE: PRODUCTION_CODE
-PORTFOLIO_JSON_FILE_HELPERS_CHANGED: YES
-PORTFOLIO_MARKDOWN_FILE_HELPERS_CHANGED: YES
-PORTFOLIO_CSV_FILE_HELPERS_CHANGED: YES
-OFFLINE_ARTIFACT_CLI_CHANGED: YES
-UNIFIED_CLI_ROUTING_CHANGED: YES
+Phase 53.4C: merged via PR #37
+MAIN_MERGE_COMMIT: 03181acc7f85a229a687eb538dd6801ad3f7410c
+PHASE_53_4C_REVIEWER_GATE: PASS
+MERGE_GATE: PASS
+
+Phase 53.5A: Multi-Symbol Simulated Portfolio CLI Orchestration Planning
+PHASE_TYPE: PLANNING_AND_DOCUMENTATION_ONLY
+PRODUCTION_CODE_CHANGED: NO
+TEST_CODE_CHANGED: NO
+CLI_RUNTIME_CHANGED: NO
 SERIALIZATION_SCHEMA_CHANGED: NO
-PACKAGE_EXPORTS_CHANGED: NO
-GENERIC_OUTPUT_WRITERS_CHANGED: NO
-PHASE_53_5_STARTED: NO
-PHASE_53_4C_REVIEWER_GATE: PENDING_REVIEW
+PHASE_53_5A_REVIEWER_GATE: PENDING_REVIEW
 MERGE_GATE: HOLD
+
+### Phase 53.5A Planning Contracts (Phase 53.5B Execution Specification)
+
+1. **Target Command**:
+   `twstock simulated-portfolio-trading` (does not modify or break existing single-symbol `twstock simulated-paper-trading`).
+
+2. **First-Version Stock Inputs**:
+   - `--stocks 2330 2317 2454`
+   - `--file stocks.txt`
+   - Rules: Must provide at least one of `--stocks` or `--file`. Combined if both provided. Symbols normalized using existing normalization logic, duplicates removed deterministically. Blank symbols fail closed. Final list must not be empty.
+   - Non-goals for Phase 53.5B: `--auto-stock-list`, `--stock-limit`, and `--stock-sample` are explicitly deferred.
+
+3. **First-Version Execution Parameters**:
+   - Parameters: `--stocks`, `--file`, `--strategy` (choices: `ma_cross`, `macd`, `rsi`), `--initial-cash`, `--quantity-per-trade` (default 1000), `--period`, `--fee-rate`, `--tax-rate`, `--slippage-per-share`, `--force-refresh`, `--output-json` (required), `--overwrite` (default False).
+   - Uniform assumptions across all portfolio symbols (shared strategy, period, quantity, fee, tax, slippage). No per-symbol strategy or quantity overrides in Phase 53.5B.
+
+4. **Orchestration Layering Architecture**:
+   - Facade (`src/tw_stock_tool/paper_trading/portfolio_engine.py`):
+     `run_simulated_portfolio_trading_result(dataframes, *, initial_cash, last_prices, quantity_per_trade=1000, fee_rate=0.0, tax_rate=0.0, slippage_per_share=0.0, guard_decision=None, guard_decision_provider=None, strategy=None, strategy_metadata=None) -> SimulatedPortfolioTradingResult`
+     - Validates inputs, creates shared `SimulatedPortfolio` & `SimulatedPaperTradingRuntimeState`, calls `run_chronological_multi_symbol_simulated_paper_trading`, builds and returns `SimulatedPortfolioTradingResult`.
+     - Prohibitions: No network fetch, no `analyze_stock`, no CLI parsing, no file writes, no Markdown/CSV exports, no recommendation logic, no coordinator/schema mutations.
+   - CLI Adapter (`src/tw_stock_tool/cli/simulated_portfolio_trading_cli.py`):
+     1. Collect & normalize symbols.
+     2. Fetch & analyze each stock via existing `analyze_stock(...)`.
+     3. Generate strategy signals & build `Mapping[str, pandas.DataFrame]`.
+     4. Validate DataFrames and build `last_prices: Mapping[str, float]`.
+     5. Call portfolio engine facade.
+     6. Export JSON artifact via `export_simulated_portfolio_trading_result_json_file(...)`.
+     7. Perform read-back validation via `load_simulated_portfolio_trading_result_json_file(...)`.
+     8. Output deterministic summary & clean exit code.
+
+5. **Fail-Closed Policy**:
+   - Complete portfolio fail-closed: If any single stock fails data fetch, analysis, strategy execution, returns empty DataFrame, lacks `Open`/`Close`/signals, or has invalid/non-numeric/NaN/infinity/<=0 final close, the entire portfolio execution fails immediately (exit code 1).
+   - Rationale: Portfolio shares cash pool and exposure; omitting a stock distorts chronological fill order, reservation, and equity calculation.
+
+6. **Artifact Output Contract**:
+   - CLI requires `--output-json`, defaults `--overwrite` to False.
+   - Writes JSON artifact via `export_simulated_portfolio_trading_result_json_file(...)`, re-loads via `load_simulated_portfolio_trading_result_json_file(...)`.
+   - No `--output-markdown` or `--output-csv-dir` in execution CLI (handled separately by `simulated-portfolio-artifact`).
+
+7. **Deterministic Execution and Summary Output**:
+   - Preserves chronological timeline, deterministic symbol ordering, pending fill prioritization before new order evaluation, shared cash/portfolio/trade_log.
+   - Terminal summary displays 14 summary metrics (Initial Cash, Final Cash, Total Market Value, Total Equity, Realized PnL, Unrealized PnL, Total Return, Total Return Pct raw float, Open Position Count, Pending Order Count, Order Count, Fill Count, Rejection Count, Audit Record Count) and Output JSON Path.
+
+8. **Phase 53.5B Planned File Scope**:
+   - `src/tw_stock_tool/paper_trading/portfolio_engine.py`
+   - `src/tw_stock_tool/cli/simulated_portfolio_trading_cli.py`
+   - `src/tw_stock_tool/cli/twstock_cli.py`
+   - `tests/test_paper_trading_portfolio_engine.py`
+   - `tests/test_simulated_portfolio_trading_cli.py`
+   - `tests/test_twstock_cli.py`
+   - `docs/user-guide/artifacts.md`
+   - `docs/user-guide/cli.md`
+   - `docs/DEVELOPMENT_ROADMAP.md`
+   - `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`
+
+9. **Phase 53.5B Planned Test Matrix**:
+   - Portfolio Engine Facade (16 tests planned): two-symbol execution, different trading dates, same-timestamp entry signals, deterministic symbol ordering, shared cash behavior, insufficient cash, open positions across symbols, realized PnL, terminal pending BUY/SELL, last-price mapping, missing last price fail closed, input mapping mutation protection, DataFrame mutation protection, coordinator invariance, single-symbol engine invariance.
+   - CLI Input (13 tests planned): `--stocks`, `--file`, combined `--stocks` & `--file`, duplicates, blank items, empty list, invalid strategy, invalid initial cash, invalid quantity, invalid rates, missing `--output-json`, existing output without `--overwrite`, existing output with `--overwrite`.
+   - CLI Execution (15 tests planned): successful two-symbol run, single analysis failure fails run, single strategy failure fails run, empty DataFrame, missing Open/Close, missing signals, invalid index, invalid final close, no partial artifact, successful JSON write, read-back validation, deterministic terminal summary, non-zero exit code, error output consistency.
+   - Integration (7 tests planned): `simulated-portfolio-trading` route registration, `--help`, artifact CLI compatibility (`validate`, `inspect`, `export-markdown`, `export-csv`), existing routes unchanged, single-symbol paper trading tests unchanged, clean subprocess import, Python 3.11/3.12 CI compatibility.
+
+10. **Non-Goals & Deferred Scope**:
+    - Non-goals: No Broker Interface, No Shioaji, No live trading, No real orders, No semi-automatic/automatic trading, No stock recommendations, No investment advice, No guaranteed returns, No scheduler, No database, No GUI changes, No Excel exporter, No new schema version, No single-symbol schema changes, No coordinator/runtime/stepper semantic changes, No result model/report-data changes, No exporter changes, No generic writer changes, No package version bump, No release publication, No per-symbol strategy/quantity configuration, No scanner-to-portfolio pipeline.
+    - Phase 53.6 Deferred Risk Flags: `--max-order-notional`, `--max-position-quantity`, `--max-position-notional`, `--max-total-exposure`.
+
 
 ## 14. Broker Interface
 
