@@ -989,11 +989,27 @@ Functions:
 - `export_simulated_portfolio_trading_markdown_file(result, path, *, overwrite=False)`
 - `export_simulated_portfolio_trading_csv_files(result, output_dir, *, basename="simulated_portfolio_trading", overwrite=False)`
 
-CSV Preflight & Partial Write Policy:
-- Independent file boundary for portfolio CSV bundle; does not modify generic 3-file `write_csv_bundle()`.
-- Resolves all 7 target file paths prior to any write operation.
-- When `overwrite=False`, checks existence of all 7 target paths before opening any file. If any single target exists, raises `FileExistsError` immediately without writing any files (preflight fail-closed, no partial bundle creation).
-- Basename Policy: Must be a non-blank string, cannot be `.` or `..`, cannot contain `/` or `\`. Fails closed if invalid.
+#### Encoding and Schema Reuse
+- JSON, Markdown, and CSV text files strictly use UTF-8 encoding.
+- `export_simulated_portfolio_trading_result_json_file(...)` must call the existing `export_simulated_portfolio_trading_result_json(...)`.
+- `load_simulated_portfolio_trading_result_json_file(...)` must call the existing `load_simulated_portfolio_trading_result_json(...)`.
+- File helpers must NOT duplicate, fork, or re-implement schema v1 validation.
+- File helpers are solely responsible for path resolution, encoding, read/write execution, and overwrite boundary enforcement.
+
+#### CSV Preflight Limitations
+- All 7 target paths (`<basename>_summary.csv`, `<basename>_positions.csv`, `<basename>_pending_orders.csv`, `<basename>_orders.csv`, `<basename>_fills.csv`, `<basename>_rejections.csv`, `<basename>_trade_log.csv`) must be resolved prior to any write operation.
+- When `overwrite=False`, if any single target file already exists, the function must fail with `FileExistsError` immediately before creating or writing any output files (preflight check prevents partial bundle creation).
+- This guarantee covers preflight existence checking only.
+- The 7-file output does NOT provide full transactional atomicity; mid-write disk space exhaustion, permission changes, filesystem failures, or OS I/O errors may still result in partial writes.
+- This phase does NOT introduce temporary-file transaction staging, rollback mechanisms, or database transactions.
+
+#### Exact Basename Policy
+- `basename` must be an exact `str` instance; it must reject `Path`, `bytes`, integers, or other string-convertible types with `PaperTradingModelError` or `ValueError`.
+- `basename` must not be an empty string `""` or contain whitespace only `"   "`.
+- `basename` must not be `.` or `..`.
+- `basename` must not contain forward slash `/` or backslash `\`.
+- `basename` must not alter or escape the caller-specified output directory.
+- If any basename rule is violated, the helper fails closed immediately without creating or writing any files.
 
 ### 14.7 Offline Artifact CLI Boundary
 
@@ -1009,7 +1025,24 @@ Subcommands:
 - `export-markdown INPUT_JSON --output-markdown PATH [--overwrite]`
 - `export-csv INPUT_JSON --output-csv-dir DIRECTORY [--basename NAME] [--overwrite]`
 
-The CLI operates purely offline on existing schema v1 JSON artifacts. It does not download data, run analysis, execute strategies, run coordinator, connect to brokers, or place orders.
+#### Prohibited Behaviors & Offline Non-Goals
+The `simulated-portfolio-artifact` CLI:
+- Operates strictly on existing schema v1 JSON artifacts.
+- Does NOT download market data.
+- Does NOT run analysis.
+- Does NOT execute strategies.
+- Does NOT run backtests.
+- Does NOT execute simulated trading.
+- Does NOT run the multi-symbol coordinator.
+- Does NOT create, accept, fill, reject, cancel, or clear orders.
+- Does NOT call the Risk Manager.
+- Does NOT call the Kill Switch.
+- Does NOT connect to brokers.
+- Does NOT perform real order placement.
+- Does NOT generate live signals.
+- Does NOT provide investment advice.
+- Does NOT recommend stocks.
+- Does NOT guarantee returns.
 
 ### 14.8 Error Policy
 
@@ -1036,15 +1069,106 @@ Preserves single-symbol models, builders, schemas v1/v2/v3, single-symbol Markdo
 
 ### 14.12 Planned Test Matrix
 
-- **Phase 53.4B Tests**:
-  - Report data: cash-only, open/closed positions, pending BUY/SELL, full trade log, exact keys, canonical ordering, derived counts, read-only non-mutation.
-  - Markdown exporter: exact title and 7 headers, exact empty section strings, cell pipe escaping, line break `<br>` conversion, deterministic metadata JSON, trailing newline.
-  - CSV bundle exporter: exact 7 bundle keys, exact headers, empty dataset headers, raw unformatted numeric strings, deterministic metadata JSON.
-- **Phase 53.4C Tests**:
-  - JSON file I/O: UTF-8 round trip, missing file, directory as file, invalid schema.
-  - Markdown file I/O: overwrite protection, UTF-8 output.
-  - CSV file I/O: 7-file creation, custom basename, basename validation failure, preflight check failure with zero partial files written, permission error handling.
-  - Offline artifact CLI: `validate`, `inspect`, `export-markdown`, `export-csv`, unified CLI routing, clean-subprocess import boundaries.
+#### Phase 53.4B Report-Data Tests (`test_paper_trading_portfolio_report_data.py`)
+- cash-only empty portfolio
+- one open position
+- multiple positions
+- mixed open and closed positions
+- pending BUY
+- pending SELL
+- multiple pending orders
+- orders
+- fills
+- rejections
+- audit events
+- exact report-data top-level keys
+- exact summary keys
+- exact row keys
+- canonical position order preservation (sorted by `symbol`)
+- canonical pending-order order preservation (sorted by `(symbol, order_id)`)
+- global audit chronology preservation (sorted by `sequence`)
+- derived `pending_order_count`
+- invalid result input type fails closed (`PaperTradingModelError`)
+- no source tuple mutation
+- no inner event-object mutation
+- no source reordering
+
+#### Phase 53.4B Markdown Exporter Tests (`test_paper_trading_portfolio_exporters.py`)
+- exact title (`# Simulated Portfolio Trading Report`)
+- exact section order (Summary, Positions, Pending Orders, Orders, Fills, Rejected Simulated Order Intents, Trade Log)
+- exact summary labels
+- exact empty-section messages (`*No positions to display.*`, `*No pending orders to display.*`, `*No orders to display.*`, `*No fills to display.*`, `*No rejected simulated order intents.*`, `*No audit events to display.*`)
+- `None` renders as empty string `""`
+- general float `:,.2f` formatting
+- `total_return_pct` percentage formatting (`{value * 100:,.2f}%`)
+- pipe escaping (`|` -> `\|`)
+- CRLF conversion (`\r\n` -> `<br>`)
+- CR conversion (`\r` -> `<br>`)
+- LF conversion (`\n` -> `<br>`)
+- deterministic metadata JSON (`json.dumps(..., ensure_ascii=False, sort_keys=True, allow_nan=False)`)
+- timestamp stable string rendering
+- trailing newline
+- Unicode content
+- no source mutation
+
+#### Phase 53.4B CSV Bundle Exporter Tests (`test_paper_trading_portfolio_exporters.py`)
+- exact seven bundle keys (`summary`, `positions`, `pending_orders`, `orders`, `fills`, `rejections`, `trade_log`)
+- exact summary header
+- exact positions header
+- exact pending-orders header
+- exact orders header
+- exact fills header
+- exact rejections header
+- exact trade-log header
+- empty datasets still emit headers
+- deterministic collection row order
+- deterministic metadata JSON
+- `None` outputs as empty cell `""`
+- raw unformatted numeric strings
+- `lineterminator="\n"`
+- Unicode content
+- no source mutation
+
+#### Phase 53.4C Filesystem Tests (`test_paper_trading_portfolio_serialization_files.py` & `test_paper_trading_portfolio_export_files.py`)
+- UTF-8 JSON file round trip
+- missing JSON file (`FileNotFoundError`)
+- directory passed as JSON file (`IsADirectoryError`)
+- malformed UTF-8 (`UnicodeDecodeError` / `PaperTradingModelError`)
+- invalid schema (`PaperTradingModelError`)
+- parent directory creation
+- Markdown overwrite default refusal (`FileExistsError`)
+- Markdown overwrite opt-in
+- Markdown UTF-8 output
+- all seven CSV paths
+- default basename (`simulated_portfolio_trading`)
+- custom basename
+- non-string basename (`PaperTradingModelError` / `ValueError`)
+- blank basename
+- `.` basename
+- `..` basename
+- forward-slash basename
+- backslash basename
+- basename cannot escape output directory
+- one existing target causes preflight failure (`FileExistsError`)
+- preflight failure creates no new files (zero partial files written)
+- permission errors (`PermissionError`)
+- no claim of transactional atomicity
+
+#### Phase 53.4C CLI Tests (`test_simulated_portfolio_artifact_cli.py`)
+- `validate` success
+- `validate` invalid schema failure
+- `validate` missing-file failure
+- `inspect` output and counts
+- `export-markdown` success
+- `export-markdown` overwrite refusal
+- `export-csv` success
+- `export-csv` overwrite/preflight refusal
+- invalid basename error
+- filesystem errors write to stderr
+- non-zero failure exit code
+- unified CLI passthrough (`twstock simulated-portfolio-artifact`)
+- clean-subprocess import boundaries
+- existing unified commands remain unchanged
 
 ### 14.13 Explicit Non-Goals
 
