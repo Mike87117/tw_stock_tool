@@ -28,6 +28,7 @@ from tw_stock_tool.cli import scan_stocks
 from tw_stock_tool.cli import stock_list_smoke_check
 from tw_stock_tool.cli import simulated_paper_trading_export_cli
 from tw_stock_tool.cli import simulated_portfolio_artifact_cli
+from tw_stock_tool.cli import simulated_portfolio_trading_cli
 from tw_stock_tool.cli import backtest_artifact_cli
 
 from tw_stock_tool.data import cache_manager
@@ -208,6 +209,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "Does not fetch market data, run analysis, execute strategies or backtests,\n"
         "execute simulated trading, run the portfolio coordinator, connect to brokers,\n"
         "place orders, produce live signals, recommend stocks, or provide investment advice.",
+    )
+
+    from tw_stock_tool.cli import simulated_portfolio_trading_cli
+
+    _add_passthrough_parser(
+        subparsers,
+        "simulated-portfolio-trading",
+        simulated_portfolio_trading_cli.main,
+        "simulated_portfolio_trading_cli.py",
+        "Run multi-symbol historical simulated portfolio trading",
+        "Run research-only multi-symbol simulated portfolio trading over historical data.\n"
+        "Does not connect to brokers, place real orders, or provide investment advice.",
     )
 
 

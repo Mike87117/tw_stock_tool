@@ -779,6 +779,63 @@ class DailyReportArtifactUnifiedCliTests(unittest.TestCase):
         text = artifact.getvalue().lower()
         self.assertIn("existing offline simulated portfolio trading json artifact", text)
 
+    def test_simulated_portfolio_trading_dispatches_to_simulated_portfolio_trading_cli(self):
+        captured = []
+
+        def fake_main():
+            captured.append(sys.argv[:])
+            return 0
+
+        with patch.object(
+            twstock_cli.simulated_portfolio_trading_cli,
+            "main",
+            side_effect=fake_main,
+        ) as mocked:
+            status = twstock_cli.main([
+                "simulated-portfolio-trading",
+                "--stocks",
+                "2330",
+                "2317",
+                "--strategy",
+                "ma_cross",
+                "--initial-cash",
+                "1000000",
+                "--output-json",
+                "portfolio.json",
+            ])
+
+        self.assertEqual(status, 0)
+        mocked.assert_called_once_with()
+        self.assertEqual(
+            captured,
+            [[
+                "simulated_portfolio_trading_cli.py",
+                "--stocks",
+                "2330",
+                "2317",
+                "--strategy",
+                "ma_cross",
+                "--initial-cash",
+                "1000000",
+                "--output-json",
+                "portfolio.json",
+            ]],
+        )
+
+    def test_simulated_portfolio_trading_help_registration_and_safety(self):
+        root = StringIO()
+        with redirect_stdout(root), self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("simulated-portfolio-trading", root.getvalue())
+
+        trading = StringIO()
+        with redirect_stdout(trading), self.assertRaises(SystemExit) as raised:
+            twstock_cli.main(["simulated-portfolio-trading", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        text = trading.getvalue().lower()
+        self.assertIn("run research-only multi-symbol simulated portfolio trading", text)
+
 
 if __name__ == "__main__":
     unittest.main()

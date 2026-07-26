@@ -28,7 +28,21 @@ export 命令可輸出 Markdown、CSV bundle 或兩者；既有輸出須使用 -
 
 ## Simulated Portfolio Trading
 
-多股票模擬投資組合 JSON artifact 離線操作工具：
+使用 `twstock simulated-portfolio-trading` 執行多股票歷史模擬並直接產生 schema v1 JSON artifact：
+
+~~~bash
+twstock simulated-portfolio-trading \
+  --stocks 2330 2317 2454 \
+  --strategy ma_cross \
+  --initial-cash 1000000 \
+  --quantity-per-trade 1000 \
+  --period 2y \
+  --output-json output/portfolio.json
+~~~
+
+注意：任一股票在取得資料、分析、策略執行或格式驗證失敗時，整個 portfolio 執行會立即失敗（fail closed），且不會在寫檔前建立 JSON artifact。寫檔與讀回驗證不具備 transactional rollback 保證。
+
+產生 JSON artifact 後，使用離線工具操作：
 
 ~~~bash
 twstock simulated-portfolio-artifact validate output/portfolio.json
