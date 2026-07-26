@@ -16,6 +16,8 @@
 
 - [開發指南](developer-guide/contributing.md)
 - [架構概覽](architecture/overview.md)
+- [產品架構與後續開發計畫](architecture/product-architecture-and-roadmap.md)
+- [Market Data Provider 拆分規劃](architecture/market-data-provider-decomposition-plan.md)
 - [Root entry removal record](archive/root-wrapper-removal.md)
 - [資料提供者與快取契約](DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md)
 

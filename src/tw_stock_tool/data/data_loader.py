@@ -1,6 +1,3 @@
-from contextlib import redirect_stderr, redirect_stdout
-from io import StringIO
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +6,8 @@ import requests
 import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
-from tw_stock_tool.utils.console_lock import console_io_lock
 from tw_stock_tool.data import cache_runtime as _cache_runtime
+from tw_stock_tool.data.providers import yfinance_provider
 
 
 class DataLoaderError(Exception):
@@ -297,29 +294,12 @@ def _download_yfinance_quiet(
     interval: str,
     auto_adjust: bool,
 ) -> pd.DataFrame:
-    # redirect_stdout/stderr are process-global, so serialize yfinance calls.
-    with console_io_lock():
-        yf_logger = logging.getLogger("yfinance")
-        previous_disabled = yf_logger.disabled
-        previous_level = yf_logger.level
-        previous_propagate = yf_logger.propagate
-        try:
-            yf_logger.disabled = True
-            yf_logger.setLevel(logging.CRITICAL + 1)
-            yf_logger.propagate = False
-            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                return yf.download(
-                    symbol,
-                    period=period,
-                    interval=interval,
-                    auto_adjust=auto_adjust,
-                    progress=False,
-                    threads=False,
-                )
-        finally:
-            yf_logger.disabled = previous_disabled
-            yf_logger.setLevel(previous_level)
-            yf_logger.propagate = previous_propagate
+    return yfinance_provider.download_yfinance_quiet(
+        symbol,
+        period,
+        interval,
+        auto_adjust,
+    )
 
 
 def _format_no_data_error(

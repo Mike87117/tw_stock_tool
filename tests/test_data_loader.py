@@ -774,5 +774,153 @@ class DataLoaderTest(unittest.TestCase):
             data_loader._write_cache(_download_df(), path)
         fresh.assert_called_once_with(path); age.assert_called_once_with(path); read.assert_called_once_with(path); write.assert_called_once()
 
+    def test_yfinance_success_restores_logger_state(self) -> None:
+        logger = logging.getLogger("yfinance")
+        old_state = (logger.disabled, logger.level, logger.propagate)
+        try:
+            logger.disabled = False
+            logger.setLevel(logging.WARNING)
+            logger.propagate = True
+            with patch.object(data_loader.yf, "download", return_value=_download_df()):
+                df = data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+            self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+            self.assertEqual((logger.disabled, logger.level, logger.propagate), (False, logging.WARNING, True))
+        finally:
+            logger.disabled, logger.level, logger.propagate = old_state
+
+    def test_yfinance_auto_adjust_false_is_forwarded_exactly(self) -> None:
+        with patch.object(data_loader.yf, "download", return_value=_download_df()) as download:
+            data_loader._download_yfinance_quiet("2330.TW", "6mo", "1d", False)
+        download.assert_called_once_with(
+            "2330.TW",
+            period="6mo",
+            interval="1d",
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+        )
+
+    def test_data_loader_yf_download_patch_surface_intercepts_helper(self) -> None:
+        expected = _download_df()
+        with patch.object(data_loader.yf, "download", return_value=expected) as download:
+            df = data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+        self.assertEqual(download.call_count, 1)
+        pd.testing.assert_frame_equal(df, expected, check_freq=False)
+
+    def test_download_tw_stock_uses_patchable_yfinance_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(data_loader, "CACHE_DIR", Path(tmp_dir)):
+                with patch.object(data_loader, "_download_yfinance_quiet", return_value=_download_df()) as helper:
+                    with patch.object(data_loader, "_write_cache") as write_cache:
+                        with patch.object(data_loader.yf, "download") as yf_download:
+                            df, symbol = data_loader.download_tw_stock(
+                                "2330",
+                                period="1y",
+                                interval="1d",
+                                auto_adjust=True,
+                                force_refresh=True,
+                            )
+        helper.assert_called_once_with("2330.TW", "1y", "1d", True)
+        self.assertEqual(symbol, "2330.TW")
+        self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+        yf_download.assert_not_called()
+        write_cache.assert_called_once()
+
+    def test_yfinance_exception_restores_state_and_suppresses_output(self) -> None:
+        logger = logging.getLogger("yfinance")
+        old_state = (logger.disabled, logger.level, logger.propagate)
+        def noisy_failing_download(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            print("provider stdout")
+            print("provider stderr", file=sys.stderr)
+            raise RuntimeError("boom")
+
+        stdout = StringIO()
+        stderr = StringIO()
+        try:
+            logger.disabled = False
+            logger.setLevel(logging.WARNING)
+            logger.propagate = True
+            with patch.object(data_loader.yf, "download", side_effect=noisy_failing_download):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    with self.assertRaisesRegex(RuntimeError, "boom"):
+                        data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual((logger.disabled, logger.level, logger.propagate), (False, logging.WARNING, True))
+        finally:
+            logger.disabled, logger.level, logger.propagate = old_state
+
+    def test_yfinance_helper_can_run_again_after_exception(self) -> None:
+        logger = logging.getLogger("yfinance")
+        old_state = (logger.disabled, logger.level, logger.propagate)
+        expected_state = (False, logging.WARNING, True)
+        stdout = StringIO()
+        stderr = StringIO()
+        calls = 0
+
+        def fail_then_succeed(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            nonlocal calls
+            calls += 1
+            print(f"provider stdout {calls}")
+            print(f"provider stderr {calls}", file=sys.stderr)
+            if calls == 1:
+                raise RuntimeError("first failure")
+            return _download_df()
+
+        try:
+            logger.disabled = expected_state[0]
+            logger.setLevel(expected_state[1])
+            logger.propagate = expected_state[2]
+
+            with patch.object(
+                data_loader.yf,
+                "download",
+                side_effect=fail_then_succeed,
+            ) as download:
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    with self.assertRaisesRegex(RuntimeError, "first failure"):
+                        data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+
+                    self.assertEqual(
+                        (logger.disabled, logger.level, logger.propagate),
+                        expected_state,
+                    )
+
+                    df = data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+
+            self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
+            self.assertEqual(download.call_count, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(
+                (logger.disabled, logger.level, logger.propagate),
+                expected_state,
+            )
+        finally:
+            logger.disabled, logger.level, logger.propagate = old_state
+
+    def test_yfinance_helper_delegates_to_provider_module(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader.yfinance_provider,
+            "download_yfinance_quiet",
+            return_value=expected,
+        ) as provider_download:
+            actual = data_loader._download_yfinance_quiet(
+                "2330.TW",
+                "6mo",
+                "1d",
+                False,
+            )
+
+        provider_download.assert_called_once_with(
+            "2330.TW",
+            "6mo",
+            "1d",
+            False,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
