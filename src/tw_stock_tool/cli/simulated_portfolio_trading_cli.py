@@ -67,45 +67,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
 
     def check_initial_cash(val: str) -> float:
-        return parse_finite_float(
-            val,
-            allow_zero=True,
-            boolean_error="initial_cash must be numeric.",
-            numeric_error="initial_cash must be numeric.",
-            range_error="initial_cash must be a finite non-negative number.",
-        )
+        return parse_finite_float(val, True, "initial_cash must be numeric.", "initial_cash must be numeric.", "initial_cash must be a finite non-negative number.")
 
     parser.add_argument("--initial-cash", required=True, type=check_initial_cash, help="Initial cash for simulation")
 
     def check_quantity(val: str) -> int:
-        return parse_positive_integer(
-            val,
-            boolean_error="quantity_per_trade must be an integer.",
-            decimal_error="quantity_per_trade must be an integer.",
-            invalid_error="quantity_per_trade must be an integer.",
-            nonpositive_error="quantity_per_trade must be a positive integer.",
-        )
+        return parse_positive_integer(val, "quantity_per_trade must be an integer.", "quantity_per_trade must be an integer.", "quantity_per_trade must be an integer.", "quantity_per_trade must be a positive integer.")
 
     parser.add_argument("--quantity-per-trade", type=check_quantity, default=1000, help="Quantity per trade")
     parser.add_argument("--period", default=DEFAULT_PERIOD, help="Data period")
 
     def check_rate(val: str) -> float:
-        return parse_finite_float(
-            val,
-            allow_zero=True,
-            boolean_error="Rate must be numeric.",
-            numeric_error="Rate must be numeric.",
-            range_error="Rate must be a finite non-negative number.",
-        )
+        return parse_finite_float(val, True, "Rate must be numeric.", "Rate must be numeric.", "Rate must be a finite non-negative number.")
 
     def check_max_position_quantity(val: str) -> int:
-        return parse_positive_integer(
-            val,
-            boolean_error="Quantity must be a strictly positive integer.",
-            decimal_error="Quantity must be a strict integer.",
-            invalid_error="Quantity must be a strictly positive integer.",
-            nonpositive_error="Quantity must be a strictly positive integer.",
-        )
+        return parse_positive_integer(val, "Quantity must be a strictly positive integer.", "Quantity must be a strict integer.", "Quantity must be a strictly positive integer.", "Quantity must be a strictly positive integer.")
 
     parser.add_argument("--fee-rate", type=check_rate, default=0.0, help="Fee rate")
     parser.add_argument("--tax-rate", type=check_rate, default=0.0, help="Tax rate")
