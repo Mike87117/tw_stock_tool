@@ -26,4 +26,47 @@ twstock simulated-paper-trading-export result.json --output-csv-dir csv
 
 export 命令可輸出 Markdown、CSV bundle 或兩者；既有輸出須使用 --overwrite。CSV basename 預設為 simulated_paper_trading。讀取支援 schema versions 1、2、3；目前輸出為 version 3。
 
+## Simulated Portfolio Trading
+
+使用 `twstock simulated-portfolio-trading` 執行多股票歷史模擬並直接產生 schema v1 JSON artifact：
+
+~~~bash
+twstock simulated-portfolio-trading \
+  --stocks 2330 2317 2454 \
+  --strategy ma_cross \
+  --initial-cash 1000000 \
+  --quantity-per-trade 1000 \
+  --period 2y \
+  --output-json output/portfolio.json
+~~~
+
+注意：任一股票在取得資料、分析、策略執行或格式驗證失敗時，整個 portfolio 執行會立即失敗（fail closed），且不會在寫檔前建立 JSON artifact。寫檔與讀回驗證不具備 transactional rollback 保證。
+
+產生 JSON artifact 後，使用離線工具操作：
+
+~~~bash
+twstock simulated-portfolio-artifact validate output/portfolio.json
+
+twstock simulated-portfolio-artifact inspect output/portfolio.json
+
+twstock simulated-portfolio-artifact export-markdown \
+  output/portfolio.json \
+  --output-markdown output/portfolio.md
+
+twstock simulated-portfolio-artifact export-csv \
+  output/portfolio.json \
+  --output-csv-dir output/portfolio_csv
+~~~
+
+說明：
+- 此命令只操作既有 JSON artifact。
+- 不抓取市場資料。
+- 不執行分析、策略、回測或 simulated trading。
+- 不呼叫 multi-symbol coordinator。
+- 不連接 broker。
+- 不放置真實訂單。
+- CSV 為七檔 bundle（包含 summary, positions, pending_orders, orders, fills, rejections, trade_log）。
+- 預設不覆寫既有輸出；覆寫必須明確使用 `--overwrite`。
+- 此功能是歷史研究輸出，不是投資建議。
+
 所有 artifact、Markdown、Excel 與 CSV 都是歷史研究輸出，不是交易指令或投資建議。
