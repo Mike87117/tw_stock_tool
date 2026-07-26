@@ -4,6 +4,11 @@ import pandas as pd
 
 from tw_stock_tool.analysis.analysis import analyze_stock
 from tw_stock_tool.backtesting.strategies import STRATEGIES
+from tw_stock_tool.cli.parsers import (
+    parse_finite_float,
+    parse_positive_integer,
+    parse_positive_notional,
+)
 from tw_stock_tool.paper_trading.engine import run_simulated_paper_trading_result
 from tw_stock_tool.paper_trading.results import build_simulated_paper_trading_summary
 from tw_stock_tool.utils.config import DEFAULT_PERIOD
@@ -18,6 +23,7 @@ from tw_stock_tool.simulated_paper_trading_guard.builder import (
 from tw_stock_tool.simulated_paper_trading_guard.providers import (
     DataFrameReferencePriceProvider,
 )
+
 
 def _extract_final_close(df: pd.DataFrame) -> float:
     if df.empty:
@@ -43,6 +49,7 @@ def _extract_final_close(df: pd.DataFrame) -> float:
 
     return fval
 
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run research-only simulated paper trading over historical data.\nDoes not connect to brokers, place real orders, or provide investment advice."
@@ -52,68 +59,35 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--strategy", required=True, choices=["ma_cross", "macd", "rsi"], help="Strategy name")
 
     def check_initial_cash(val: str) -> float:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("initial_cash must be numeric.")
-        fval = float(val)
-        if math.isnan(fval) or math.isinf(fval) or fval < 0:
-            raise argparse.ArgumentTypeError("initial_cash must be a finite non-negative number.")
-        return fval
+        return parse_finite_float(val, True, "initial_cash must be numeric.", None, "initial_cash must be a finite non-negative number.")
 
     parser.add_argument("--initial-cash", required=True, type=check_initial_cash, help="Initial cash for simulation")
 
     def check_quantity(val: str) -> int:
-        if "." in val:
-            raise argparse.ArgumentTypeError("quantity_per_trade must be an integer.")
-        ival = int(val)
-        if ival <= 0:
-            raise argparse.ArgumentTypeError("quantity_per_trade must be a positive integer.")
-        return ival
+        return parse_positive_integer(val, None, "quantity_per_trade must be an integer.", None, "quantity_per_trade must be a positive integer.")
 
     parser.add_argument("--quantity-per-trade", required=True, type=check_quantity, help="Quantity per trade")
 
     parser.add_argument("--period", default=DEFAULT_PERIOD, help="Data period")
 
     def check_rate(val: str) -> float:
-        fval = float(val)
-        if math.isnan(fval) or math.isinf(fval) or fval < 0:
-            raise argparse.ArgumentTypeError("Rate must be a finite non-negative number.")
-        return fval
+        return parse_finite_float(val, True, None, None, "Rate must be a finite non-negative number.")
 
     parser.add_argument("--fee-rate", type=check_rate, default=0.0, help="Fee rate")
     parser.add_argument("--tax-rate", type=check_rate, default=0.0, help="Tax rate")
     parser.add_argument("--slippage-per-share", type=check_rate, default=0.0, help="Slippage per share")
     parser.add_argument("--force-refresh", action="store_true", help="Force refresh data")
 
-    def check_notional(val: str) -> float:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("Notional must be numeric.")
-        try:
-            fval = float(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("Notional must be numeric.")
-        if math.isnan(fval) or math.isinf(fval) or fval <= 0:
-            raise argparse.ArgumentTypeError("Notional must be a finite strictly positive number.")
-        return fval
-
-    parser.add_argument("--max-order-notional", type=check_notional, default=None, help="Maximum notional value per order")
-    parser.add_argument("--max-position-notional", type=check_notional, default=None, help="Maximum total position notional value")
+    parser.add_argument("--max-order-notional", type=parse_positive_notional, default=None, help="Maximum notional value per order")
+    parser.add_argument("--max-position-notional", type=parse_positive_notional, default=None, help="Maximum total position notional value")
 
     def check_max_quantity(val: str) -> int:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("Quantity must be a positive integer.")
-        if "." in val:
-            raise argparse.ArgumentTypeError("Quantity must be a strict integer.")
-        try:
-            ival = int(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("Quantity must be a positive integer.")
-        if ival <= 0:
-            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
-        return ival
+        return parse_positive_integer(val, "Quantity must be a positive integer.", "Quantity must be a strict integer.", "Quantity must be a positive integer.", "Quantity must be a strictly positive integer.")
 
     parser.add_argument("--max-position-quantity", type=check_max_quantity, default=None, help="Maximum total position quantity")
 
     return parser.parse_args(argv)
+
 
 def _build_guard_decision_provider(
     args: argparse.Namespace,
@@ -144,6 +118,7 @@ def _build_guard_decision_provider(
         guard_config,
         reference_price_provider=reference_price_provider,
     )
+
 
 def main(argv: list[str] | None = None) -> int | None:
     try:
@@ -215,6 +190,7 @@ def main(argv: list[str] | None = None) -> int | None:
     except Exception as exc:
         print(f"Error: {exc}")
         return 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

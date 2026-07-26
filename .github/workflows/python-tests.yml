@@ -1,4 +1,4 @@
-﻿name: Python Tests
+name: Python Tests
 
 on:
   push:
@@ -63,3 +63,10 @@ jobs:
           twstock backtest-report --help
           twstock parameter-sweep --help
           twstock walk-forward --help
+          twstock daily-report-artifact --help
+          twstock backtest-artifact --help
+          twstock backtest-result-export --help
+          twstock simulated-paper-trading --help
+          twstock simulated-paper-trading-export --help
+          twstock simulated-portfolio-artifact --help
+          twstock simulated-portfolio-trading --help
