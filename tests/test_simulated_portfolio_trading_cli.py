@@ -873,6 +873,20 @@ class TestSimulatedPortfolioTradingCLIRiskFlags(unittest.TestCase):
             with patch("sys.stderr", new=io.StringIO()):
                 with self.assertRaises(SystemExit):
                     _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--output-json", "out.json"] + flag_args)
+    def test_risk_flags_reject_full_validation_matrix(self):
+        base = ["--strategy", "ma_cross", "--initial-cash", "100000", "--output-json", "out.json"]
+        for flag in ("--max-order-notional", "--max-position-notional", "--max-total-exposure"):
+            for value in ("0", "-1", "nan", "inf", "-inf", "true", "false", "nonnumeric"):
+                with self.subTest(flag=flag, value=value), patch("sys.stderr", new=io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        _parse_args(base + [flag, value])
+        for value in ("0", "-1", "1000.0", "1000.5", "true", "false", "nonnumeric"):
+            with self.subTest(flag="--max-position-quantity", value=value), patch("sys.stderr", new=io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    _parse_args(base + ["--max-position-quantity", value])
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                _parse_args(base + ["--max-total-exposure", "9" * 10000])
 
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.run_simulated_portfolio_trading_result")
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")

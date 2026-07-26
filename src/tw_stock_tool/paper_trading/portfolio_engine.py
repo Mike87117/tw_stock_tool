@@ -74,9 +74,16 @@ def _normalize_optional_risk_notional(name: str, value: object) -> float | None:
         raise PaperTradingModelError(f"{name} must be numeric, not boolean.")
     if type(value) not in (int, float):
         raise PaperTradingModelError(f"{name} must be an integer or float.")
-    numeric = float(value)
+    try:
+        numeric = float(value)
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError(
+            f"{name} must be a finite strictly positive integer or float."
+        ) from None
     if not math.isfinite(numeric) or numeric <= 0.0:
-        raise PaperTradingModelError(f"{name} must be strictly positive.")
+        raise PaperTradingModelError(
+            f"{name} must be a finite strictly positive integer or float."
+        )
     return numeric
 
 
@@ -128,10 +135,10 @@ def _build_composite_guard_decision_provider(
 
         all_allowed = all(dec.is_allowed for _, dec in decisions)
 
-        combined_metadata: dict[str, Any] = {}
-        for name, dec in decisions:
-            if dec.metadata:
-                combined_metadata[name] = dict(dec.metadata)
+        combined_metadata: dict[str, Any] = {
+            name: dict(dec.metadata)
+            for name, dec in decisions
+        }
 
         if all_allowed:
             return SimulatedPaperTradingGuardDecision.allow(metadata=combined_metadata)
