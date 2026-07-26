@@ -229,3 +229,46 @@ class ChronologicalRuntimePortfolioExposureProvider:
                 total_exposure += float(pos.quantity) * price_float
 
         return float(total_exposure + self._runtime_state.total_reserved_buy_notional)
+
+
+class MultiSymbolDataFrameReferencePriceProvider:
+    def __init__(
+        self,
+        dataframes: Mapping[str, pd.DataFrame],
+        *,
+        price_column: str = "Open",
+    ) -> None:
+        if not isinstance(dataframes, Mapping):
+            raise SimulatedPaperTradingGuardError("dataframes must be a Mapping.")
+        if not dataframes:
+            raise SimulatedPaperTradingGuardError("dataframes must not be empty.")
+        if not price_column or not isinstance(price_column, str) or not price_column.strip():
+            raise SimulatedPaperTradingGuardError("price_column must be a non-blank string.")
+
+        self._providers: dict[str, DataFrameReferencePriceProvider] = {}
+        for k, v in dataframes.items():
+            if not isinstance(k, str) or not k.strip():
+                raise SimulatedPaperTradingGuardError("symbol keys must be non-blank strings.")
+            if not isinstance(v, pd.DataFrame):
+                raise SimulatedPaperTradingGuardError("values must be pandas DataFrames.")
+            self._providers[k] = DataFrameReferencePriceProvider(v, price_column=price_column)
+
+    def __call__(
+        self,
+        order: SimulatedOrder,
+        portfolio: SimulatedPortfolio,
+    ) -> float:
+        if not isinstance(order, SimulatedOrder):
+            raise SimulatedPaperTradingGuardError("order must be a SimulatedOrder.")
+        if not isinstance(portfolio, SimulatedPortfolio):
+            raise SimulatedPaperTradingGuardError("portfolio must be a SimulatedPortfolio.")
+
+        if order.symbol not in self._providers:
+            raise SimulatedPaperTradingGuardError(f"Symbol '{order.symbol}' not found in dataframes.")
+
+        price_float = self._providers[order.symbol](order, portfolio)
+
+        if not math.isfinite(price_float):
+            raise SimulatedPaperTradingGuardError("Price must be finite.")
+
+        return price_float

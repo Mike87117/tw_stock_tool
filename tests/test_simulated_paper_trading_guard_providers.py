@@ -2,8 +2,205 @@ import unittest
 import math
 import pandas as pd
 from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPortfolio, SimulatedPosition
-from tw_stock_tool.simulated_paper_trading_guard.providers import DataFrameReferencePriceProvider, DataFramePortfolioExposureProvider
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardError
+from tw_stock_tool.simulated_paper_trading_guard.providers import (
+    DataFrameReferencePriceProvider,
+    DataFramePortfolioExposureProvider,
+    MultiSymbolDataFrameReferencePriceProvider,
+)
+
+
+
+class TestMultiSymbolDataFrameReferencePriceProvider(unittest.TestCase):
+    def setUp(self):
+        self.df1 = pd.DataFrame(
+            {"Open": [100.0, 110.0]},
+            index=pd.to_datetime(["2023-01-01", "2023-01-02"]),
+        )
+        self.df2 = pd.DataFrame(
+            {"Open": [200.0, 220.0]},
+            index=pd.to_datetime(["2023-01-01", "2023-01-02"]),
+        )
+        self.dfs = {"2330": self.df1, "2317": self.df2}
+        self.provider = MultiSymbolDataFrameReferencePriceProvider(self.dfs)
+
+    def test_constructor_non_mapping_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider([self.df1])  # type: ignore
+
+    def test_constructor_empty_mapping_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({})
+
+    def test_constructor_blank_symbol_key_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({"": self.df1})
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({"   ": self.df1})
+
+    def test_constructor_non_string_symbol_key_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({2330: self.df1})  # type: ignore
+
+    def test_constructor_non_dataframe_value_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({"2330": "not df"})  # type: ignore
+
+    def test_constructor_empty_dataframe_value_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({"2330": pd.DataFrame()})
+
+    def test_constructor_blank_price_column_rejected(self):
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider(self.dfs, price_column="")
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider(self.dfs, price_column="   ")
+
+    def test_constructor_missing_price_column_rejected(self):
+        df_no_open = pd.DataFrame({"Close": [100.0]}, index=[1])
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({"2330": df_no_open})
+
+    def test_constructor_duplicate_index_rejected(self):
+        df_dup = pd.DataFrame({"Open": [100.0, 105.0]}, index=[1, 1])
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            MultiSymbolDataFrameReferencePriceProvider({"2330": df_dup})
+
+    def test_constructor_non_monotonic_unique_index_accepted(self):
+        df_nonmono = pd.DataFrame({"Open": [100.0, 105.0]}, index=[2, 1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_nonmono})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        self.assertEqual(provider(order, portfolio), 105.0)
+
+    def test_constructor_custom_price_column_accepted(self):
+        df_custom = pd.DataFrame({"Close": [150.0]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_custom}, price_column="Close")
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        self.assertEqual(provider(order, portfolio), 150.0)
+
+    def test_call_selects_correct_symbol_and_price(self):
+        order1 = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
+        order2 = SimulatedOrder(order_id="2", symbol="2317", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        self.assertEqual(self.provider(order1, portfolio), 100.0)
+        self.assertEqual(self.provider(order2, portfolio), 200.0)
+
+    def test_call_two_symbols_different_prices(self):
+        order1 = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-02"))
+        order2 = SimulatedOrder(order_id="2", symbol="2317", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-02"))
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        self.assertEqual(self.provider(order1, portfolio), 110.0)
+        self.assertEqual(self.provider(order2, portfolio), 220.0)
+
+    def test_call_missing_order_symbol_rejected(self):
+        order = SimulatedOrder(order_id="1", symbol="2454", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            self.provider(order, portfolio)
+
+    def test_call_missing_signal_time_row_rejected(self):
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-05"))
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            self.provider(order, portfolio)
+
+    def test_call_invalid_order_rejected(self):
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            self.provider("not_an_order", portfolio)  # type: ignore
+
+    def test_call_invalid_portfolio_rejected(self):
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            self.provider(order, "not_a_portfolio")  # type: ignore
+
+    def test_call_boolean_price_rejected(self):
+        df_bool = pd.DataFrame({"Open": [True]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_bool})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+    def test_call_string_price_rejected(self):
+        df_str = pd.DataFrame({"Open": ["abc"]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_str})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+
+    def test_call_nan_price_rejected(self):
+        df_nan = pd.DataFrame({"Open": [float("nan")]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_nan})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+    def test_call_positive_infinity_rejected(self):
+        df_inf = pd.DataFrame({"Open": [float("inf")]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_inf})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+    def test_call_negative_infinity_rejected(self):
+        df_neginf = pd.DataFrame({"Open": [float("-inf")]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_neginf})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+    def test_call_zero_price_rejected(self):
+        df_zero = pd.DataFrame({"Open": [0.0]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_zero})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+    def test_call_negative_price_rejected(self):
+        df_neg = pd.DataFrame({"Open": [-10.0]}, index=[1])
+        provider = MultiSymbolDataFrameReferencePriceProvider({"2330": df_neg})
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        with self.assertRaises(SimulatedPaperTradingGuardError):
+            provider(order, portfolio)
+
+    def test_call_ignores_order_metadata_price(self):
+        order = SimulatedOrder(
+            order_id="1",
+            symbol="2330",
+            side="BUY",
+            quantity=1,
+            signal_time=pd.to_datetime("2023-01-01"),
+            metadata={"price": 99999.0},
+        )
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        self.assertEqual(self.provider(order, portfolio), 100.0)
+
+    def test_call_returns_exact_builtin_float(self):
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        res = self.provider(order, portfolio)
+        self.assertEqual(res, 100.0)
+        self.assertEqual(type(res), float)
+
+    def test_call_does_not_mutate_mapping_or_dataframes(self):
+        df1_copy = self.df1.copy()
+        df2_copy = self.df2.copy()
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
+        portfolio = SimulatedPortfolio(cash=1000.0)
+        self.provider(order, portfolio)
+        pd.testing.assert_frame_equal(self.df1, df1_copy)
+        pd.testing.assert_frame_equal(self.df2, df2_copy)
+
 
 class TestDataFrameReferencePriceProvider(unittest.TestCase):
     def test_provider_returns_signal_row_open_by_default(self):
@@ -12,6 +209,7 @@ class TestDataFrameReferencePriceProvider(unittest.TestCase):
         order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=pd.to_datetime("2023-01-01"))
         portfolio = SimulatedPortfolio(cash=1000.0)
         self.assertEqual(provider(order, portfolio), 100.0)
+
 
     def test_provider_supports_custom_price_column(self):
         df = pd.DataFrame({"Close": [100.0, 105.0]}, index=pd.to_datetime(["2023-01-01", "2023-01-02"]))

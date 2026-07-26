@@ -387,5 +387,266 @@ class TestPortfolioEngineFacade(unittest.TestCase):
         pd.testing.assert_frame_equal(dataframes["2330.TW"], df1_copy)
 
 
+from decimal import Decimal
+from fractions import Fraction
+import numpy as np
+
+from tw_stock_tool.paper_trading.models import PaperTradingModelError, SimulatedOrder, SimulatedPortfolio, SimulatedPosition
+from tw_stock_tool.paper_trading.portfolio_engine import (
+    run_simulated_portfolio_trading_result,
+    _normalize_optional_risk_notional,
+    _normalize_optional_risk_quantity,
+    _build_composite_guard_decision_provider,
+)
+from tw_stock_tool.paper_trading.portfolio_results import SimulatedPortfolioTradingResult
+from tw_stock_tool.simulated_paper_trading_guard.adapter import (
+    SimulatedPaperTradingGuardDecision,
+)
+
+
+class TestPortfolioEngineRiskFlags(unittest.TestCase):
+    def setUp(self):
+        self.df1 = _make_sample_df(
+            [
+                ("2026-01-02", 1, 0),
+                ("2026-01-05", 0, 0),
+                ("2026-01-06", 0, 1),
+            ],
+            close_prices=[100.0, 105.0, 110.0],
+        )
+        self.df2 = _make_sample_df(
+            [
+                ("2026-01-02", 1, 0),
+                ("2026-01-05", 0, 0),
+                ("2026-01-06", 0, 0),
+            ],
+            close_prices=[200.0, 205.0, 210.0],
+        )
+        self.dataframes = {"2330.TW": self.df1, "2317.TW": self.df2}
+        self.last_prices = {"2330.TW": 110.0, "2317.TW": 210.0}
+
+    # ------------------------------------------------------------------
+    # Validation Unit Tests
+    # ------------------------------------------------------------------
+
+    def test_normalize_optional_risk_notional_valid(self):
+        self.assertIsNone(_normalize_optional_risk_notional("test", None))
+        self.assertEqual(_normalize_optional_risk_notional("test", 100), 100.0)
+        self.assertEqual(_normalize_optional_risk_notional("test", 100.5), 100.5)
+
+    def test_normalize_optional_risk_notional_invalid(self):
+        for invalid in [0, 0.0, -10, -10.5, True, False, np.bool_(True), "100", float("nan"), float("inf"), float("-inf"), Decimal("100"), Fraction(1, 2)]:
+            with self.assertRaises(PaperTradingModelError):
+                _normalize_optional_risk_notional("test", invalid)
+
+    def test_normalize_optional_risk_quantity_valid(self):
+        self.assertIsNone(_normalize_optional_risk_quantity("test", None))
+        self.assertEqual(_normalize_optional_risk_quantity("test", 1000), 1000)
+
+    def test_normalize_optional_risk_quantity_invalid(self):
+        for invalid in [0, -10, True, False, np.bool_(True), 1000.0, 1000.5, "1000", Decimal("1000"), Fraction(1000, 1)]:
+            with self.assertRaises(PaperTradingModelError):
+                _normalize_optional_risk_quantity("test", invalid)
+
+    def test_facade_notional_flag_invalid_types_raise(self):
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(self.dataframes, initial_cash=500000.0, last_prices=self.last_prices, max_order_notional="100000")
+
+    def test_facade_quantity_flag_invalid_types_raise(self):
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(self.dataframes, initial_cash=500000.0, last_prices=self.last_prices, max_position_quantity=1000.0)  # type: ignore
+
+    # ------------------------------------------------------------------
+    # Individual Risk Limits Tests
+    # ------------------------------------------------------------------
+
+    def test_max_order_notional_limit(self):
+        # Quantity = 1000, signal time Open = 99.0 -> Order notional = 99,000
+        res_allowed = run_simulated_portfolio_trading_result(
+            self.dataframes,
+            initial_cash=500000.0,
+            last_prices=self.last_prices,
+            quantity_per_trade=1000,
+            max_order_notional=100000.0,
+        )
+        self.assertGreater(res_allowed.fill_count, 0)
+
+        # Cap at 50,000 -> 99,000 > 50,000 -> Blocked
+        res_blocked = run_simulated_portfolio_trading_result(
+            self.dataframes,
+            initial_cash=500000.0,
+            last_prices=self.last_prices,
+            quantity_per_trade=1000,
+            max_order_notional=50000.0,
+        )
+        self.assertEqual(res_blocked.fill_count, 0)
+        self.assertGreater(res_blocked.rejection_count, 0)
+        self.assertIn("order_notional exceeds max_order_notional", res_blocked.rejections[0].reasons)
+
+    def test_max_position_quantity_limit(self):
+        res_blocked = run_simulated_portfolio_trading_result(
+            self.dataframes,
+            initial_cash=500000.0,
+            last_prices=self.last_prices,
+            quantity_per_trade=1000,
+            max_position_quantity=500,
+        )
+        self.assertEqual(res_blocked.fill_count, 0)
+        self.assertGreater(res_blocked.rejection_count, 0)
+        self.assertIn("projected_position_quantity exceeds max_position_quantity", res_blocked.rejections[0].reasons)
+
+    def test_max_position_notional_limit(self):
+        res_blocked = run_simulated_portfolio_trading_result(
+            self.dataframes,
+            initial_cash=500000.0,
+            last_prices=self.last_prices,
+            quantity_per_trade=1000,
+            max_position_notional=50000.0,
+        )
+        self.assertEqual(res_blocked.fill_count, 0)
+        self.assertGreater(res_blocked.rejection_count, 0)
+        self.assertIn("projected_position_notional exceeds max_position_notional", res_blocked.rejections[0].reasons)
+
+    def test_max_total_exposure_limit(self):
+        res_blocked = run_simulated_portfolio_trading_result(
+            self.dataframes,
+            initial_cash=500000.0,
+            last_prices=self.last_prices,
+            quantity_per_trade=1000,
+            max_total_exposure=50000.0,
+        )
+        self.assertEqual(res_blocked.fill_count, 0)
+        self.assertGreater(res_blocked.rejection_count, 0)
+        self.assertIn("projected_total_exposure exceeds max_total_exposure", res_blocked.rejections[0].reasons)
+
+    # ------------------------------------------------------------------
+    # Shared Total Exposure & Reservation Lifecycle
+    # ------------------------------------------------------------------
+
+    def test_shared_total_exposure_between_same_timestamp_symbols(self):
+        # Both 2330.TW (Open 99.0, notional 99k) and 2317.TW (Open 199.0, notional 199k) BUY on 2026-01-02.
+        # Lexical order: 2317.TW evaluated first. 199k <= 250k exposure -> Accepted.
+        # 2317.TW reserved 199k. Next 2330.TW evaluated: 199k + 99k = 298k > 250k -> Blocked.
+        res = run_simulated_portfolio_trading_result(
+            self.dataframes,
+            initial_cash=1000000.0,
+            last_prices=self.last_prices,
+            quantity_per_trade=1000,
+            max_total_exposure=250000.0,
+        )
+        rej = res.rejections
+        self.assertEqual(len(rej), 1)
+        self.assertEqual(rej[0].candidate_order.symbol, "2330.TW")
+        self.assertIn("projected_total_exposure exceeds max_total_exposure", rej[0].reasons)
+
+
+
+    def test_reservation_lifecycle_and_terminal_pending_reservation(self):
+        # BUY signal on last row ("2026-01-06") -> order accepted and stays in pending state at simulation end.
+        df_terminal = _make_sample_df(
+            [
+                ("2026-01-02", 0, 0),
+                ("2026-01-05", 0, 0),
+                ("2026-01-06", 1, 0),
+            ],
+            close_prices=[100.0, 105.0, 110.0],
+        )
+        res = run_simulated_portfolio_trading_result(
+            {"2330.TW": df_terminal},
+            initial_cash=500000.0,
+            last_prices={"2330.TW": 110.0},
+            quantity_per_trade=1000,
+            max_total_exposure=150000.0,
+        )
+        self.assertEqual(len(res.pending_orders), 1)
+        self.assertEqual(res.pending_orders[0].reserved_buy_notional, 109000.0)
+
+    # ------------------------------------------------------------------
+    # SELL Portfolio-Risk Bypass
+    # ------------------------------------------------------------------
+
+    def test_sell_order_bypasses_portfolio_risk(self):
+        # 2330.TW BUY on day 1 (99k notional, allowed under 100k cap).
+        # On day 3, SELL signal (Open 109.0, notional 109k > 100k cap).
+        # SELL passes risk guard cleanly via sell_bypass.
+        df_sell = _make_sample_df(
+            [
+                ("2026-01-02", 1, 0),
+                ("2026-01-05", 0, 0),
+                ("2026-01-06", 0, 1),
+                ("2026-01-07", 0, 0),
+            ],
+            close_prices=[100.0, 105.0, 110.0, 112.0],
+        )
+        res = run_simulated_portfolio_trading_result(
+            {"2330.TW": df_sell},
+            initial_cash=500000.0,
+            last_prices={"2330.TW": 112.0},
+            quantity_per_trade=1000,
+            max_order_notional=100000.0,
+        )
+        self.assertEqual(res.fill_count, 2)  # BUY fill + SELL fill
+        self.assertEqual(res.rejection_count, 0)
+
+    # ------------------------------------------------------------------
+    # Caller Guard Composition
+    # ------------------------------------------------------------------
+
+    def test_composite_guard_decision_provider_fixed_and_custom_together_rejected(self):
+        risk_prov = lambda _o, _p: SimulatedPaperTradingGuardDecision.allow()
+        fixed = SimulatedPaperTradingGuardDecision.allow()
+        custom = lambda _o, _p: SimulatedPaperTradingGuardDecision.allow()
+        with self.assertRaises(ValueError):
+            _build_composite_guard_decision_provider(
+                portfolio_risk_provider=risk_prov,
+                fixed_guard_decision=fixed,
+                custom_guard_decision_provider=custom,
+            )
+
+    def test_composite_guard_decision_provider_evaluates_all_sources_and_namespaces_metadata(self):
+        risk_prov = lambda _o, _p: SimulatedPaperTradingGuardDecision.allow(metadata={"r": 1})
+        custom_prov = lambda _o, _p: SimulatedPaperTradingGuardDecision.allow(metadata={"c": 2})
+
+        comp = _build_composite_guard_decision_provider(
+            portfolio_risk_provider=risk_prov,
+            custom_guard_decision_provider=custom_prov,
+        )
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        port = SimulatedPortfolio(cash=1000.0)
+
+        dec = comp(order, port)
+        self.assertTrue(dec.is_allowed)
+        self.assertEqual(dec.metadata, {"portfolio_risk_guard": {"r": 1}, "custom_guard": {"c": 2}})
+
+    def test_composite_guard_decision_provider_combines_reasons_in_order_and_deduplicates(self):
+        fixed = SimulatedPaperTradingGuardDecision.block(reasons=["r1", "r2"], metadata={"f": 1})
+        risk_prov = lambda _o, _p: SimulatedPaperTradingGuardDecision.block(reasons=["r2", "r3"])
+
+        comp = _build_composite_guard_decision_provider(
+            portfolio_risk_provider=risk_prov,
+            fixed_guard_decision=fixed,
+        )
+        order = SimulatedOrder(order_id="1", symbol="2330", side="BUY", quantity=1, signal_time=1)
+        port = SimulatedPortfolio(cash=1000.0)
+
+        dec = comp(order, port)
+        self.assertFalse(dec.is_allowed)
+        self.assertEqual(dec.reasons, ("r1", "r2", "r3"))
+
+    def test_sell_order_does_not_bypass_fixed_or_custom_block(self):
+        fixed = SimulatedPaperTradingGuardDecision.block(reasons=["fixed_blocked"])
+
+        res = run_simulated_portfolio_trading_result(
+            {"2330.TW": self.df1},
+            initial_cash=500000.0,
+            last_prices={"2330.TW": 110.0},
+            max_order_notional=100000.0,
+            guard_decision=fixed,
+        )
+        self.assertEqual(res.fill_count, 0)
+        self.assertGreater(res.rejection_count, 0)
+        self.assertIn("fixed_blocked", res.rejections[0].reasons)
+
+
 if __name__ == "__main__":
     unittest.main()
