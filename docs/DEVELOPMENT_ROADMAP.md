@@ -475,24 +475,23 @@ MAIN_MERGE_COMMIT: 03181acc7f85a229a687eb538dd6801ad3f7410c
 PHASE_53_4C_REVIEWER_GATE: PASS
 MERGE_GATE: PASS
 
-Phase 53.5A: Multi-Symbol Simulated Portfolio CLI Orchestration Planning
+Phase 53.5A & 53.5B: merged via PR #38
+MAIN_MERGE_COMMIT: 899e6c2b7ff4caf2fe8b347c87e7c8bf97e17d96
+PHASE_53_5A_REVIEWER_GATE: PASS
+PHASE_53_5B_REVIEWER_GATE: PASS
+PR_38_MERGED: YES
+MERGE_GATE: COMPLETE
+
+Phase 53.6A: Portfolio Risk Flags Architecture Planning
 PHASE_TYPE: PLANNING_AND_DOCUMENTATION_ONLY
 PRODUCTION_CODE_CHANGED: NO
 TEST_CODE_CHANGED: NO
 CLI_RUNTIME_CHANGED: NO
 SERIALIZATION_SCHEMA_CHANGED: NO
-PHASE_53_5A_REVIEWER_GATE: PASS
+DOCUMENTATION_CHANGED: YES
+PHASE_53_6A_REVIEWER_GATE: PENDING_REVIEW
+PHASE_53_6B_STARTED: NO
 MERGE_GATE: HOLD
-
-Phase 53.5B implementation complete, awaiting Reviewer Gate
-PHASE_TYPE: PRODUCTION_CODE
-PORTFOLIO_ENGINE_FACADE_CHANGED: YES
-MULTI_SYMBOL_EXECUTION_CLI_CHANGED: YES
-UNIFIED_CLI_ROUTING_CHANGED: YES
-SERIALIZATION_SCHEMA_CHANGED: NO
-PHASE_53_5B_REVIEWER_GATE: PENDING_REVIEW
-MERGE_GATE: HOLD
-PHASE_53_6_STARTED: NO
 
 
 ### Phase 53.5A Planning Contracts (Phase 53.5B Execution Specification)
@@ -580,6 +579,166 @@ PHASE_53_6_STARTED: NO
 11. **Non-Goals & Deferred Scope**:
     - Non-goals: No Broker Interface, No Shioaji, No live trading, No real orders, No semi-automatic/automatic trading, No stock recommendations, No investment advice, No guaranteed returns, No scheduler, No database, No GUI changes, No Excel exporter, No new schema version, No single-symbol schema changes, No coordinator/runtime/stepper semantic changes, No result model/report-data changes, No exporter changes, No generic writer changes, No package version bump, No release publication, No per-symbol strategy/quantity configuration, No scanner-to-portfolio pipeline.
     - Phase 53.6 Deferred Risk Flags: `--max-order-notional`, `--max-position-quantity`, `--max-position-notional`, `--max-total-exposure`.
+
+
+### Phase 53.6A Planning Contracts (Phase 53.6B Risk Flags Execution Specification)
+
+1. **Feature Boundary**:
+   - Target Command: `twstock simulated-portfolio-trading` (and pure Python facade `run_simulated_portfolio_trading_result`).
+   - Four optional risk flags:
+     - `--max-order-notional`
+     - `--max-position-quantity`
+     - `--max-position-notional`
+     - `--max-total-exposure`
+   - Single-Symbol CLI (`twstock simulated-paper-trading`) remains COMPLETELY UNTOUCHED.
+   - All flags are research-only simulated trading safeguards. They do not connect to brokers, do not place real orders, do not provide investment advice, and do not guarantee risk mitigation or returns.
+   - When omitted (`None`), Phase 53.5B multi-symbol trading behavior is 100% preserved.
+
+2. **Per-Flag Numeric Types & Validation Contract**:
+   - `--max-order-notional`:
+     - CLI: `type=float` (strictly positive finite float).
+     - Domain: `None` or strictly positive finite `int`/`float`. `None` disables cap. Rejects `0`, negative values (`< 0`), `bool`, `numpy.bool_`, `Decimal`, `Fraction`, custom `Real` subclasses, numeric strings at domain boundary (e.g. `"100000"`), `NaN`, `+inf`, and `-inf`.
+   - `--max-position-quantity`:
+     - CLI: `type=int` (strictly positive integer).
+     - Domain: `None` or exact strictly positive `int` (`type(value) is int`). `None` disables cap. Rejects `0`, negative integers, `bool`, `numpy.bool_`, floats (including exact float `1000.0` or fractional floats), and numeric strings at domain boundary (e.g. `"100"`).
+   - `--max-position-notional`:
+     - CLI: `type=float` (strictly positive finite float).
+     - Domain: `None` or strictly positive finite `int`/`float`. Same rejection rules as `--max-order-notional`.
+   - `--max-total-exposure`:
+     - CLI: `type=float` (strictly positive finite float).
+     - Domain: `None` or strictly positive finite `int`/`float`. Same rejection rules as `--max-order-notional`.
+   - Domain Contract: `None` means disabled; strictly positive valid value (`int`/`float` for notional/exposure, exact `int` for quantity) means enabled; setting any limit to `0` or `0.0` is an invalid configuration (fails closed).
+
+3. **Exposure-Increasing Order Policy & SELL Bypass**:
+   - System is long-only (`SimulatedPortfolio`).
+   - `BUY` orders increase portfolio exposure and position sizes: MUST undergo risk limit evaluation.
+   - `SELL` / exit orders decrease portfolio exposure and position sizes: Portfolio risk caps (`max_order_notional`, `max_position_quantity`, `max_position_notional`, `max_total_exposure`) BYPASS `SELL` orders (returning an allow decision for the portfolio-risk source) so users can always exit existing long positions without being blocked by risk caps.
+   - Caller-supplied `fixed_guard` decision or custom `guard_decision_provider` do NOT automatically bypass `SELL` orders; they evaluate `SELL` orders according to their own semantics.
+
+4. **Reference Price & As-Of DataFrame Pricing Architecture**:
+   - **Candidate Reference Price Provider**: Phase 53.6B is planned to introduce `MultiSymbolDataFrameReferencePriceProvider` in `src/tw_stock_tool/simulated_paper_trading_guard/providers.py`.
+     - Accepts `dataframes: Mapping[str, pandas.DataFrame]` and `price_column: str = "Open"`.
+     - Uses `order.symbol` and `order.signal_time` for exact DataFrame index lookup.
+     - Does not read order metadata price, future rows, next-bar Open fill price, or simulation end `last_prices`.
+     - Fails closed if symbol is missing, signal-time row is missing, or Open price is missing, non-finite, or non-positive.
+     - Preserves existing single-symbol `DataFrameReferencePriceProvider`.
+   - **Portfolio Exposure Provider**: Directly reuses existing `ChronologicalRuntimePortfolioExposureProvider(dataframes, runtime_state, price_column="Open")`.
+     - Valuates each open long position (`quantity > 0`) using the latest row at or before `order.signal_time` (as-of lookup).
+     - If current global timestamp has no bar for a symbol, uses the nearest earlier observable Open.
+     - Never reads future rows or ending `last_prices`.
+     - Fails closed if missing positive position DataFrame, no row at or before signal time, or invalid price.
+   - **No Look-Ahead Bias & Zero Mutation**: No coordinator or stepper price-state observer/mutation required. Public callback signature remains `(order, portfolio) -> SimulatedPaperTradingGuardDecision`.
+
+5. **Quantity and Notional Formulas**:
+   - `candidate_reference_price = MultiSymbolDataFrameReferencePriceProvider(order, portfolio)`.
+   - `candidate_order_notional = order.quantity * candidate_reference_price` (BUY only).
+   - `current_position_quantity(symbol) = portfolio.position_for(symbol).quantity`.
+   - `projected_position_quantity = current_position_quantity(symbol) + candidate_order.quantity`.
+   - `current_position_notional(symbol) = current_position_quantity(symbol) * candidate_reference_price`.
+   - `projected_position_notional(symbol) = current_position_notional(symbol) + candidate_order_notional` (equivalent to `projected_position_quantity * candidate_reference_price`).
+   - `filled_positions_exposure = sum(pos.quantity * latest DataFrame Open at or before order.signal_time for pos in portfolio.positions.values() if pos.quantity > 0)`.
+   - `pending_buy_reservation = runtime_state.total_reserved_buy_notional` (summing `SimulatedPendingOrderState.reserved_buy_notional`).
+   - `current_total_exposure = filled_positions_exposure + pending_buy_reservation`.
+   - `projected_total_exposure = current_total_exposure + candidate_order_notional` (for BUY).
+   - Policy: These projected formulas apply to `BUY` portfolio-risk evaluation (`SELL` is bypassed by portfolio risk caps); fees, taxes, and slippage are excluded from notional caps; `max-position-notional` re-valuates the symbol's current position and projected position using candidate reference Open at signal time (does not use average cost, next-bar fill price, or ending `last_prices`); long-only non-negative values.
+
+6. **Pending Order Reservation Semantics**:
+   - Candidate BUY orders on Bar $N$ become `pending_orders` awaiting Bar $N+1$ Open fills.
+   - Pending BUY orders ARE included in `runtime_state.total_reserved_buy_notional` when evaluating subsequent candidate orders on the same or subsequent bars until filled, skipped, or failed.
+   - Evaluation order within the same timestamp is strictly lexicographical by canonical symbol key (`"2317.TW" < "2330.TW"`).
+   - Lifecycle: Risk-rejected candidate orders never enter pending state. Accepted pending orders are popped from `pending_orders` at the start of the next bar's fill attempt. Once an accepted pending order fills, is skipped because of an invalid next-bar Open, or fails portfolio validation, it is removed from pending state and its BUY reservation is released.
+   - Terminal Pending State: Accepted pending BUY orders that do not receive a subsequent bar before simulation end remain in pending state and their reservations remain in the final runtime/result artifact.
+
+7. **Enforcement Layer & Guard Reuse Architecture**:
+   - Phase 53.6B is planned to reuse existing risk & guard infrastructure:
+     - `SimulatedPaperTradingRiskConfig`
+     - `SimulatedPaperTradingGuardConfig`
+     - `build_guard_decision_provider_from_config`
+     - `SimulatedPaperTradingGuardAdapter`
+     - `MultiSymbolDataFrameReferencePriceProvider` (NEW)
+     - `ChronologicalRuntimePortfolioExposureProvider`
+   - Flow: Four CLI flags -> `SimulatedPaperTradingRiskConfig` -> `SimulatedPaperTradingGuardConfig` -> `MultiSymbolDataFrameReferencePriceProvider` & `ChronologicalRuntimePortfolioExposureProvider` -> `build_guard_decision_provider_from_config(...)` -> risk `guard_decision_provider`.
+
+8. **Guard Composition & Mutual Exclusion Contract**:
+   - Preserves existing caller mutual exclusion: `guard_decision` and `guard_decision_provider` cannot both be provided by caller.
+   - **No risk limits enabled**: 100% Phase 53.5B behavior and caller mutual exclusion preserved. No composite provider created.
+   - **Risk limits enabled**: Facade validates caller mutual exclusion, then builds a facade-local composite provider (`composite_provider`), passing `guard_decision=None` and `guard_decision_provider=composite_provider` to coordinator. Valid combinations:
+     - Risk only: evaluates `[portfolio_risk_source]`
+     - Fixed decision + Risk: evaluates `[fixed_guard_decision, portfolio_risk_source]`
+     - Risk + Custom provider: evaluates `[portfolio_risk_source, caller_custom_provider]`
+     (Fixed decision + Risk + Custom provider remains invalid).
+   - **Evaluation Policy: Evaluate All**: All configured sources in the composite provider are evaluated without short-circuiting.
+   - **Reason Composition**: Combine denial reasons in source evaluation order, apply global stable deduplication (keep first occurrence), set `is_allowed = False` if any source blocks.
+   - **Metadata Composition**: Namespaced under `fixed_guard`, `portfolio_risk_guard`, `custom_guard`.
+   - **Exception Policy**: Internal risk provider errors and custom provider exceptions fail execution closed (record execution error, abort simulation, fail entire execution). If an earlier source blocked but a later source raises an exception, the exception takes precedence and the entire execution fails closed.
+
+9. **Canonical Existing Rejection Reasons**:
+   - Reuses existing canonical reason strings emitted by core risk rules:
+     - `order_notional exceeds max_order_notional`
+     - `projected_position_quantity exceeds max_position_quantity`
+     - `projected_position_notional exceeds max_position_notional`
+     - `projected_total_exposure exceeds max_total_exposure`
+   - The core risk rules emit these base reason strings. The existing risk builder may preserve or aggregate them according to its existing behavior. Phase 53.6B must persist the actual `SimulatedPaperTradingGuardDecision` reasons returned by the existing builder/adapter pipeline and must not rewrite them in the CLI.
+   - Rejections record standard `SimulatedOrderRejection` events into `portfolio.trade_log`, updating `rejection_count`, `rejections`, and `audit_log`.
+
+10. **Deterministic Same-Timestamp Behavior**:
+    - Same-timestamp evaluation order is deterministic by canonical symbol key (`"2317.TW" < "2330.TW"`).
+    - Shared limit deductions are deterministic. Input dictionary order does not alter outcome. Repeat runs produce identical results.
+
+11. **Failure Boundary Classification**:
+    - **Configuration / Parser Failure**: Non-positive limit (0, negative), NaN, infinity, string at facade -> Pre-execution fail closed (`ret=1`, stderr `error: ...`, no output file).
+    - **Risk Limit Exceeded**: Normal simulated trading rejection (`risk_rejected`), trading continues for remaining bars/symbols, final artifact JSON generated cleanly.
+    - **Internal Provider Error**: Unhandled exception fails closed to prevent hidden corrupt state.
+
+12. **Schema and Artifact Compatibility**:
+    - `SERIALIZATION_SCHEMA_CHANGED: NO`
+    - The existing result, rejection, audit, and schema structures appear sufficient. Phase 53.6B is planned to preserve them without a schema version change, subject to implementation and offline artifact compatibility verification.
+
+13. **Backward Compatibility**:
+    - When flags are omitted (`None`), Phase 53.5B behavior is 100% unchanged.
+    - Single-symbol CLI, existing facade callers, and existing custom guard decision providers remain fully compatible.
+
+14. **Planned File Scope for Phase 53.6B**:
+    - **Required Production Files**:
+      - `src/tw_stock_tool/cli/simulated_portfolio_trading_cli.py`
+      - `src/tw_stock_tool/paper_trading/portfolio_engine.py`
+      - `src/tw_stock_tool/simulated_paper_trading_guard/providers.py`
+    - **Required Test Files**:
+      - `tests/test_simulated_portfolio_trading_cli.py`
+      - `tests/test_paper_trading_portfolio_engine.py`
+      - `tests/test_simulated_paper_trading_guard_providers.py`
+    - **Optional Documentation Files**:
+      - `docs/DEVELOPMENT_ROADMAP.md`
+      - `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`
+      - `docs/user-guide/cli.md`
+    - **Explicitly Forbidden Production Files**:
+      - `src/tw_stock_tool/paper_trading/coordinator.py`
+      - `src/tw_stock_tool/paper_trading/stepper.py`
+      - `src/tw_stock_tool/paper_trading/runtime.py`
+      - `src/tw_stock_tool/paper_trading/models.py`
+      - `src/tw_stock_tool/paper_trading/portfolio_results.py`
+      - `src/tw_stock_tool/risk/config.py`
+      - `src/tw_stock_tool/risk/rules.py`
+      - `src/tw_stock_tool/risk/models.py`
+      - `src/tw_stock_tool/risk/builder.py`
+      - `src/tw_stock_tool/simulated_paper_trading_guard/adapter.py`
+      - `src/tw_stock_tool/simulated_paper_trading_guard/builder.py`
+      - `src/tw_stock_tool/simulated_paper_trading_guard/config.py`
+      - `portfolio_risk_guard.py` (NEW)
+      - serialization schema files
+      - generic output writers
+      - single-symbol CLI files
+
+15. **Planned Test Matrix for Phase 53.6B**:
+    - **Multi-Symbol Reference Provider**: exact candidate symbol lookup, exact signal-time Open lookup, different DataFrames per symbol, missing symbol/row/Open fail-closed, invalid Open (bool/string/NaN/inf/zero/negative) fail-closed, does not read order metadata price, does not mutate inputs, preserves single-symbol `DataFrameReferencePriceProvider`.
+    - **As-Of Exposure Integration & Pending Lifecycle**: position with bar at candidate timestamp, position without bar at candidate timestamp uses nearest earlier Open, no-signal intermediate bar available via DataFrame as-of lookup, later/future row never used, no row at or before signal time fails closed, final `last_prices` not used, multiple positions sum deterministically, pending BUY reservation included, pending SELL reservation excluded (contributes zero reservation), candidate BUY not double-counted, mismatched symbol calendars, runtime portfolio identity mismatch fails closed, risk-rejected candidate never enters pending state, successful fill replaces reservation with filled position exposure, invalid-open skipped fill releases reservation, portfolio-validation failed fill releases reservation, terminal accepted pending BUY remains reserved in final runtime/result (not silently released without a fill attempt).
+    - **Validation**: notional/exposure flags (omitted accepted, positive int/float accepted, zero/negative/bool/string/NaN/inf rejected), position quantity (omitted accepted, positive exact int accepted, zero/negative/bool/numpy.bool_/1000.0/fractional float/string rejected).
+    - **Risk Behavior**: below limit allowed, exactly equal allowed, above limit rejected, all 4 existing canonical reason strings preserved, BUY total exposure adds candidate notional once, pending reservation competes across same-timestamp candidates, lexicographical symbol ordering deterministic, SELL bypasses portfolio risk caps (large SELL not rejected by max-order-notional), SELL does not bypass fixed guard or custom provider.
+    - **Guard Composition & Exceptions**: risk only, fixed allow/block + risk allow/block, risk allow/block + custom allow/block, fixed and custom together remain invalid, evaluate-all behavior, deterministic reason ordering, stable deduplication, metadata namespacing, risk/custom provider exception fails execution, later exception overrides earlier block.
+    - **Compatibility & Integration**: CLI help smoke, all four flags routed, successful artifact JSON export, offline artifact CLI compatibility, no schema version change, single-symbol CLI unaffected, full suite regression.
+
+
+
 
 
 

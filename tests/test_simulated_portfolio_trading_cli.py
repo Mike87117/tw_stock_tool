@@ -802,5 +802,171 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
             self.assertGreater(len(summary_csv_path.read_text(encoding="utf-8").strip()), 0)
 
 
+class TestSimulatedPortfolioTradingCLIRiskFlags(unittest.TestCase):
+    def test_risk_flags_parsing_defaults_none(self):
+        args = _parse_args(
+            [
+                "--stocks",
+                "2330",
+                "--strategy",
+                "ma_cross",
+                "--initial-cash",
+                "1000000",
+                "--output-json",
+                "out.json",
+            ]
+        )
+        self.assertIsNone(args.max_order_notional)
+        self.assertIsNone(args.max_position_quantity)
+        self.assertIsNone(args.max_position_notional)
+        self.assertIsNone(args.max_total_exposure)
+
+    def test_risk_flags_parsing_valid_values(self):
+        args = _parse_args(
+            [
+                "--stocks",
+                "2330",
+                "--strategy",
+                "ma_cross",
+                "--initial-cash",
+                "1000000",
+                "--output-json",
+                "out.json",
+                "--max-order-notional",
+                "100000",
+                "--max-position-quantity",
+                "5000",
+                "--max-position-notional",
+                "200000.5",
+                "--max-total-exposure",
+                "500000",
+            ]
+        )
+        self.assertEqual(args.max_order_notional, 100000.0)
+        self.assertEqual(type(args.max_order_notional), float)
+        self.assertEqual(args.max_position_quantity, 5000)
+        self.assertEqual(type(args.max_position_quantity), int)
+        self.assertEqual(args.max_position_notional, 200000.5)
+        self.assertEqual(type(args.max_position_notional), float)
+        self.assertEqual(args.max_total_exposure, 500000.0)
+        self.assertEqual(type(args.max_total_exposure), float)
+
+    def test_risk_flags_parsing_invalid_values(self):
+        invalid_cases = [
+            ["--max-order-notional", "0"],
+            ["--max-order-notional", "-10"],
+            ["--max-order-notional", "nan"],
+            ["--max-order-notional", "inf"],
+            ["--max-order-notional", "true"],
+            ["--max-order-notional", "invalid"],
+            ["--max-position-quantity", "0"],
+            ["--max-position-quantity", "-5"],
+            ["--max-position-quantity", "100.5"],
+            ["--max-position-quantity", "true"],
+            ["--max-position-quantity", "invalid"],
+            ["--max-position-notional", "0"],
+            ["--max-position-notional", "-100"],
+            ["--max-total-exposure", "0"],
+            ["--max-total-exposure", "-100"],
+        ]
+        for flag_args in invalid_cases:
+            with patch("sys.stderr", new=io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--output-json", "out.json"] + flag_args)
+    def test_risk_flags_reject_full_validation_matrix(self):
+        base = ["--strategy", "ma_cross", "--initial-cash", "100000", "--output-json", "out.json"]
+        for flag in ("--max-order-notional", "--max-position-notional", "--max-total-exposure"):
+            for value in ("0", "-1", "nan", "inf", "-inf", "true", "false", "nonnumeric"):
+                with self.subTest(flag=flag, value=value), patch("sys.stderr", new=io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        _parse_args(base + [flag, value])
+        for value in ("0", "-1", "1000.0", "1000.5", "true", "false", "nonnumeric"):
+            with self.subTest(flag="--max-position-quantity", value=value), patch("sys.stderr", new=io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    _parse_args(base + ["--max-position-quantity", value])
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                _parse_args(base + ["--max-total-exposure", "9" * 10000])
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.run_simulated_portfolio_trading_result")
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_facade_routing_receives_all_four_risk_kwargs(self, mock_analyze, mock_engine):
+        mock_analyze.return_value = _make_mock_analysis("2330")
+        mock_engine.return_value = MagicMock(spec=SimulatedPortfolioTradingResult)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_file = Path(tmpdir) / "out.json"
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: df}):
+                main(
+                    [
+                        "--stocks",
+                        "2330",
+                        "--strategy",
+                        "ma_cross",
+                        "--initial-cash",
+                        "500000",
+                        "--max-order-notional",
+                        "100000",
+                        "--max-position-quantity",
+                        "1000",
+                        "--max-position-notional",
+                        "100000",
+                        "--max-total-exposure",
+                        "200000",
+                        "--output-json",
+                        str(json_file),
+                    ]
+                )
+
+        mock_engine.assert_called_once()
+        kwargs = mock_engine.call_args.kwargs
+        self.assertEqual(kwargs["max_order_notional"], 100000.0)
+        self.assertEqual(kwargs["max_position_quantity"], 1000)
+        self.assertEqual(kwargs["max_position_notional"], 100000.0)
+        self.assertEqual(kwargs["max_total_exposure"], 200000.0)
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_end_to_end_artifact_with_risk_flags_enabled(self, mock_analyze):
+        df = _make_sample_df(
+            [
+                ("2026-01-02", 1, 0),
+                ("2026-01-05", 0, 0),
+            ],
+            close_prices=[100.0, 105.0],
+        )
+        mock_analyze.return_value = _make_mock_analysis("2330", df=df)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_file = Path(tmpdir) / "out.json"
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda _df: df}):
+                ret = main(
+                    [
+                        "--stocks",
+                        "2330",
+                        "--strategy",
+                        "ma_cross",
+                        "--initial-cash",
+                        "500000",
+                        "--quantity-per-trade",
+                        "1000",
+                        "--max-order-notional",
+                        "50000",  # Order notional = 99,000 > 50,000 -> Blocked
+                        "--output-json",
+                        str(json_file),
+                    ]
+                )
+
+            self.assertIsNone(ret)
+            self.assertTrue(json_file.exists())
+
+            raw_json = json_file.read_text(encoding="utf-8")
+            json_data = json.loads(raw_json)
+            self.assertIn(str(json_data["schema_version"]), ("1", "1.0"))
+
+            loaded = load_simulated_portfolio_trading_result_json(raw_json)
+            self.assertEqual(loaded.rejection_count, 1)
+            self.assertIn("order_notional exceeds max_order_notional", loaded.rejections[0].reasons)
+
+
 if __name__ == "__main__":
     unittest.main()

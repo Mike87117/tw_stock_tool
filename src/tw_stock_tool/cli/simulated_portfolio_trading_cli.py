@@ -101,14 +101,43 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             raise argparse.ArgumentTypeError("Rate must be a finite non-negative number.")
         return fval
 
+    def check_risk_notional(val: str) -> float:
+        if val.lower() in ("true", "false"):
+            raise argparse.ArgumentTypeError("Notional must be numeric.")
+        try:
+            fval = float(val)
+        except ValueError:
+            raise argparse.ArgumentTypeError("Notional must be numeric.")
+        if math.isnan(fval) or math.isinf(fval) or fval <= 0:
+            raise argparse.ArgumentTypeError("Notional must be a finite strictly positive number.")
+        return fval
+
+    def check_max_position_quantity(val: str) -> int:
+        if val.lower() in ("true", "false"):
+            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
+        if "." in val:
+            raise argparse.ArgumentTypeError("Quantity must be a strict integer.")
+        try:
+            ival = int(val)
+        except ValueError:
+            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
+        if ival <= 0:
+            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
+        return ival
+
     parser.add_argument("--fee-rate", type=check_rate, default=0.0, help="Fee rate")
     parser.add_argument("--tax-rate", type=check_rate, default=0.0, help="Tax rate")
     parser.add_argument("--slippage-per-share", type=check_rate, default=0.0, help="Slippage per share")
+    parser.add_argument("--max-order-notional", type=check_risk_notional, default=None, help="Maximum notional value per candidate order")
+    parser.add_argument("--max-position-quantity", type=check_max_position_quantity, default=None, help="Maximum position quantity per symbol")
+    parser.add_argument("--max-position-notional", type=check_risk_notional, default=None, help="Maximum position notional per symbol")
+    parser.add_argument("--max-total-exposure", type=check_risk_notional, default=None, help="Maximum aggregate filled and pending BUY exposure")
     parser.add_argument("--force-refresh", action="store_true", help="Force refresh data")
     parser.add_argument("--output-json", required=True, help="Path for JSON artifact output")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output JSON artifact")
 
     return parser.parse_args(argv)
+
 
 
 def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
@@ -195,9 +224,14 @@ def main(argv: list[str] | None = None) -> int | None:
             fee_rate=args.fee_rate,
             tax_rate=args.tax_rate,
             slippage_per_share=args.slippage_per_share,
+            max_order_notional=args.max_order_notional,
+            max_position_quantity=args.max_position_quantity,
+            max_position_notional=args.max_position_notional,
+            max_total_exposure=args.max_total_exposure,
             strategy=args.strategy,
             strategy_metadata={"period": args.period},
         )
+
 
         export_path = export_simulated_portfolio_trading_result_json_file(
             result,
