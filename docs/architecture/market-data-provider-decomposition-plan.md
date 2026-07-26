@@ -25,7 +25,7 @@
 * **Base branch:** `agent/docs-product-architecture-roadmap`
 * **Expected stacked base HEAD:** `e32d184094e6524a265e6768af7de09cb4393b6a`
 * **Phase branch:** `phase-55-1a-market-data-provider-planning`
-* **Existing Draft PR:** `#43`
+* **Existing Draft PR:** `#44` (stacked on PR `#43`)
 * **Scope Limit:** 本 Phase 為 pure architecture audit & contract documentation。不得修改任何 production code 或 test code，不得提前執行 Provider 拆分或新增 Provider 模組。
 
 ---
@@ -34,10 +34,10 @@
 
 判斷現況時遵循以下嚴格優先順序：
 
-1. **目前 branch 的 production runtime source** (`src/tw_stock_tool/data/data_loader.py`, `cache_runtime.py` 等)
-2. **目前 test suite** (`tests/test_data_loader.py` 及相關測試)
+1. **目前 branch 的 production runtime source** ([`data_loader.py`](../../src/tw_stock_tool/data/data_loader.py), [`cache_runtime.py`](../../src/tw_stock_tool/data/cache_runtime.py) 等)
+2. **目前 test suite** ([`test_data_loader.py`](../../tests/test_data_loader.py) 及相關測試)
 3. **`pyproject.toml` 與 package/CLI entrypoints**
-4. **現行 user/developer documentation** (`docs/DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md`, `docs/user-guide/data-and-cache.md` 等)
+4. **現行 user/developer documentation** ([`DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md`](../DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md), [`data-and-cache.md`](../user-guide/data-and-cache.md) 等)
 5. **Git history 與最近 merged PRs** (`dddb0c1`, `23aa63e`, `5eee347` 等)
 6. **歷史 Phase / Track 文件**
 7. **LLM Wiki** (僅作輔助，不得覆蓋 repository evidence)
@@ -55,7 +55,7 @@
 
 ## 四、Current Data-Loading Architecture
 
-現行資料載入入口為 [download_tw_stock](file:///f:/Python/tw_stock_tool/temp_test/src/tw_stock_tool/data/data_loader.py#L342-L426)，作為 fallback orchestration facade。
+現行資料載入入口為 [`download_tw_stock`](../../src/tw_stock_tool/data/data_loader.py)，作為 fallback orchestration facade。
 
 ### 4.1 Orchestration 流程
 
@@ -97,7 +97,7 @@ download_tw_stock(stock_id, period="1y", interval="1d", auto_adjust=None, force_
 
 ## 五、Current Function Responsibility Inventory
 
-對目前 [data_loader.py](file:///f:/Python/tw_stock_tool/temp_test/src/tw_stock_tool/data/data_loader.py) 中所有 23 個函式進行權責與拆分建議分類：
+對目前 [`data_loader.py`](../../src/tw_stock_tool/data/data_loader.py) 中所有 23 個函式進行權責與拆分建議分類：
 
 | Function Name | Current Responsibility | Direct Dependencies | Primary Caller | Patch / Monkeypatch Surface | User-Visible Behavior | Extraction Risk | Recommended Category |
 |---|---|---|---|---|---|---|---|
@@ -132,7 +132,7 @@ download_tw_stock(stock_id, period="1y", interval="1d", auto_adjust=None, force_
 經檢視 Git history (`dddb0c1b0b30733722292fab1eb7debdd2e1e2d3`, `23aa63e6e756dda7695a8ab7e66d1aa184afa059`, `5eee34738d9d46c9c0c4ac9a9732d3843f882885`) 與現行程式碼：
 
 1. **已完成事項：**
-   * 快取底層邏輯已經抽取至 `src/tw_stock_tool/data/cache_runtime.py`。
+   * 快取底層邏輯已經抽取至 [`cache_runtime.py`](../../src/tw_stock_tool/data/cache_runtime.py)。
    * `cache_runtime.py` 實作了 `_cache_path`, `_is_cache_fresh`, `_get_cache_age_days`, `_read_cache`, `_write_cache`。
 2. **`data_loader.py` 現狀：**
    * 保留同名的相容性代理函式 (compatibility delegates)，例如：
@@ -140,7 +140,7 @@ download_tw_stock(stock_id, period="1y", interval="1d", auto_adjust=None, force_
      def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool) -> Path:
          return _cache_runtime._cache_path(symbol, period, interval, auto_adjust, cache_dir=CACHE_DIR)
      ```
-   * 如此設計係為了維持 `tests/test_data_loader.py` 中直接 patch `data_loader._cache_path` 或 `data_loader._is_cache_fresh` 的測試能力與向下相容性。
+   * 如此設計係為了維持 [`test_data_loader.py`](../../tests/test_data_loader.py) 中直接 patch `data_loader._cache_path` 或 `data_loader._is_cache_fresh` 的測試能力與向下相容性。
 3. **本 Phase 原則：**
    * 不得撤銷或重做此已完成之抽取。
    * 未來 Provider 拆分時亦需參考此 Compatibility Delegate 模式，保護既存測試 patch surface。
@@ -164,9 +164,9 @@ download_tw_stock(stock_id, period="1y", interval="1d", auto_adjust=None, force_
 
 | Patch Target | Current Test Usage Path | Reason Used in Tests | Risk of Breaking upon Extraction | Compatibility Strategy Required | Characterization Gap Status | Allowed / Forbidden Observable Behavior Changes |
 |---|---|---|---|---|---|---|
-| `data_loader.yf.download` | `patch.object(data_loader.yf, "download", ...)` | 模擬 yfinance 網路回應 | High | `data_loader.py` 需保有 `yf` 或代理，否則 `patch.object` 失敗 | COVERED | **Forbidden:** 不得改變靜音、鎖控、及傳入 `yf.download` 的參數與順序 |
+| `data_loader.yf.download` | `patch.object(data_loader.yf, "download", ...)` | 模擬 yfinance 網路回應 | High | `data_loader.py` 需保有 `yf` 或代理，否則 `patch.object` 失敗 | COVERED (Current inline implementation) | **Forbidden:** 不得改變靜音、鎖控、及傳入 `yf.download` 的參數與順序 |
 | `data_loader.requests.get` | `patch.object(data_loader.requests, "get", ...)` | 模擬 TWSE/TPEx 網路回應 | High | `data_loader.py` 需保有 `requests` 或代理，或將官方 provider 作為內部可 patch 屬性 | COVERED | **Forbidden:** 不得改變 URL, query params, headers, timeout |
-| `data_loader._download_yfinance_quiet` | `patch.object(data_loader, "_download_yfinance_quiet")` | 隔離 yfinance 測試 fallback 邏輯 | High | `data_loader.py` 必須保留 `_download_yfinance_quiet` 代理函式 | COVERED | **Forbidden:** 不得改變 quiet 輸出 suppression 與鎖控 |
+| `data_loader._download_yfinance_quiet` | `patch.object(data_loader, "_download_yfinance_quiet")` | 隔離 yfinance 測試 fallback 邏輯 | High | `data_loader.py` 必須保留 `_download_yfinance_quiet` 代理函式 | COVERED (Current inline implementation) | **Forbidden:** 不得改變 quiet 輸出 suppression 與鎖控 |
 | `data_loader._download_twse_stock` | `patch.object(data_loader, "_download_twse_stock")` | 測試 TPEx fallback 的單元切換 | High | `data_loader.py` 必須保留 `_download_twse_stock` 代理函式 | COVERED | **Forbidden:** 不得改變 TWSE 下載邏輯與月報表過濾 |
 | `data_loader._download_tpex_stock` | `patch.object(data_loader, "_download_tpex_stock")` | 測試 6488 上櫃股票 fallback | High | `data_loader.py` 必須保留 `_download_tpex_stock` 代理函式 | COVERED | **Forbidden:** 不得改變 TPEx 月報表與 OpenAPI quote 轉接 |
 | `data_loader._download_official_stock` | `patch.object(data_loader, "_download_official_stock")` | 測試 auto_adjust=False 進入官方 fallback | High | `data_loader.py` 必須保留 `_download_official_stock` 代理函式 | COVERED | **Forbidden:** 不得改變 `.TW`/`.TWO` 官方轉接通道 |
@@ -196,7 +196,7 @@ Option E: 一次抽出全部 Providers (Big Bang Extraction)
 | **Direct Seam Cleanliness** | **Clean** (輸入 `symbol, period, interval, auto_adjust` -> `DataFrame`) | Requires shared helpers (`_period_start`, `_month_starts`, `_parse_roc_date`) | Requires shared helpers (`_period_start`, `_month_starts`, `_parse_tpex_date`, latest quote) | Pure utility functions | Very complex multi-module boundaries |
 | **Existing Patch Surface Impact** | Moderate (需維護 `yf.download` 與 `_download_yfinance_quiet` delegates) | Moderate (需維護 `requests.get` 與 `_download_twse_stock` delegates) | Moderate (需維護 `requests.get` 與 `_download_tpex_stock` delegates) | Low | **Extremely High** (同時影響所有測試 patch) |
 | **Circular Dependency Risk** | **None** | Moderate (若 Helper 留在 `data_loader.py` 則會反向引用) | Moderate (若 Helper 留在 `data_loader.py` 則會反向引用) | **None** | High |
-| **Characterization Test Readiness** | **95% Covered** (靜音、多執行緒、與錯誤處理均有完整測試) | 80% Covered (月報表解析缺部份單元測試) | 70% Covered (OpenAPI quote 部分缺乏直連獨立測試) | 85% Covered | Low overall confidence |
+| **Characterization Test Readiness** | **HIGH** (五個方案中測試準備度最高) | MEDIUM (月報表解析缺部份邊界測試) | LOW (OpenAPI quote 部分缺乏直連獨立測試) | MEDIUM | LOW (總體風阻極大) |
 | **Blast Radius (衝擊範圍)** | **Low** (僅影響 yfinance 下載階段) | Medium (僅影響上市 fallback) | Medium (僅影響上櫃 fallback) | Low (但影響全體輸出格式) | **Maximum** (整個 data 模組被拆解) |
 | **Recommendation** | **RECOMMENDED (1st Choice)** | Deferred to 3rd | Deferred to 4th | RECOMMENDED (2nd Choice or accompanying helper module) | **REJECTED** |
 
@@ -210,50 +210,52 @@ Option E: 一次抽出全部 Providers (Big Bang Extraction)
 
 | Requirement / Scenario | Description | Coverage Status | Action for Phase 55.1B |
 |---|---|---|---|
-| Forwarded Arguments | 正確轉送 `symbol, period, interval, auto_adjust, progress=False, threads=False` | **COVERED** (`test_download_yfinance_quiet_calls_yfinance_download`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Empty DataFrame Return | yfinance 回傳空 DataFrame 時正常處理為失敗 | **COVERED** (`test_all_yfinance_failures_are_quiet_until_unified_error`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Exception Handling | yfinance 拋出 Exception 時靜音並紀錄錯誤 | **COVERED** (`test_download_yfinance_quiet_suppresses_output`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Quiet Stdout/Stderr | 過程輸出被 `redirect_stdout` / `redirect_stderr` 攔截 | **COVERED** (`test_download_yfinance_quiet_suppresses_output`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Logger Restoration on Success | 成功後恢復 `yfinance` logger 狀態 | **COVERED** (`test_tpex_wrapper_and_logger_contracts`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Logger Restoration on Exception | 拋出異常時 `finally` 仍確保恢復 `yfinance` logger 狀態 | **COVERED** (`test_tpex_wrapper_and_logger_contracts`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Thread Safety | 多執行緒下 `console_io_lock` 確保靜音不交錯 | **COVERED** (`test_download_yfinance_quiet_is_thread_safe`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| `auto_adjust=True/False` | 正確轉送 `auto_adjust` 參數 | **COVERED** (`test_numeric_symbol_tries_two_after_tw_yfinance_empty`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Existing Patch Compatibility | `patch.object(data_loader.yf, "download")` 仍可運作 | **COVERED** (Current test suite) | **BLOCKING_PHASE_55_1B** (新增專屬 delegate 相容性測試) |
+| Forwarded Arguments | 正確轉送 `symbol, period, interval, auto_adjust, progress=False, threads=False` | **COVERED** ([`test_download_yfinance_quiet_calls_yfinance_download`](../../tests/test_data_loader.py#L131)) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Empty DataFrame Return | yfinance 回傳空 DataFrame 時正常處理為失敗 | **COVERED** ([`test_all_yfinance_failures_are_quiet_until_unified_error`](../../tests/test_data_loader.py#L227)) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Exception Handling | yfinance 拋出 Exception 時靜音、釋放鎖、恢復 logger 狀態並傳播例外 | **COVERED** ([`test_tpex_wrapper_and_logger_contracts`](../../tests/test_data_loader.py#L612) line 621 `side_effect=RuntimeError("boom")`) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Quiet Stdout/Stderr | 過程輸出被 `redirect_stdout` / `redirect_stderr` 攔截 | **COVERED** ([`test_download_yfinance_quiet_suppresses_output`](../../tests/test_data_loader.py#L154)) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Logger Restoration on Success | 成功下載後恢復預設或自訂之 `yfinance` logger 狀態 (`disabled`, `level`, `propagate`) | **PARTIALLY_COVERED** | **BLOCKING_PHASE_55_1B** (新增成功路徑自訂 logger 恢復測試) |
+| Logger Restoration on Exception | 拋出 Exception 時 `finally` 仍確保恢復 `yfinance` logger 狀態 | **COVERED** ([`test_tpex_wrapper_and_logger_contracts`](../../tests/test_data_loader.py#L612) line 621 `side_effect=RuntimeError("boom")`) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Thread Safety | 多執行緒下 `console_io_lock` 確保靜音與輸出不交錯 | **COVERED** ([`test_download_yfinance_quiet_is_thread_safe`](../../tests/test_data_loader.py#L175)) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| `auto_adjust=True` Forwarding | 正確轉送 `auto_adjust=True` 參數至 `yf.download` | **COVERED** ([`test_download_yfinance_quiet_calls_yfinance_download`](../../tests/test_data_loader.py#L131)) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| `auto_adjust=False` Forwarding | 正確轉送 `auto_adjust=False` 參數至 `yf.download` | **PARTIALLY_COVERED** | **BLOCKING_PHASE_55_1B** (新增 `auto_adjust=False` 精確轉送斷言) |
+| Existing Patch Compatibility (Current Inline) | 現行 `data_loader.yf.download` 與 `data_loader._download_yfinance_quiet` 可被 monkeypatch | **COVERED** (現行測試套件) | **BLOCKING_PHASE_55_1B** (凍結現行可測試介面合約) |
+| Future Compatibility Delegate after Extraction | 抽取後之 Provider 相容性代理介面 | **NOT_YET_IMPLEMENTED** | N/A (留待 Phase 55.1C 實作) |
 
 ### 9.2 TWSE Characterization
 
-| Requirement / Scenario | Description | Coverage Status | Action for Phase 55.1B |
+| Requirement / Scenario | Description | Coverage Status | Action for Future Phases |
 |---|---|---|---|
-| Target Endpoint URL | HTTP 請求至 `https://www.twse.com.tw/exchangeReport/STOCK_DAY` | **COVERED** (`test_twse_fallback_when_yfinance_has_no_data`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Query Parameters | 帶入 `response=json`, `date=YYYYMM01`, `stockNo=ID` | **COVERED** | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Timeout & HTTP error | `timeout=20`, 支援 `raise_for_status` | **PARTIALLY_COVERED** | **BLOCKING_PHASE_55_1B** (補齊 HTTP 500/timeout 測試) |
-| `stat != OK` handling | 忽略非 OK 月份繼續迴圈 | **PARTIALLY_COVERED** | **BLOCKING_PHASE_55_1B** (補齊 stat!=OK 測試) |
-| ROC Date Parsing | 民國 115/06/18 解析為 2026-06-18 | **COVERED** (`test_twse_fallback_when_yfinance_has_no_data`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Numeric Commas | `"1,000"` 千分位點正確轉換為 `1000.0` | **COVERED** | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Non-1d Interval Rejection | `interval != "1d"` 時拋出 `DataLoaderError` | **COVERED** (`test_official_fallback_interval_limitation_is_in_error_message`) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Target Endpoint URL | HTTP 請求至 `https://www.twse.com.tw/exchangeReport/STOCK_DAY` | **COVERED** ([`test_twse_fallback_when_yfinance_has_no_data`](../../tests/test_data_loader.py#L59)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Query Parameters | 帶入 `response=json`, `date=YYYYMM01`, `stockNo=ID` | **COVERED** | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Timeout & HTTP error | `timeout=20`, 支援 `raise_for_status` | **PARTIALLY_COVERED** | **BLOCKING_FUTURE_TWSE_EXTRACTION** |
+| `stat != OK` handling | 忽略非 OK 月份繼續迴圈 | **PARTIALLY_COVERED** | **BLOCKING_FUTURE_TWSE_EXTRACTION** |
+| ROC Date Parsing | 民國 115/06/18 解析為 2026-06-18 | **COVERED** ([`test_twse_fallback_when_yfinance_has_no_data`](../../tests/test_data_loader.py#L59)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Numeric Commas | `"1,000"` 千分位點正確轉換為 `1000.0` | **COVERED** | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Non-1d Interval Rejection | `interval != "1d"` 時拋出 `DataLoaderError` | **COVERED** ([`test_official_fallback_interval_limitation_is_in_error_message`](../../tests/test_data_loader.py#L454)) | NOT_REQUIRED_FOR_PHASE_55_1B |
 
 ### 9.3 TPEx Characterization
 
-| Requirement / Scenario | Description | Coverage Status | Action for Phase 55.1B |
+| Requirement / Scenario | Description | Coverage Status | Action for Future Phases |
 |---|---|---|---|
-| Target Endpoint URL | HTTP 請求至 `https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock` | **COVERED** (`test_tpex_wrapper_and_logger_contracts`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| OpenAPI Latest Quote Endpoint | `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes` | **COVERED** (`test_tpex_latest_quote_success_and_no_match`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Latest Quote Called Exactly Once | 當月報表全空時，呼叫 latest quote fallback 恰好一次 | **COVERED** (`test_tpex_monthly_empty_calls_latest_quote_once`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Two Date Formats | 支援 ROC "/" 分隔與 7碼/8碼 純數字字串 | **PARTIALLY_COVERED** | **BLOCKING_PHASE_55_1B** (補齊純數字日期解析邊界測試) |
-| No Matching Quote Exception | OpenAPI 回傳資料無匹配股票時拋出 `DataLoaderError` | **COVERED** (`test_tpex_latest_quote_success_and_no_match`) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Target Endpoint URL | HTTP 請求至 `https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock` | **COVERED** ([`test_tpex_wrapper_and_logger_contracts`](../../tests/test_data_loader.py#L612)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| OpenAPI Latest Quote Endpoint | `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes` | **COVERED** ([`test_tpex_latest_quote_success_and_no_match`](../../tests/test_data_loader.py#L748)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Latest Quote Called Exactly Once | 當月報表全空時，呼叫 latest quote fallback 恰好一次 | **COVERED** ([`test_tpex_monthly_empty_calls_latest_quote_once`](../../tests/test_data_loader.py#L737)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Two Date Formats | 支援 ROC "/" 分隔與 7碼/8碼 純數字字串 | **PARTIALLY_COVERED** | **BLOCKING_FUTURE_TPEX_EXTRACTION** |
+| No Matching Quote Exception | OpenAPI 回傳資料無匹配股票時拋出 `DataLoaderError` | **COVERED** ([`test_tpex_latest_quote_success_and_no_match`](../../tests/test_data_loader.py#L748)) | NOT_REQUIRED_FOR_PHASE_55_1B |
 
 ### 9.4 Shared Orchestration Characterization
 
-| Requirement / Scenario | Description | Coverage Status | Action for Phase 55.1B |
+| Requirement / Scenario | Description | Coverage Status | Action for Phase 55.1B / Future |
 |---|---|---|---|
-| Unsuffixed Attempt Order | 無字尾股票依序嘗試 `.TW` 再 `.TWO` | **COVERED** (`test_numeric_symbol_tries_two_after_tw_yfinance_empty`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Explicit Suffix Crossover | 指定 `.TW` 絕不大吵切換至 `.TWO` (反之亦然) | **COVERED** (`test_explicit_tw_does_not_try_two`, `test_explicit_two_does_not_try_tw`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Official Only When `auto_adjust=False` | `auto_adjust=True` 時跳過官方 fallback 直奔 stale cache / error | **COVERED** (`test_auto_adjust_skips_official_fallback`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Non-fatal Cache Write Failure | 快取寫入拋出例外時不破壞已下載之資料回傳 | **COVERED** (`test_yfinance_cache_write_failure_is_non_fatal`, `test_official_fallback_cache_write_failure_is_non_fatal`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Stale Cache Rejection Boundary | 超過 14 天之快取拋出例外拒絕使用 | **COVERED** (`test_stale_cache_older_than_threshold_is_rejected_and_raises`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Stale Cache Stderr Warning Channel | 使用符合期限之 Stale Cache 時明確向 `sys.stderr` 輸出 `[WARNING]` | **COVERED** (`test_download_falls_back_to_stale_cache_when_live_fetch_fails`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| `force_refresh` Bypass | `force_refresh=True` 完整跳過 fresh 與 stale 快取讀取 | **COVERED** (`test_force_refresh_bypasses_stale_cache_fallback`) | NOT_REQUIRED_FOR_FIRST_SEAM |
-| Unified DataLoaderError Message | 失敗訊息包含嘗試之符號清單與失敗原因組合 | **COVERED** (`test_no_data_error_lists_tried_symbols`) | NOT_REQUIRED_FOR_FIRST_SEAM |
+| Unsuffixed Attempt Order | 無字尾股票依序嘗試 `.TW` 再 `.TWO` | **COVERED** ([`test_numeric_symbol_tries_two_after_tw_yfinance_empty`](../../tests/test_data_loader.py#L110)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Explicit Suffix Behavior | 指定 `.TW` 時不得切換至 `.TWO` (反之亦然) | **COVERED** ([`test_explicit_tw_does_not_try_two`](../../tests/test_data_loader.py#L268), [`test_explicit_two_does_not_try_tw`](../../tests/test_data_loader.py#L286)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Official Only When `auto_adjust=False` | `auto_adjust=True` 時跳過官方 fallback 直奔 stale cache / error | **COVERED** ([`test_auto_adjust_skips_official_fallback`](../../tests/test_data_loader.py#L344)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Non-fatal Cache Write Failure | 快取寫入拋出例外時不破壞已下載之資料回傳 | **COVERED** ([`test_yfinance_cache_write_failure_is_non_fatal`](../../tests/test_data_loader.py#L433)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Stale Cache Rejection Boundary | 超過 14 天之快取拋出例外拒絕使用 | **COVERED** ([`test_stale_cache_older_than_threshold_is_rejected_and_raises`](../../tests/test_data_loader.py#L522)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Stale Cache Stderr Warning Channel | 使用符合期限之 Stale Cache 時明確向 `sys.stderr` 輸出 `[WARNING]` | **COVERED** ([`test_download_falls_back_to_stale_cache_when_live_fetch_fails`](../../tests/test_data_loader.py#L466)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| `force_refresh` Bypass | `force_refresh=True` 完整跳過 fresh 與 stale 快取讀取 | **COVERED** ([`test_force_refresh_bypasses_stale_cache_fallback`](../../tests/test_data_loader.py#L537)) | NOT_REQUIRED_FOR_PHASE_55_1B |
+| Unified DataLoaderError Message | 失敗訊息包含嘗試之符號清單與失敗原因組合 | **COVERED** ([`test_no_data_error_lists_tried_symbols`](../../tests/test_data_loader.py#L304)) | NOT_REQUIRED_FOR_PHASE_55_1B |
 
 ---
 
@@ -263,78 +265,121 @@ Option E: 一次抽出全部 Providers (Big Bang Extraction)
 
 ### 10.1 Why Option A First?
 
-1. **職責單純且獨立：** Yahoo Finance 為主要的即時資料提供者，無須依賴 TWSE/TPEx 特有的民國年解析、月報表拆解與 OpenAPI fallback 邏輯。
-2. **具備最完整測試覆蓋：** 靜音 (suppression)、鎖控 (locking)、執行緒安全 (thread-safety) 與例外恢復 (logger restoration) 已具備高達 95% 的現存測試覆蓋率。
+1. **職責單純且獨立：** Yahoo Finance 是目前主要的外部價格資料來源，無須依賴 TWSE/TPEx 特有的民國年解析、月報表拆解與 OpenAPI fallback 邏輯。 (註：本產品不提供極速即時、保證最新或投資等級之資料承諾。)
+2. **具備高測試準備度：** 靜音 (suppression)、鎖控 (locking)、執行緒安全 (thread-safety) 與例外恢復 (logger restoration on exception) 已具備現存高度測試覆蓋。
 3. **無循環依賴風險：** 其介面為純粹的 `(symbol, period, interval, auto_adjust) -> pd.DataFrame`。
 
-### 10.2 Proposed Destination & Compatibility Structure
+### 10.2 Future Seams
 
-在未來的實作 Phase (Phase 55.1C) 中，將會：
-
-1. 建立新模組 `src/tw_stock_tool/data/providers/yfinance_provider.py` (或等價位置)。
-2. 將 `_download_yfinance_quiet` 的核心實作搬移至該模組。
-3. 在 `src/tw_stock_tool/data/data_loader.py` 中保留 Compatibility Delegate：
-   ```python
-   # Compatibility delegate in data_loader.py
-   def _download_yfinance_quiet(symbol: str, period: str, interval: str, auto_adjust: bool) -> pd.DataFrame:
-       return yfinance_provider.download_yfinance_quiet(symbol, period, interval, auto_adjust)
-   ```
-4. 在 `data_loader.py` 中保留 `import yfinance as yf` 模組層級引用，確保既存測試如 `patch.object(data_loader.yf, "download")` 完全不受影響。
-
-### 10.3 Deferred Seams
-
-* **TWSE / TPEx Providers:** 延後至 Phase 55.1D / 55.1E。
-* **Shared Normalization / Parsing:** 可於 Phase 55.1D 前作為獨立內部工具抽取，或與官方 Provider 一併處理。
+* **TWSE / TPEx Providers:** 延後至未來獨立 Phase (`BLOCKING_FUTURE_TWSE_EXTRACTION` / `BLOCKING_FUTURE_TPEX_EXTRACTION`)。
+* **Shared Normalization / Parsing:** 可於未來作為獨立內部工具抽取，或與官方 Provider 一併處理。
 * **Orchestration Facade (`download_tw_stock`):** 永久保留在 `data_loader.py`，作為公開 API 進入點。
 
 ---
 
-## 十一、Proposed Phase 55.1B Scope (Tests-Only Characterization)
+## 十一、Phase 55.1B Scope (Tests-Only Yahoo Provider Characterization)
 
 本 Phase 定義下一個 Phase (Phase 55.1B) 的精確範圍。**本 Phase 不得執行 Phase 55.1B 的任何工作。**
 
 ```text
 PHASE: 55.1B
-PHASE_TYPE: TESTS_ONLY_PROVIDER_CHARACTERIZATION
+PHASE_TYPE: TESTS_ONLY_YFINANCE_PROVIDER_CHARACTERIZATION
 PRODUCTION_CODE_CHANGED: NO
-EXTRACTION_STARTED: NO
+PROVIDER_EXTRACTION_STARTED: NO
 MERGE_GATE: HOLD
 ```
 
-### 11.1 Proposed Test Additions for Phase 55.1B
+### 11.1 Allowed Scope & Tests to Add in Phase 55.1B
 
-Phase 55.1B 必須在不修改任何 production code 的前提下，新增以下測試案例至 `tests/test_data_loader.py` 或專屬 characterization 測試檔案：
+Phase 55.1B 的目的**僅限於保護下一個 Yahoo Provider extraction**。在不修改任何 production code 的前提下，僅允許於 [`tests/test_data_loader.py`](../../tests/test_data_loader.py) 中新增以下 6 項 characterization tests：
 
-1. **yfinance Provider Boundary Tests:**
-   * 驗證 `data_loader._download_yfinance_quiet` 透過相容代理介面呼叫時，與直接呼叫 yfinance 核心具備完全相同的行為與錯誤傳播。
-   * 驗證當 `yf.download` 拋出 `Exception` 時，`console_io_lock` 正確釋放且 stderr 靜音效果無殘留。
-2. **TWSE Provider Boundary Tests:**
-   * 新增 TWSE 回傳 `stat != "OK"` (如超頻查詢或非交易日) 的邊界情況斷言。
-   * 新增 TWSE HTTP 請求逾時 (Timeout) 或 500 錯誤時的錯誤處理斷言。
-3. **TPEx Provider Boundary Tests:**
-   * 新增 TPEx 純數字 7碼 (如 "1130102") 與 8碼 (如 "20240102") 日期格式解析的獨立單元斷言。
-   * 新增 TPEx OpenAPI 列表為空時，`_download_tpex_latest_quote` 正確回傳 `DataLoaderError` 的精確文字斷言。
-4. **Delegate Patch Safeguard Tests:**
-   * 顯式撰寫針對 `data_loader._download_yfinance_quiet` 與 `data_loader.yf.download` 進行 monkeypatch 的合約保護測試，確保未來的抽取不會破壞 external patchability。
+1. **Logger Restoration on Success Test:**
+   * 預先設定非預設 logger 狀態 (`disabled=False`, `level=logging.WARNING`, `propagate=True`)。
+   * 讓 `yf.download` 成功回傳 DataFrame。
+   * 呼叫 `_download_yfinance_quiet`。
+   * 斷言 `disabled`, `level`, `propagate` 完整恢復至呼叫前狀態。
+2. **`auto_adjust=False` Exact Forwarding Test:**
+   * 顯式斷言當 `auto_adjust=False` 傳入時，`yf.download` 收到的 kwargs 中確實包含 `auto_adjust=False`。
+3. **`data_loader.yf.download` Monkeypatch Contract Test:**
+   * 驗證對 `data_loader.yf.download` 進行 `patch.object` 時能正確攔截並回傳模擬 DataFrame。
+4. **`data_loader._download_yfinance_quiet` Monkeypatch Contract Test:**
+   * 驗證對 `data_loader._download_yfinance_quiet` 進行 `patch.object` 時能正確攔截並傳回模擬 DataFrame。
+5. **Yahoo Exception Cleanup Test:**
+   * 驗證當 `yf.download` 拋出例外時，`console_io_lock` 正確釋放、logger 狀態恢復、且 stdout/stderr 無任何殘留或流失。
+6. **Subsequent Call Lock Release Verification Test:**
+   * 在拋出 Exception 之後隨即進行第二次 `_download_yfinance_quiet` 呼叫，證明進程鎖 (process lock) 未遭死鎖 (deadlock) 且可再次正常完成。
 
-### 11.2 Entry Gate for Phase 55.1C (Production Extraction)
+### 11.2 Allowed File for Phase 55.1B
 
-進入 Phase 55.1C 的充要條件：
-* Phase 55.1B 新增的所有 characterization tests 100% 通過。
-* 全套單元測試 (`python -m unittest discover -s tests`) 100% 通過。
-* 拆分契約 (Extraction Contract) 獲得完整審查與 Reviewer Gate 通過。
+只允許修改：
+```text
+tests/test_data_loader.py
+```
+
+明確禁止修改：
+```text
+src/**
+docs/**
+pyproject.toml
+README.md
+CHANGELOG.md
+.github/**
+```
 
 ---
 
-## 十二、Rollback Strategy & Non-Goals
+## 十二、Candidate Scope for Phase 55.1C (Production Yahoo Extraction)
 
-### 12.1 Rollback Strategy
+本章節記錄未來 Phase 55.1C (Production Extraction) 的候選範圍與契約要求。**本 Phase 不得執行 Phase 55.1C。**
+
+### 12.1 Phase 55.1C Candidate Allowed Scope
+
+預計允許修改/新增之檔案：
+```text
+src/tw_stock_tool/data/providers/__init__.py
+src/tw_stock_tool/data/providers/yfinance_provider.py
+src/tw_stock_tool/data/data_loader.py
+tests/test_data_loader.py
+```
+
+### 12.2 Phase 55.1C Explicit Forbidden Scope
+
+明確禁止修改：
+```text
+src/tw_stock_tool/data/cache_runtime.py
+src/tw_stock_tool/data/cache_utils.py
+src/tw_stock_tool/data/cache_manager.py
+TWSE provider code
+TPEx provider code
+official parsing helpers
+download_tw_stock orchestration order
+cache policy
+error aggregation
+CLI / GUI / reports / backtesting / paper trading / risk modules
+```
+
+### 12.3 Phase 55.1C Compatibility Requirements
+
+1. **Compatibility Delegate:** `data_loader.py` 必須保留同名代理函式 `_download_yfinance_quiet`：
+   ```python
+   def _download_yfinance_quiet(symbol: str, period: str, interval: str, auto_adjust: bool) -> pd.DataFrame:
+       return yfinance_provider.download_yfinance_quiet(symbol, period, interval, auto_adjust)
+   ```
+2. **Patch Surface Preservation:** `data_loader.py` 必須保留 `import yfinance as yf` 模組物件或明確轉接點，確保既存測試對 `data_loader.yf.download` 的 `patch.object` 依然有效。
+3. **No Early-Bound Imports:** 新建立的 Provider 模組或 `data_loader.py` 不得使用早綁定匯入 (如 `from yfinance import download`)，否則會繞過既有 `yf.download` 的模組級 patch。
+4. **Facade Delegation Path:** `download_tw_stock(...)` 不得直接繞過 `data_loader._download_yfinance_quiet` 代理函式，否則既存外部測試對 `data_loader._download_yfinance_quiet` 的 patch contract 將會失效。
+
+---
+
+## 十三、Rollback Strategy & Non-Goals
+
+### 13.1 Rollback Strategy
 
 若未來的 Provider 抽取 Phase 發生非預期的測試破壞或相容性問題：
 1. 可直接恢復 `data_loader.py` 內的原始 inline 實作。
 2. 由於 `data_loader.py` 保留了完整的 Compatibility Delegates，外部 Caller (`analysis.py`, CLI 等) 介面無須作任何改動。
 
-### 12.2 Explicit Non-Goals for Phase 55.1
+### 13.2 Explicit Non-Goals for Phase 55.1
 
 * 不修改任何交易、回測、風控、或 artifact 運算語意。
 * 不改變預設快取目錄或快取檔名命名邏輯。
@@ -345,12 +390,32 @@ Phase 55.1B 必須在不修改任何 production code 的前提下，新增以下
 
 ---
 
-## 十三、Decision Summary & Gate Status
+## 十四、Phase 55.1B Entry & Exit Gates
+
+### 14.1 Entry Gate for Phase 55.1B
+
+* Phase 55.1A Reviewer Gate 通過。
+
+### 14.2 Exit Gate for Phase 55.1B (Entry Gate for Phase 55.1C)
+
+進入 Phase 55.1C (Production Extraction) 的充要條件：
+1. Phase 55.1B 新增的 6 項 Yahoo 專屬 characterization tests 全數通過。
+2. 既有 [`tests/test_data_loader.py`](../../tests/test_data_loader.py) 測試全數通過。
+3. 全套單元測試 (`python -m unittest discover -s tests`) 100% 通過。
+4. Reviewer 確認 Yahoo相容性契約 (compatibility contract) 完整無虞。
+5. PR `#44` 與 Phase 55.1B 均維持 `MERGE_GATE: HOLD`，等待未來 Production PR 統一處理 stacked merge。
+
+*(註：不需要先完成 TWSE / TPEx characterization 即可啟動 Yahoo extraction。)*
+
+---
+
+## 十五、Decision Summary & Gate Status
 
 ```text
-PHASE_55_1A_DECISION: COMPLETE_AUDIT_AND_CONTRACT_PROPOSED
+PHASE_55_1A_DECISION: AUDIT_REFINED_FOR_YFINANCE_ONLY_SCOPE
 RECOMMENDED_FIRST_SEAM: OPTION_A_YFINANCE_PROVIDER
-BLOCKING_CHARACTERIZATION_GAPS: IDENTIFIED_FOR_PHASE_55_1B
+BLOCKING_CHARACTERIZATION_GAPS: IDENTIFIED_FOR_PHASE_55_1B_YFINANCE_ONLY
+TWSE_TPEX_CHARACTERIZATION: DEFERRED_TO_FUTURE_PHASES
 PRODUCTION_CODE_CHANGED: NO
 TEST_CODE_CHANGED: NO
 PROVIDER_EXTRACTION_STARTED: NO
