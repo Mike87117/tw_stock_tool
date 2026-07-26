@@ -10,6 +10,11 @@ import pandas as pd
 from tw_stock_tool.analysis.analysis import analyze_stock
 from tw_stock_tool.analysis.scanner import load_stock_ids_from_file, normalize_stock_ids
 from tw_stock_tool.backtesting.strategies import STRATEGIES
+from tw_stock_tool.cli.parsers import (
+    parse_finite_float,
+    parse_positive_integer,
+    parse_positive_notional,
+)
 from tw_stock_tool.paper_trading.portfolio_engine import run_simulated_portfolio_trading_result
 from tw_stock_tool.paper_trading.portfolio_report_data import build_simulated_portfolio_trading_summary
 from tw_stock_tool.paper_trading.portfolio_serialization_files import (
@@ -62,82 +67,58 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
 
     def check_initial_cash(val: str) -> float:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("initial_cash must be numeric.")
-        try:
-            fval = float(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("initial_cash must be numeric.")
-        if math.isnan(fval) or math.isinf(fval) or fval < 0:
-            raise argparse.ArgumentTypeError("initial_cash must be a finite non-negative number.")
-        return fval
+        return parse_finite_float(
+            val,
+            allow_zero=True,
+            boolean_error="initial_cash must be numeric.",
+            numeric_error="initial_cash must be numeric.",
+            range_error="initial_cash must be a finite non-negative number.",
+        )
 
     parser.add_argument("--initial-cash", required=True, type=check_initial_cash, help="Initial cash for simulation")
 
     def check_quantity(val: str) -> int:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("quantity_per_trade must be an integer.")
-        if "." in val:
-            raise argparse.ArgumentTypeError("quantity_per_trade must be an integer.")
-        try:
-            ival = int(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("quantity_per_trade must be an integer.")
-        if ival <= 0:
-            raise argparse.ArgumentTypeError("quantity_per_trade must be a positive integer.")
-        return ival
+        return parse_positive_integer(
+            val,
+            boolean_error="quantity_per_trade must be an integer.",
+            decimal_error="quantity_per_trade must be an integer.",
+            invalid_error="quantity_per_trade must be an integer.",
+            nonpositive_error="quantity_per_trade must be a positive integer.",
+        )
 
     parser.add_argument("--quantity-per-trade", type=check_quantity, default=1000, help="Quantity per trade")
     parser.add_argument("--period", default=DEFAULT_PERIOD, help="Data period")
 
     def check_rate(val: str) -> float:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("Rate must be numeric.")
-        try:
-            fval = float(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("Rate must be numeric.")
-        if math.isnan(fval) or math.isinf(fval) or fval < 0:
-            raise argparse.ArgumentTypeError("Rate must be a finite non-negative number.")
-        return fval
-
-    def check_risk_notional(val: str) -> float:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("Notional must be numeric.")
-        try:
-            fval = float(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("Notional must be numeric.")
-        if math.isnan(fval) or math.isinf(fval) or fval <= 0:
-            raise argparse.ArgumentTypeError("Notional must be a finite strictly positive number.")
-        return fval
+        return parse_finite_float(
+            val,
+            allow_zero=True,
+            boolean_error="Rate must be numeric.",
+            numeric_error="Rate must be numeric.",
+            range_error="Rate must be a finite non-negative number.",
+        )
 
     def check_max_position_quantity(val: str) -> int:
-        if val.lower() in ("true", "false"):
-            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
-        if "." in val:
-            raise argparse.ArgumentTypeError("Quantity must be a strict integer.")
-        try:
-            ival = int(val)
-        except ValueError:
-            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
-        if ival <= 0:
-            raise argparse.ArgumentTypeError("Quantity must be a strictly positive integer.")
-        return ival
+        return parse_positive_integer(
+            val,
+            boolean_error="Quantity must be a strictly positive integer.",
+            decimal_error="Quantity must be a strict integer.",
+            invalid_error="Quantity must be a strictly positive integer.",
+            nonpositive_error="Quantity must be a strictly positive integer.",
+        )
 
     parser.add_argument("--fee-rate", type=check_rate, default=0.0, help="Fee rate")
     parser.add_argument("--tax-rate", type=check_rate, default=0.0, help="Tax rate")
     parser.add_argument("--slippage-per-share", type=check_rate, default=0.0, help="Slippage per share")
-    parser.add_argument("--max-order-notional", type=check_risk_notional, default=None, help="Maximum notional value per candidate order")
+    parser.add_argument("--max-order-notional", type=parse_positive_notional, default=None, help="Maximum notional value per candidate order")
     parser.add_argument("--max-position-quantity", type=check_max_position_quantity, default=None, help="Maximum position quantity per symbol")
-    parser.add_argument("--max-position-notional", type=check_risk_notional, default=None, help="Maximum position notional per symbol")
-    parser.add_argument("--max-total-exposure", type=check_risk_notional, default=None, help="Maximum aggregate filled and pending BUY exposure")
+    parser.add_argument("--max-position-notional", type=parse_positive_notional, default=None, help="Maximum position notional per symbol")
+    parser.add_argument("--max-total-exposure", type=parse_positive_notional, default=None, help="Maximum aggregate filled and pending BUY exposure")
     parser.add_argument("--force-refresh", action="store_true", help="Force refresh data")
     parser.add_argument("--output-json", required=True, help="Path for JSON artifact output")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output JSON artifact")
 
     return parser.parse_args(argv)
-
 
 
 def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
@@ -197,7 +178,6 @@ def main(argv: list[str] | None = None) -> int | None:
                 )
 
             input_symbol_map[canonical_symbol] = input_id
-
             df_exec = strategy_func(analysis.indicator_df)
 
             if df_exec.empty:
@@ -231,7 +211,6 @@ def main(argv: list[str] | None = None) -> int | None:
             strategy=args.strategy,
             strategy_metadata={"period": args.period},
         )
-
 
         export_path = export_simulated_portfolio_trading_result_json_file(
             result,
