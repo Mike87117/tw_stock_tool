@@ -899,5 +899,28 @@ class DataLoaderTest(unittest.TestCase):
         finally:
             logger.disabled, logger.level, logger.propagate = old_state
 
+    def test_yfinance_helper_delegates_to_provider_module(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader.yfinance_provider,
+            "download_yfinance_quiet",
+            return_value=expected,
+        ) as provider_download:
+            actual = data_loader._download_yfinance_quiet(
+                "2330.TW",
+                "6mo",
+                "1d",
+                False,
+            )
+
+        provider_download.assert_called_once_with(
+            "2330.TW",
+            "6mo",
+            "1d",
+            False,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
