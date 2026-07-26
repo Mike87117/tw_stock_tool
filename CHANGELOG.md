@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Multi-symbol historical simulated portfolio trading.
+- Aggregate portfolio schema v1 JSON artifact workflow.
+- Portfolio Markdown and deterministic seven-file CSV export.
+- Optional portfolio risk limits:
+  - max order notional
+  - max position quantity
+  - max position notional
+  - max total exposure
+
+### Reliability and Validation
+
+- Exact signal-time reference-price validation.
+- Chronological as-of portfolio exposure valuation.
+- Pending BUY exposure reservation.
+- Deterministic same-timestamp symbol ordering.
+- Installed-package smoke coverage for newly supported CLI commands.
+
+### Notes
+
+`tw_stock_tool` remains for historical research only. It has no broker integration, does not place real orders, does not provide investment advice, and provides no guarantee of returns or risk prevention.
+
 ## v0.4.0 - 2026-07-24
 
 ### Highlights
