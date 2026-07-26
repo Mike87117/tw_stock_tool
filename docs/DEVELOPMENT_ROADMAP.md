@@ -564,6 +564,23 @@ MERGE_GATE: HOLD
    - `src/tw_stock_tool/cli/twstock_cli.py`
    - `tests/test_paper_trading_portfolio_engine.py`
    - `tests/test_simulated_portfolio_trading_cli.py`
+   - `tests/test_twstock_cli.py`
+   - `docs/user-guide/artifacts.md`
+   - `docs/user-guide/cli.md`
+   - `docs/DEVELOPMENT_ROADMAP.md`
+   - `docs/SIMULATED_PAPER_TRADING_RUNTIME_ARCHITECTURE.md`
+
+10. **Phase 53.5B Planned Test Matrix**:
+    - Portfolio Engine Facade: two-symbol execution, different trading dates, same-timestamp entry signals, deterministic symbol ordering, shared cash behavior, insufficient cash, open positions across symbols, realized PnL, terminal pending BUY/SELL, last-price mapping, missing last price fail closed, input mapping mutation protection, DataFrame mutation protection, coordinator invariance, single-symbol engine invariance.
+    - CLI Input & Symbol Collection: `--stocks` input, `--file` input, combined `--stocks` & `--file`, duplicate symbol deduplication (first-occurrence order), blank CLI stock item fails closed, blank file line ignored, comment file line ignored, file containing only blanks/comments produces empty-list failure, bare TW stock resolves to `.TW` canonical symbol, bare TPEX stock fallback resolves to `.TWO` canonical symbol, explicit `.TW` input preserves resolved symbol, explicit `.TWO` input preserves resolved symbol, two inputs resolving to same canonical symbol fail closed, dataframes and last_prices use identical canonical keys, artifact symbols use canonical resolved symbols, invalid strategy choice, zero initial cash accepted (`total_return_pct is None`), negative initial cash rejected, bool initial cash rejected, NaN / infinity initial cash rejected, invalid quantity rejected, invalid fee/tax/slippage rates rejected, missing `--output-json` rejected, existing output without `--overwrite` rejected, existing output with `--overwrite` accepted.
+    - CLI Execution & Fail-Closed Semantics: successful two-symbol run, single analysis failure fails run (no artifact created pre-write), single strategy failure fails run (no artifact created pre-write), empty strategy DataFrame fails run, missing `Open`/`Close` column fails run, missing standard signals fails run, invalid index fails run, invalid final close fails run, no artifact created on pre-write execution or validation failure, successful JSON write, read-back validation, filesystem write or read-back failure does not claim transactional rollback, summary builder receives read-back result, CLI does not recompute domain metrics, output JSON path printed separately from 14 domain metrics, deterministic terminal summary output, non-zero exit code on failure, error output consistency.
+    - Integration & CLI Compatibility: `simulated-portfolio-trading` route registration in `twstock_cli.py`, `simulated-portfolio-trading --help`, produced JSON artifact passes `twstock simulated-portfolio-artifact validate/inspect/export-markdown/export-csv`, single-symbol CLI example includes required arguments (`--initial-cash`, `--quantity-per-trade`), no nonexistent single-symbol `--output-json`, existing unified commands unchanged, existing single-symbol paper trading tests unchanged, clean subprocess import, Python 3.11/3.12 CI compatibility.
+
+11. **Non-Goals & Deferred Scope**:
+    - Non-goals: No Broker Interface, No Shioaji, No live trading, No real orders, No semi-automatic/automatic trading, No stock recommendations, No investment advice, No guaranteed returns, No scheduler, No database, No GUI changes, No Excel exporter, No new schema version, No single-symbol schema changes, No coordinator/runtime/stepper semantic changes, No result model/report-data changes, No exporter changes, No generic writer changes, No package version bump, No release publication, No per-symbol strategy/quantity configuration, No scanner-to-portfolio pipeline.
+    - Phase 53.6 Deferred Risk Flags: `--max-order-notional`, `--max-position-quantity`, `--max-position-notional`, `--max-total-exposure`.
+
+
 ### Phase 53.6A Planning Contracts (Phase 53.6B Risk Flags Execution Specification)
 
 1. **Feature Boundary**:
