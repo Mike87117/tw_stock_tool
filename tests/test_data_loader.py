@@ -1126,5 +1126,33 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
+    def test_twse_helper_delegates_to_provider_module(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader.twse_provider,
+            "download_twse_stock",
+            return_value=expected,
+        ) as provider_download:
+            actual = data_loader._download_twse_stock(
+                "2330",
+                "6mo",
+                "1d",
+            )
+
+        provider_download.assert_called_once_with(
+            "2330",
+            "6mo",
+            "1d",
+            period_start=data_loader._period_start,
+            month_starts=data_loader._month_starts,
+            parse_roc_date=data_loader._parse_roc_date,
+            to_float=data_loader._to_float,
+            to_int=data_loader._to_int,
+            finalize_official_rows=data_loader._finalize_official_rows,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
