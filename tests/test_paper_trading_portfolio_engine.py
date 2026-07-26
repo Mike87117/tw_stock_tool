@@ -702,6 +702,7 @@ class TestPortfolioEngineRiskFlags(unittest.TestCase):
             self.assertEqual(dec.is_allowed, expected)
             self.assertEqual(calls, ["risk"])
             self.assertEqual(dec.metadata, {"fixed_guard": {}, "portfolio_risk_guard": {}})
+            self.assertEqual(list(dec.metadata.keys()), ["fixed_guard", "portfolio_risk_guard"])
         for risk_decision, custom_decision, expected in ((allow, allow, True), (block, allow, False), (allow, block, False), (block, block, False)):
             calls = []
             def risk(_o, _p, decision=risk_decision):
@@ -714,9 +715,15 @@ class TestPortfolioEngineRiskFlags(unittest.TestCase):
             self.assertEqual(dec.is_allowed, expected)
             self.assertEqual(calls, ["risk", "custom"])
             self.assertEqual(dec.metadata, {"portfolio_risk_guard": {}, "custom_guard": {}})
-        self.assertEqual(_build_composite_guard_decision_provider(portfolio_risk_provider=lambda _o, _p: allow)(order, port).metadata, {"portfolio_risk_guard": {}})
+            self.assertEqual(list(dec.metadata.keys()), ["portfolio_risk_guard", "custom_guard"])
+        risk_only = _build_composite_guard_decision_provider(
+            portfolio_risk_provider=lambda _order, _portfolio: allow,
+        )(order, port)
+        self.assertEqual(risk_only.metadata, {"portfolio_risk_guard": {}})
+        self.assertEqual(list(risk_only.metadata.keys()), ["portfolio_risk_guard"])
         blocked = _build_composite_guard_decision_provider(portfolio_risk_provider=lambda _o, _p: block)(order, port)
         self.assertEqual(blocked.metadata, {"portfolio_risk_guard": {}})
+        self.assertEqual(list(blocked.metadata.keys()), ["portfolio_risk_guard"])
         self.assertEqual(blocked.reasons, ("blocked",))
         dedup = _build_composite_guard_decision_provider(
             portfolio_risk_provider=lambda _o, _p: SimulatedPaperTradingGuardDecision.block(reasons=["duplicate", "risk_only"]),
@@ -734,12 +741,18 @@ class TestPortfolioEngineRiskFlags(unittest.TestCase):
                 _build_composite_guard_decision_provider(portfolio_risk_provider=lambda _o, _p, decision=risk: decision, custom_guard_decision_provider=lambda _o, _p: (_ for _ in ()).throw(RuntimeError("custom failure")))(order, port)
 
     def test_as_of_cross_symbol_exposure_and_mapping_order_invariance(self):
-        a = _make_sample_df([("2026-01-02", 1, 0), ("2026-01-05", 0, 0), ("2026-01-06", 0, 0), ("2026-01-08", 0, 0), ("2026-01-09", 0, 0)], [101.0, 101.0, 121.0, 121.0, 10001.0])
+        # A lacks an exact 2026-01-08 row: use the earlier no-signal 2026-01-06
+        # Open, exclude future 2026-01-09 and last_prices, and count B once.
+        # 120,000 + 50,000 == the exactly-equal 170,000 cap, so B is allowed.
+        a = _make_sample_df([("2026-01-02", 1, 0), ("2026-01-05", 0, 0), ("2026-01-06", 0, 0), ("2026-01-09", 0, 0)], [101.0, 101.0, 121.0, 10001.0])
         b = _make_sample_df([("2026-01-08", 1, 0), ("2026-01-09", 0, 0)], [51.0, 51.0])
         kwargs = dict(initial_cash=500000.0, last_prices={"2330.TW": 10000.0, "2317.TW": 50.0}, quantity_per_trade=1000, max_total_exposure=170000.0)
         first = run_simulated_portfolio_trading_result({"2330.TW": a, "2317.TW": b}, **kwargs)
         second = run_simulated_portfolio_trading_result({"2317.TW": b, "2330.TW": a}, **kwargs)
         self.assertEqual(first.rejection_count, 0)
+        self.assertEqual(second.rejection_count, 0)
+        self.assertEqual([fill.symbol for fill in first.fills], ["2330.TW", "2317.TW"])
+        self.assertEqual([fill.symbol for fill in second.fills], ["2330.TW", "2317.TW"])
         self.assertEqual([x.symbol for x in first.orders], [x.symbol for x in second.orders])
         self.assertEqual([(x.candidate_order.symbol, x.reasons) for x in first.rejections], [(x.candidate_order.symbol, x.reasons) for x in second.rejections])
         self.assertEqual(first.pending_orders, second.pending_orders)
@@ -759,6 +772,13 @@ class TestPortfolioEngineRiskFlags(unittest.TestCase):
         b = _make_sample_df([("2026-01-05", 1, 0)], [51.0])
         success = run_simulated_portfolio_trading_result({"2330.TW": a, "2317.TW": b}, initial_cash=500000.0, last_prices={"2330.TW": 40.0, "2317.TW": 50.0}, quantity_per_trade=1000, max_total_exposure=90000.0)
         self.assertEqual(success.rejection_count, 0)
+        # A fills at the next timestamp, releasing its 40,000 reservation;
+        # B's 50,000 terminal pending BUY is accepted at the exact 90,000 cap.
+        self.assertEqual([fill.symbol for fill in success.fills], ["2330.TW"])
+        self.assertEqual(success.open_position_count, 1)
+        self.assertEqual([pending.symbol for pending in success.pending_orders], ["2317.TW"])
+        self.assertEqual(success.pending_orders[0].reserved_buy_notional, 50000.0)
+        self.assertEqual([rejection.candidate_order.symbol for rejection in success.rejections], [])
         invalid_a = a.copy(); invalid_a.iloc[1, invalid_a.columns.get_loc("Open")] = float("nan")
         skipped = run_simulated_portfolio_trading_result({"2330.TW": invalid_a, "2317.TW": b}, initial_cash=500000.0, last_prices={"2330.TW": 40.0, "2317.TW": 50.0}, quantity_per_trade=1000, max_total_exposure=50000.0)
         self.assertEqual(skipped.open_position_count, 0)
