@@ -853,22 +853,49 @@ class DataLoaderTest(unittest.TestCase):
     def test_yfinance_helper_can_run_again_after_exception(self) -> None:
         logger = logging.getLogger("yfinance")
         old_state = (logger.disabled, logger.level, logger.propagate)
+        expected_state = (False, logging.WARNING, True)
         stdout = StringIO()
         stderr = StringIO()
+        calls = 0
+
+        def fail_then_succeed(symbol: str, *args, **kwargs) -> pd.DataFrame:
+            nonlocal calls
+            calls += 1
+            print(f"provider stdout {calls}")
+            print(f"provider stderr {calls}", file=sys.stderr)
+            if calls == 1:
+                raise RuntimeError("first failure")
+            return _download_df()
+
         try:
+            logger.disabled = expected_state[0]
+            logger.setLevel(expected_state[1])
+            logger.propagate = expected_state[2]
+
             with patch.object(
                 data_loader.yf,
                 "download",
-                side_effect=[RuntimeError("first failure"), _download_df()],
+                side_effect=fail_then_succeed,
             ) as download:
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     with self.assertRaisesRegex(RuntimeError, "first failure"):
                         data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+
+                    self.assertEqual(
+                        (logger.disabled, logger.level, logger.propagate),
+                        expected_state,
+                    )
+
                     df = data_loader._download_yfinance_quiet("2330.TW", "1y", "1d", True)
+
             self.assertEqual(float(df.iloc[-1]["Close"]), 12.0)
             self.assertEqual(download.call_count, 2)
             self.assertEqual(stdout.getvalue(), "")
             self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(
+                (logger.disabled, logger.level, logger.propagate),
+                expected_state,
+            )
         finally:
             logger.disabled, logger.level, logger.propagate = old_state
 
