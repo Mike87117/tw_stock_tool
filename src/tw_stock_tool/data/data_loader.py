@@ -7,7 +7,7 @@ import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.data import cache_runtime as _cache_runtime
-from tw_stock_tool.data.providers import yfinance_provider
+from tw_stock_tool.data.providers import twse_provider, yfinance_provider
 
 
 class DataLoaderError(Exception):
@@ -156,40 +156,18 @@ def _finalize_official_rows(
 
 
 def _download_twse_stock(stock_id: str, period: str, interval: str) -> pd.DataFrame:
-    if interval != "1d":
-        raise DataLoaderError("TWSE fallback only supports 1d interval.")
-
-    start = _period_start(period)
-    rows: list[dict[str, Any]] = []
-    for month in _month_starts(start, pd.Timestamp.today().normalize()):
-        params = {
-            "response": "json",
-            "date": month.strftime("%Y%m01"),
-            "stockNo": stock_id,
-        }
-        response = requests.get(
-            "https://www.twse.com.tw/exchangeReport/STOCK_DAY",
-            params=params,
-            timeout=20,
-        )
-        if hasattr(response, "raise_for_status"):
-            response.raise_for_status()
-        data = response.json()
-        if data.get("stat") != "OK":
-            continue
-        for row in data.get("data", []):
-            rows.append(
-                {
-                    "Date": _parse_roc_date(row[0]),
-                    "Open": _to_float(row[3]),
-                    "High": _to_float(row[4]),
-                    "Low": _to_float(row[5]),
-                    "Close": _to_float(row[6]),
-                    "Volume": _to_int(row[1]),
-                }
-            )
-
-    return _finalize_official_rows(rows, stock_id, ".TW", start, period)
+    return twse_provider.download_twse_stock(
+        stock_id,
+        period,
+        interval,
+        period_start=_period_start,
+        month_starts=_month_starts,
+        parse_roc_date=_parse_roc_date,
+        to_float=_to_float,
+        to_int=_to_int,
+        finalize_official_rows=_finalize_official_rows,
+        error_type=DataLoaderError,
+    )
 
 
 def _download_tpex_stock(stock_id: str, period: str, interval: str) -> pd.DataFrame:

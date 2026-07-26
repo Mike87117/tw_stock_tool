@@ -922,5 +922,237 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
+    def test_twse_requests_get_patch_surface_and_exact_request_contract(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.raise_calls = 0
+
+            def raise_for_status(self) -> None:
+                self.raise_calls += 1
+
+            def json(self) -> dict:
+                return {
+                    "stat": "OK",
+                    "data": [
+                        [
+                            "113/01/02",
+                            "1,000",
+                            "10,000",
+                            "10.00",
+                            "12.00",
+                            "9.00",
+                            "11.00",
+                            "+1.00",
+                            "10",
+                        ],
+                    ],
+                }
+
+        response = Response()
+        start = pd.Timestamp("2024-01-01")
+        month = pd.Timestamp("2024-01-01")
+
+        with patch.object(
+            data_loader,
+            "_period_start",
+            return_value=start,
+        ) as period_start:
+            with patch.object(
+                data_loader,
+                "_month_starts",
+                return_value=[month],
+            ):
+                with patch.object(
+                    data_loader.requests,
+                    "get",
+                    return_value=response,
+                ) as request_get:
+                    result = data_loader._download_twse_stock(
+                        "2330",
+                        "1mo",
+                        "1d",
+                    )
+
+        period_start.assert_called_once_with("1mo")
+        request_get.assert_called_once_with(
+            "https://www.twse.com.tw/exchangeReport/STOCK_DAY",
+            params={
+                "response": "json",
+                "date": "20240101",
+                "stockNo": "2330",
+            },
+            timeout=20,
+        )
+        self.assertEqual(response.raise_calls, 1)
+        self.assertEqual(result.index[0], pd.Timestamp("2024-01-02"))
+        self.assertEqual(int(result.iloc[0]["Volume"]), 1000)
+        self.assertEqual(float(result.iloc[0]["Close"]), 11.0)
+
+    def test_twse_non_ok_month_is_skipped_before_later_success(self) -> None:
+        class Response:
+            def __init__(self, payload: dict) -> None:
+                self.payload = payload
+                self.raise_calls = 0
+
+            def raise_for_status(self) -> None:
+                self.raise_calls += 1
+
+            def json(self) -> dict:
+                return self.payload
+
+        resp1 = Response({"stat": "很抱歉，沒有符合條件的資料!", "data": []})
+        resp2 = Response(
+            {
+                "stat": "OK",
+                "data": [
+                    [
+                        "113/02/05",
+                        "2,000",
+                        "20,000",
+                        "20.00",
+                        "22.00",
+                        "19.00",
+                        "21.00",
+                        "+1.00",
+                        "20",
+                    ],
+                ],
+            }
+        )
+
+        months = [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-02-01")]
+        with patch.object(data_loader, "_period_start", return_value=pd.Timestamp("2024-01-01")):
+            with patch.object(data_loader, "_month_starts", return_value=months):
+                with patch.object(
+                    data_loader.requests,
+                    "get",
+                    side_effect=[resp1, resp2],
+                ) as request_get:
+                    result = data_loader._download_twse_stock("2330", "2mo", "1d")
+
+        self.assertEqual(request_get.call_count, 2)
+        self.assertEqual(
+            request_get.call_args_list[0][1]["params"]["date"],
+            "20240101",
+        )
+        self.assertEqual(
+            request_get.call_args_list[1][1]["params"]["date"],
+            "20240201",
+        )
+        self.assertEqual(resp1.raise_calls, 1)
+        self.assertEqual(resp2.raise_calls, 1)
+        self.assertEqual(result.index[0], pd.Timestamp("2024-02-05"))
+        self.assertEqual(float(result.iloc[0]["Close"]), 21.0)
+
+    def test_twse_all_non_ok_months_raise_exact_no_data_error(self) -> None:
+        class Response:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict:
+                return {"stat": "很抱歉，沒有符合條件的資料!", "data": []}
+
+        months = [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-02-01")]
+        with patch.object(data_loader, "_period_start", return_value=pd.Timestamp("2024-01-01")):
+            with patch.object(data_loader, "_month_starts", return_value=months):
+                with patch.object(data_loader.requests, "get", return_value=Response()) as request_get:
+                    with self.assertRaisesRegex(
+                        data_loader.DataLoaderError,
+                        r"^Official fallback has no data: 2330\.TW$",
+                    ):
+                        data_loader._download_twse_stock("2330", "2mo", "1d")
+
+        self.assertEqual(request_get.call_count, 2)
+
+    def test_twse_http_error_propagates_before_json_parsing(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.json_calls = 0
+
+            def raise_for_status(self) -> None:
+                raise data_loader.requests.HTTPError("twse http failure")
+
+            def json(self) -> dict:
+                self.json_calls += 1
+                return {"stat": "OK", "data": []}
+
+        resp = Response()
+        with patch.object(data_loader, "_period_start", return_value=pd.Timestamp("2024-01-01")):
+            with patch.object(data_loader, "_month_starts", return_value=[pd.Timestamp("2024-01-01")]):
+                with patch.object(data_loader, "_finalize_official_rows") as finalize:
+                    with patch.object(data_loader.requests, "get", return_value=resp):
+                        with self.assertRaisesRegex(
+                            data_loader.requests.HTTPError,
+                            "twse http failure",
+                        ):
+                            data_loader._download_twse_stock("2330", "1mo", "1d")
+
+        self.assertEqual(resp.json_calls, 0)
+        finalize.assert_not_called()
+
+    def test_twse_non_daily_interval_rejects_before_network(self) -> None:
+        with patch.object(data_loader.requests, "get") as request_get:
+            with patch.object(data_loader, "_period_start") as period_start:
+                with patch.object(data_loader, "_month_starts") as month_starts:
+                    with self.assertRaisesRegex(
+                        data_loader.DataLoaderError,
+                        r"^TWSE fallback only supports 1d interval\.$",
+                    ):
+                        data_loader._download_twse_stock("2330", "1mo", "1wk")
+
+        request_get.assert_not_called()
+        period_start.assert_not_called()
+        month_starts.assert_not_called()
+
+    def test_official_dispatch_uses_patchable_twse_helper(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "_download_twse_stock",
+            return_value=expected,
+        ) as twse_download:
+            actual = data_loader._download_official_stock(
+                "2330",
+                ".TW",
+                "6mo",
+                "1d",
+            )
+
+        twse_download.assert_called_once_with(
+            "2330",
+            "6mo",
+            "1d",
+        )
+        self.assertIs(actual, expected)
+
+    def test_twse_helper_delegates_to_provider_module(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader.twse_provider,
+            "download_twse_stock",
+            return_value=expected,
+        ) as provider_download:
+            actual = data_loader._download_twse_stock(
+                "2330",
+                "6mo",
+                "1d",
+            )
+
+        provider_download.assert_called_once_with(
+            "2330",
+            "6mo",
+            "1d",
+            period_start=data_loader._period_start,
+            month_starts=data_loader._month_starts,
+            parse_roc_date=data_loader._parse_roc_date,
+            to_float=data_loader._to_float,
+            to_int=data_loader._to_int,
+            finalize_official_rows=data_loader._finalize_official_rows,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
