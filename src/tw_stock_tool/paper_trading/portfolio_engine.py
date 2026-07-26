@@ -3,6 +3,7 @@ Pure, reusable module facade for multi-symbol simulated portfolio paper trading 
 """
 
 import math
+from numbers import Real
 from typing import Any, Callable, Mapping
 import pandas as pd
 
@@ -26,18 +27,31 @@ from tw_stock_tool.simulated_paper_trading_guard.adapter import (
 )
 
 
-def _require_finite_non_negative_rate(name: str, value: Any) -> float:
-    if isinstance(value, bool) or type(value).__name__ in ("bool", "bool_"):
-        raise PaperTradingModelError(f"{name} must not be boolean.")
+def _require_finite_number(
+    name: str,
+    value: object,
+    *,
+    non_negative: bool = False,
+    strictly_positive: bool = False,
+) -> float:
+    if isinstance(value, bool) or type(value).__name__ in ("bool", "bool_") or not isinstance(value, Real):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.")
+
     try:
-        fval = float(value)
-    except (ValueError, TypeError):
-        raise PaperTradingModelError(f"{name} must be numeric.") from None
-    if math.isnan(fval) or math.isinf(fval):
-        raise PaperTradingModelError(f"{name} must be finite.")
-    if fval < 0:
+        numeric = float(value)
+    except (OverflowError, TypeError, ValueError):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.") from None
+
+    if not math.isfinite(numeric):
+        raise PaperTradingModelError(f"{name} must be finite numeric data.")
+
+    if non_negative and numeric < 0:
         raise PaperTradingModelError(f"{name} must be non-negative.")
-    return fval
+
+    if strictly_positive and numeric <= 0:
+        raise PaperTradingModelError(f"{name} must be strictly positive.")
+
+    return numeric
 
 
 def run_simulated_portfolio_trading_result(
@@ -77,29 +91,18 @@ def run_simulated_portfolio_trading_result(
         raise PaperTradingModelError("last_prices keys must match dataframes keys exactly.")
 
     for sym, price in last_prices.items():
-        if isinstance(price, bool) or type(price).__name__ in ("bool", "bool_"):
-            raise PaperTradingModelError(f"last_price for '{sym}' must not be boolean.")
-        try:
-            fprice = float(price)
-        except (ValueError, TypeError):
-            raise PaperTradingModelError(f"last_price for '{sym}' must be numeric.") from None
-        if math.isnan(fprice) or math.isinf(fprice):
-            raise PaperTradingModelError(f"last_price for '{sym}' must be finite.")
-        if fprice <= 0:
-            raise PaperTradingModelError(f"last_price for '{sym}' must be strictly positive.")
+        _require_finite_number(f"last_price for '{sym}'", price, strictly_positive=True)
 
-    init_cash_float = _require_finite_non_negative_rate("initial_cash", initial_cash)
+    init_cash_float = _require_finite_number("initial_cash", initial_cash, non_negative=True)
 
-    if isinstance(quantity_per_trade, bool) or type(quantity_per_trade).__name__ in ("bool", "bool_"):
-        raise PaperTradingModelError("quantity_per_trade must not be boolean.")
-    if not isinstance(quantity_per_trade, int):
+    if isinstance(quantity_per_trade, bool) or type(quantity_per_trade).__name__ in ("bool", "bool_") or type(quantity_per_trade) is not int:
         raise PaperTradingModelError("quantity_per_trade must be an integer.")
     if quantity_per_trade <= 0:
         raise PaperTradingModelError("quantity_per_trade must be a positive integer.")
 
-    fee_rate_float = _require_finite_non_negative_rate("fee_rate", fee_rate)
-    tax_rate_float = _require_finite_non_negative_rate("tax_rate", tax_rate)
-    slippage_float = _require_finite_non_negative_rate("slippage_per_share", slippage_per_share)
+    fee_rate_float = _require_finite_number("fee_rate", fee_rate, non_negative=True)
+    tax_rate_float = _require_finite_number("tax_rate", tax_rate, non_negative=True)
+    slippage_float = _require_finite_number("slippage_per_share", slippage_per_share, non_negative=True)
 
     portfolio = SimulatedPortfolio(cash=init_cash_float)
     runtime_state = SimulatedPaperTradingRuntimeState(portfolio=portfolio)

@@ -30,6 +30,9 @@ def _extract_final_close(df: pd.DataFrame) -> float:
     if type(val) is bool or type(val).__name__ in ("bool", "bool_"):
         raise ValueError("Final Close must not be boolean.")
 
+    if isinstance(val, str):
+        raise ValueError("Final Close must not be string.")
+
     try:
         fval = float(val)
     except (ValueError, TypeError):
@@ -232,7 +235,7 @@ def main(argv: list[str] | None = None) -> int | None:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"Error: {exc}")
+        print(f"error: {exc}", file=sys.stderr)
         return 1
 
 

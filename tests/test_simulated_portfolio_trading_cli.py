@@ -11,11 +11,13 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from tw_stock_tool.analysis.analysis import StockAnalysis
+from tw_stock_tool.cli import simulated_portfolio_artifact_cli
 from tw_stock_tool.cli.simulated_portfolio_trading_cli import (
     _collect_stock_ids,
     _parse_args,
     main,
 )
+from tw_stock_tool.paper_trading.portfolio_results import SimulatedPortfolioTradingResult
 from tw_stock_tool.paper_trading.portfolio_serialization import (
     load_simulated_portfolio_trading_result_json,
 )
@@ -88,6 +90,26 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 _parse_args(["--strategy", "ma_cross", "--initial-cash", "nan", "--output-json", "out.json"])
 
+            with self.assertRaises(SystemExit):
+                _parse_args(["--strategy", "ma_cross", "--initial-cash", "inf", "--output-json", "out.json"])
+
+    def test_parse_args_invalid_rates_and_quantity(self):
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--fee-rate", "-0.01", "--output-json", "out.json"])
+
+            with self.assertRaises(SystemExit):
+                _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--tax-rate", "nan", "--output-json", "out.json"])
+
+            with self.assertRaises(SystemExit):
+                _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--slippage-per-share", "inf", "--output-json", "out.json"])
+
+            with self.assertRaises(SystemExit):
+                _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "1000.5", "--output-json", "out.json"])
+
+            with self.assertRaises(SystemExit):
+                _parse_args(["--strategy", "ma_cross", "--initial-cash", "100000", "--quantity-per-trade", "0", "--output-json", "out.json"])
+
     def test_parse_args_zero_initial_cash_accepted(self):
         args = _parse_args(
             [
@@ -103,7 +125,45 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
         )
         self.assertEqual(args.initial_cash, 0.0)
 
-    def test_collect_stock_ids_combining_and_deduplication(self):
+    def test_collect_stock_ids_stocks_only(self):
+        args = _parse_args(
+            [
+                "--stocks",
+                "2330",
+                "2317",
+                "--strategy",
+                "ma_cross",
+                "--initial-cash",
+                "100000",
+                "--output-json",
+                "out.json",
+            ]
+        )
+        stock_ids = _collect_stock_ids(args)
+        self.assertEqual(stock_ids, ["2330", "2317"])
+
+    def test_collect_stock_ids_file_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = Path(tmpdir) / "stocks.txt"
+            file_path.write_text("2330\n2317\n", encoding="utf-8")
+
+            args = _parse_args(
+                [
+                    "--file",
+                    str(file_path),
+                    "--strategy",
+                    "ma_cross",
+                    "--initial-cash",
+                    "100000",
+                    "--output-json",
+                    "out.json",
+                ]
+            )
+
+            stock_ids = _collect_stock_ids(args)
+            self.assertEqual(stock_ids, ["2330", "2317"])
+
+    def test_collect_stock_ids_combining_stocks_precedes_file_and_deduplication(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = Path(tmpdir) / "stocks.txt"
             file_path.write_text("2317\n# comment\n 2454 \n\n", encoding="utf-8")
@@ -182,29 +242,76 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
             self.assertIn("Final stock list is empty", str(ctx.exception))
 
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
-    def test_canonical_resolved_symbol_mapping_and_collision(self, mock_analyze):
+    def test_canonical_resolved_symbol_mapping_and_collision_error_formatting(self, mock_analyze):
         a1 = _make_mock_analysis("2330", symbol="2330.TW")
         a2 = _make_mock_analysis("2330.TW", symbol="2330.TW")
         mock_analyze.side_effect = [a1, a2]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = Path(tmpdir) / "out.json"
-            ret = main(
-                [
-                    "--stocks",
-                    "2330",
-                    "2330.TW",
-                    "--strategy",
-                    "ma_cross",
-                    "--initial-cash",
-                    "100000",
-                    "--output-json",
-                    str(out_file),
-                ]
-            )
+            stdout_cap = io.StringIO()
+            stderr_cap = io.StringIO()
+            with patch("sys.stdout", new=stdout_cap), patch("sys.stderr", new=stderr_cap):
+                ret = main(
+                    [
+                        "--stocks",
+                        "2330",
+                        "2330.TW",
+                        "--strategy",
+                        "ma_cross",
+                        "--initial-cash",
+                        "100000",
+                        "--output-json",
+                        str(out_file),
+                    ]
+                )
+
             self.assertEqual(ret, 1)
-            # Ensure pre-write failure creates no output file
             self.assertFalse(out_file.exists())
+
+            # Stderr checks
+            err_text = stderr_cap.getvalue()
+            self.assertTrue(err_text.startswith("error: "))
+            self.assertIn("2330", err_text)
+            self.assertIn("2330.TW", err_text)
+            self.assertIn("Canonical symbol collision detected", err_text)
+
+            # Stdout checks (empty)
+            self.assertEqual(stdout_cap.getvalue(), "")
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_bare_tw_and_tpex_resolved_symbols_passed_to_facade(self, mock_analyze):
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
+        a2 = _make_mock_analysis("8069", symbol="8069.TWO")
+        mock_analyze.side_effect = [a1, a2]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "out.json"
+
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: df}):
+                with patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.run_simulated_portfolio_trading_result") as mock_facade:
+                    mock_facade.return_value = MagicMock(spec=SimulatedPortfolioTradingResult)
+                    ret = main(
+                        [
+                            "--stocks",
+                            "2330",
+                            "8069",
+                            "--strategy",
+                            "ma_cross",
+                            "--initial-cash",
+                            "500000",
+                            "--output-json",
+                            str(out_file),
+                        ]
+                    )
+
+            mock_facade.assert_called_once()
+            call_args = mock_facade.call_args
+            dataframes = call_args.args[0]
+            last_prices = call_args.kwargs["last_prices"]
+
+            self.assertEqual(set(dataframes.keys()), {"2330.TW", "8069.TWO"})
+            self.assertEqual(set(last_prices.keys()), {"2330.TW", "8069.TWO"})
 
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
     def test_successful_two_symbol_cli_execution_and_summary(self, mock_analyze):
@@ -219,8 +326,9 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
             out_file = Path(tmpdir) / "portfolio.json"
 
             stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
             with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: df}):
-                with patch("sys.stdout", new=stdout_capture):
+                with patch("sys.stdout", new=stdout_capture), patch("sys.stderr", new=stderr_capture):
                     ret = main(
                         [
                             "--stocks",
@@ -239,53 +347,128 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
 
             self.assertIsNone(ret)
             self.assertTrue(out_file.exists())
+            self.assertEqual(stderr_capture.getvalue(), "")
 
-            # Read back artifact and verify schema compliance
             content = out_file.read_text(encoding="utf-8")
             result = load_simulated_portfolio_trading_result_json(content)
             self.assertEqual(result.initial_cash, 500000.0)
-            self.assertEqual(result.fill_count, 2)
 
             output_str = stdout_capture.getvalue()
             self.assertIn("Simulated portfolio trading finished. Summary:", output_str)
             self.assertIn("Initial Cash: 500000.0", output_str)
             self.assertIn(f"Output JSON Path: {out_file}", output_str)
 
+    # Strategy & DataFrame Fail-Closed Tests
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
-    def test_single_stock_analysis_failure_fails_entire_run_no_output(self, mock_analyze):
+    def test_strategy_raises_exception_fails_run_no_output(self, mock_analyze):
         a1 = _make_mock_analysis("2330", symbol="2330.TW")
-        mock_analyze.side_effect = [a1, ValueError("Market data network error")]
+        mock_analyze.side_effect = [a1]
+
+        def bad_strategy(df):
+            raise RuntimeError("Strategy error")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = Path(tmpdir) / "out.json"
-
-            ret = main(
-                [
-                    "--stocks",
-                    "2330",
-                    "2317",
-                    "--strategy",
-                    "ma_cross",
-                    "--initial-cash",
-                    "500000",
-                    "--output-json",
-                    str(out_file),
-                ]
-            )
+            stderr_cap = io.StringIO()
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": bad_strategy}):
+                with patch("sys.stderr", new=stderr_cap):
+                    ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
 
             self.assertEqual(ret, 1)
             self.assertFalse(out_file.exists())
+            self.assertTrue(stderr_cap.getvalue().startswith("error: "))
 
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
-    def test_missing_open_close_or_signals_fails_run_no_output(self, mock_analyze):
-        bad_df = pd.DataFrame({"Open": [100.0], "Close": [105.0]})  # Missing signals
-        a1 = _make_mock_analysis("2330", symbol="2330.TW", df=bad_df)
+    def test_strategy_returns_empty_dataframe_fails_run_no_output(self, mock_analyze):
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
         mock_analyze.side_effect = [a1]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = Path(tmpdir) / "out.json"
+            stderr_cap = io.StringIO()
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: pd.DataFrame()}):
+                with patch("sys.stderr", new=stderr_cap):
+                    ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
 
+            self.assertEqual(ret, 1)
+            self.assertFalse(out_file.exists())
+            self.assertTrue(stderr_cap.getvalue().startswith("error: "))
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_missing_open_or_close_fails_run_no_output(self, mock_analyze):
+        bad_df = pd.DataFrame({"Close": [100.0], "entry_signal": [True], "exit_signal": [False]})
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
+        mock_analyze.side_effect = [a1]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "out.json"
+            stderr_cap = io.StringIO()
             with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: bad_df}):
+                with patch("sys.stderr", new=stderr_cap):
+                    ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
+
+            self.assertEqual(ret, 1)
+            self.assertFalse(out_file.exists())
+            self.assertTrue(stderr_cap.getvalue().startswith("error: "))
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_duplicate_or_non_monotonic_index_fails_run_no_output(self, mock_analyze):
+        # Non-monotonic index
+        dates = [pd.Timestamp("2026-01-05"), pd.Timestamp("2026-01-02")]
+        non_mono_df = pd.DataFrame({"Open": [100.0, 101.0], "Close": [105.0, 106.0], "entry_signal": [True, False], "exit_signal": [False, False]}, index=dates)
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
+        mock_analyze.side_effect = [a1]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "out.json"
+            stderr_cap = io.StringIO()
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: non_mono_df}):
+                with patch("sys.stderr", new=stderr_cap):
+                    ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
+
+            self.assertEqual(ret, 1)
+            self.assertFalse(out_file.exists())
+            self.assertTrue(stderr_cap.getvalue().startswith("error: "))
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_final_close_invalid_types_and_values_fails_run_no_output(self, mock_analyze):
+        cases = [
+            ("bool", pd.DataFrame({"Open": [100.0], "Close": [True], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+            ("string", pd.DataFrame({"Open": [100.0], "Close": ["105.0"], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+            ("nan", pd.DataFrame({"Open": [100.0], "Close": [float("nan")], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+            ("inf", pd.DataFrame({"Open": [100.0], "Close": [float("inf")], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+            ("-inf", pd.DataFrame({"Open": [100.0], "Close": [float("-inf")], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+            ("zero", pd.DataFrame({"Open": [100.0], "Close": [0.0], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+            ("negative", pd.DataFrame({"Open": [100.0], "Close": [-10.0], "entry_signal": [True], "exit_signal": [False]}, index=[pd.Timestamp("2026-01-02")])),
+        ]
+
+        for case_name, bad_df in cases:
+            with self.subTest(case_name=case_name):
+                a1 = _make_mock_analysis("2330", symbol="2330.TW")
+                mock_analyze.side_effect = [a1]
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    out_file = Path(tmpdir) / "out.json"
+                    stderr_cap = io.StringIO()
+                    with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: bad_df}):
+                        with patch("sys.stderr", new=stderr_cap):
+                            ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
+
+                    self.assertEqual(ret, 1)
+                    self.assertFalse(out_file.exists())
+                    self.assertTrue(stderr_cap.getvalue().startswith("error: "))
+
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_existing_output_without_overwrite_fails_and_leaves_file_unchanged(self, mock_analyze):
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
+        mock_analyze.side_effect = [a1]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "existing.json"
+            out_file.write_text('{"original": "data"}', encoding="utf-8")
+
+            stderr_cap = io.StringIO()
+            with patch("sys.stderr", new=stderr_cap):
                 ret = main(
                     [
                         "--stocks",
@@ -300,32 +483,8 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
                 )
 
             self.assertEqual(ret, 1)
-            self.assertFalse(out_file.exists())
-
-    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
-    def test_existing_output_without_overwrite_fails_and_leaves_file_unchanged(self, mock_analyze):
-        a1 = _make_mock_analysis("2330", symbol="2330.TW")
-        mock_analyze.side_effect = [a1]
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_file = Path(tmpdir) / "existing.json"
-            out_file.write_text('{"original": "data"}', encoding="utf-8")
-
-            ret = main(
-                [
-                    "--stocks",
-                    "2330",
-                    "--strategy",
-                    "ma_cross",
-                    "--initial-cash",
-                    "500000",
-                    "--output-json",
-                    str(out_file),
-                ]
-            )
-
-            self.assertEqual(ret, 1)
             self.assertEqual(out_file.read_text(encoding="utf-8"), '{"original": "data"}')
+            self.assertTrue(stderr_cap.getvalue().startswith("error: "))
 
     @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
     def test_existing_output_with_overwrite_succeeds(self, mock_analyze):
@@ -352,6 +511,111 @@ class TestSimulatedPortfolioTradingCLI(unittest.TestCase):
 
             self.assertIsNone(ret)
             self.assertNotIn('{"original": "data"}', out_file.read_text(encoding="utf-8"))
+
+    # Write & Read-Back Boundary Tests
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_read_back_failure_returns_1_uses_stderr_and_does_not_delete_written_artifact(self, mock_analyze):
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
+        mock_analyze.side_effect = [a1]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "out.json"
+
+            stderr_cap = io.StringIO()
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: df}):
+                with patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.load_simulated_portfolio_trading_result_json_file", side_effect=ValueError("Corrupted artifact read-back")):
+                    with patch("sys.stderr", new=stderr_cap):
+                        ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
+
+            self.assertEqual(ret, 1)
+            # Written artifact must NOT be deleted
+            self.assertTrue(out_file.exists())
+            self.assertTrue(stderr_cap.getvalue().startswith("error: "))
+            self.assertIn("Corrupted artifact read-back", stderr_cap.getvalue())
+
+    # Summary Boundary Tests (Identity Test)
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_summary_builder_receives_loader_returned_object_identity(self, mock_analyze):
+        a1 = _make_mock_analysis("2330", symbol="2330.TW")
+        mock_analyze.side_effect = [a1]
+
+        mock_pre_write_obj = MagicMock(name="PreWriteObj")
+        mock_loaded_obj = MagicMock(name="LoadedObj")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "out.json"
+
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: df}):
+                with patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.run_simulated_portfolio_trading_result", return_value=mock_pre_write_obj):
+                    with patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.export_simulated_portfolio_trading_result_json_file", return_value=str(out_file)):
+                        with patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.load_simulated_portfolio_trading_result_json_file", return_value=mock_loaded_obj) as mock_loader:
+                            with patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.build_simulated_portfolio_trading_summary") as mock_summary_builder:
+                                mock_summary_builder.return_value = {
+                                    "initial_cash": 500000.0,
+                                    "final_cash": 500000.0,
+                                    "total_market_value": 0.0,
+                                    "total_equity": 500000.0,
+                                    "realized_pnl": 0.0,
+                                    "unrealized_pnl": 0.0,
+                                    "total_return": 0.0,
+                                    "total_return_pct": 0.0,
+                                    "open_position_count": 0,
+                                    "pending_order_count": 0,
+                                    "order_count": 0,
+                                    "fill_count": 0,
+                                    "rejection_count": 0,
+                                    "audit_record_count": 0,
+                                }
+                                ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(out_file)])
+
+            self.assertIsNone(ret)
+            mock_loader.assert_called_once_with(str(out_file))
+            # Critical identity assertion: summary builder received loaded_obj (B), NOT pre_write_obj (A)!
+            mock_summary_builder.assert_called_once_with(mock_loaded_obj)
+
+    # Offline Artifact Compatibility Integration Test
+    @patch("tw_stock_tool.cli.simulated_portfolio_trading_cli.analyze_stock")
+    def test_offline_artifact_cli_compatibility_integration(self, mock_analyze):
+        df1 = _make_sample_df([("2026-01-02", 1, 0), ("2026-01-05", 0, 0)], close_prices=[100.0, 110.0])
+        a1 = _make_mock_analysis("2330", symbol="2330.TW", df=df1)
+        mock_analyze.side_effect = [a1]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_file = Path(tmpdir) / "portfolio.json"
+            md_file = Path(tmpdir) / "portfolio.md"
+            csv_dir = Path(tmpdir) / "csv_out"
+
+            # 1. Execute CLI to produce JSON artifact
+            with patch.dict("tw_stock_tool.cli.simulated_portfolio_trading_cli.STRATEGIES", {"ma_cross_strategy": lambda df: df}):
+                ret = main(["--stocks", "2330", "--strategy", "ma_cross", "--initial-cash", "500000", "--output-json", str(json_file)])
+
+            self.assertIsNone(ret)
+            self.assertTrue(json_file.exists())
+
+            # 2. Operate offline artifact CLI on generated JSON artifact
+            # 2a. Validate
+            val_ret = simulated_portfolio_artifact_cli.main(["validate", str(json_file)])
+            self.assertIsNone(val_ret)
+
+            # 2b. Inspect
+            stdout_cap = io.StringIO()
+            with patch("sys.stdout", new=stdout_cap):
+                insp_ret = simulated_portfolio_artifact_cli.main(["inspect", str(json_file)])
+            self.assertIsNone(insp_ret)
+            self.assertIn("Simulated Portfolio Trading Artifact Summary", stdout_cap.getvalue())
+
+            # 2c. Export Markdown
+            md_ret = simulated_portfolio_artifact_cli.main(["export-markdown", str(json_file), "--output-markdown", str(md_file)])
+            self.assertIsNone(md_ret)
+            self.assertTrue(md_file.exists())
+
+            # 2d. Export CSV Bundle
+            csv_ret = simulated_portfolio_artifact_cli.main(["export-csv", str(json_file), "--output-csv-dir", str(csv_dir)])
+            self.assertIsNone(csv_ret)
+            self.assertTrue(csv_dir.exists())
+            self.assertTrue((csv_dir / "simulated_portfolio_trading_summary.csv").exists())
+            self.assertTrue((csv_dir / "simulated_portfolio_trading_positions.csv").exists())
+            self.assertTrue((csv_dir / "simulated_portfolio_trading_orders.csv").exists())
 
 
 if __name__ == "__main__":

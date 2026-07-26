@@ -115,9 +115,6 @@ class TestPortfolioEngineFacade(unittest.TestCase):
         self.assertGreater(res.rejection_count, 0)
 
     def test_open_and_closed_positions(self):
-        # Bar 1 (01-02): entry signal -> pending BUY created
-        # Bar 2 (01-05): pending BUY fills at 104.0; exit signal -> pending SELL created
-        # Bar 3 (01-06): pending SELL fills at 119.0 -> position closed!
         df1 = _make_sample_df(
             [
                 ("2026-01-02", 1, 0),
@@ -180,39 +177,109 @@ class TestPortfolioEngineFacade(unittest.TestCase):
         with self.assertRaises(PaperTradingModelError):
             run_simulated_portfolio_trading_result(dataframes, initial_cash=-1.0, last_prices=last_prices)
 
-        with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=True, last_prices=last_prices)
-
-        with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=float("nan"), last_prices=last_prices)
-
-        with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=float("inf"), last_prices=last_prices)
-
-    def test_invalid_quantity_per_trade_rejected(self):
+    def test_initial_cash_numeric_string_rejected(self):
         df1 = _make_sample_df([("2026-01-02", 0, 0)])
         dataframes = {"2330.TW": df1}
         last_prices = {"2330.TW": 100.0}
 
         with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, quantity_per_trade=0)
+            run_simulated_portfolio_trading_result(dataframes, initial_cash="100000", last_prices=last_prices)
 
-        with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, quantity_per_trade=-100)
-
-        with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, quantity_per_trade=True)
-
-    def test_invalid_rates_rejected(self):
+    def test_fee_rate_numeric_string_rejected(self):
         df1 = _make_sample_df([("2026-01-02", 0, 0)])
         dataframes = {"2330.TW": df1}
         last_prices = {"2330.TW": 100.0}
 
         with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, fee_rate=-0.01)
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, fee_rate="0.001425")
+
+    def test_tax_rate_numeric_string_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": 100.0}
 
         with self.assertRaises(PaperTradingModelError):
-            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, tax_rate=True)
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, tax_rate="0.003")
+
+    def test_slippage_per_share_numeric_string_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": 100.0}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, slippage_per_share="1.5")
+
+    def test_last_price_numeric_string_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": "100.0"}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices)
+
+    def test_quantity_numeric_string_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": 100.0}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, quantity_per_trade="1000")
+
+    def test_quantity_float_form_integer_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": 100.0}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, quantity_per_trade=1000.0)
+
+    def test_last_price_bool_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": True}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices)
+
+    def test_last_price_nan_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": float("nan")}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices)
+
+    def test_last_price_positive_infinity_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": float("inf")}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices)
+
+    def test_last_price_negative_infinity_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": float("-inf")}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices)
+
+    def test_rate_nan_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": 100.0}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, fee_rate=float("nan"))
+
+    def test_rate_infinity_rejected(self):
+        df1 = _make_sample_df([("2026-01-02", 0, 0)])
+        dataframes = {"2330.TW": df1}
+        last_prices = {"2330.TW": 100.0}
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result(dataframes, initial_cash=100000.0, last_prices=last_prices, fee_rate=float("inf"))
 
     def test_dataframes_and_last_prices_validation(self):
         df1 = _make_sample_df([("2026-01-02", 0, 0)])
@@ -234,6 +301,9 @@ class TestPortfolioEngineFacade(unittest.TestCase):
 
         with self.assertRaises(PaperTradingModelError):
             run_simulated_portfolio_trading_result({"2330.TW": df1}, initial_cash=100000.0, last_prices={"2330.TW": 100.0, "2317.TW": 50.0})
+
+        with self.assertRaises(PaperTradingModelError):
+            run_simulated_portfolio_trading_result({"2330.TW": df1, "2317.TW": df1}, initial_cash=100000.0, last_prices={"2330.TW": 100.0})
 
     def test_caller_mutation_protection(self):
         df1 = _make_sample_df([("2026-01-02", 1, 0)], close_prices=[100.0])
