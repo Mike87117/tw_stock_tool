@@ -6,11 +6,11 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 import pandas as pd
 
-from tw_stock_tool.data import data_loader
+from tw_stock_tool.data import data_loader, fallback_orchestration
 
 
 def _download_df() -> pd.DataFrame:
@@ -2907,6 +2907,171 @@ class DataLoaderTest(unittest.TestCase):
         get_cache_age_days.assert_not_called()
         prepare.assert_not_called()
         write_cache.assert_not_called()
+
+    def test_download_tw_stock_facade_delegates_to_fallback_orchestration_module(
+        self,
+    ) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader._fallback_orchestration,
+            "download_tw_stock",
+            return_value=(
+                expected,
+                "2330.TW",
+            ),
+        ) as orchestrate:
+            actual_df, actual_symbol = data_loader.download_tw_stock(
+                " 2330 ",
+                period="6mo",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=True,
+                verbose=True,
+            )
+
+        orchestrate.assert_called_once_with(
+            " 2330 ",
+            "6mo",
+            "1d",
+            False,
+            True,
+            True,
+            validate_inputs=data_loader._validate_inputs,
+            symbol_candidates=data_loader._symbol_candidates,
+            build_cache_path=data_loader._cache_path,
+            is_cache_fresh=data_loader._is_cache_fresh,
+            read_cache=data_loader._read_cache,
+            prepare_ohlcv=data_loader._prepare_ohlcv,
+            download_yfinance=data_loader._download_yfinance_quiet,
+            write_cache=data_loader._write_cache,
+            download_official=data_loader._download_official_stock,
+            get_cache_age_days=data_loader._get_cache_age_days,
+            format_no_data_error=data_loader._format_no_data_error,
+            default_auto_adjust=data_loader.DEFAULT_AUTO_ADJUST,
+            max_stale_cache_days=data_loader.MAX_STALE_CACHE_DAYS,
+        )
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "2330.TW")
+
+    def test_fallback_orchestration_accepts_fully_injected_fake_dependencies(
+        self,
+    ) -> None:
+        class FakePath:
+            def __init__(self, label: str, exists: bool) -> None:
+                self.label = label
+                self._exists = exists
+
+            def exists(self) -> bool:
+                return self._exists
+
+            def __str__(self) -> str:
+                return self.label
+
+        tw_path = FakePath("missing-tw.csv", False)
+        two_path = FakePath("missing-two.csv", False)
+        candidates = [
+            ("2330.TW", "2330", ".TW"),
+            ("2330.TWO", "2330", ".TWO"),
+        ]
+        sentinel = data_loader.DataLoaderError("sentinel")
+
+        validate_inputs = Mock()
+        symbol_candidates = Mock(return_value=candidates)
+        build_cache_path = Mock(
+            side_effect=[
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+            ]
+        )
+        is_cache_fresh = Mock(side_effect=[False, False])
+        read_cache = Mock()
+        prepare_ohlcv = Mock()
+        download_yfinance = Mock(
+            side_effect=[
+                RuntimeError("Yahoo TW failure"),
+                pd.DataFrame(),
+            ]
+        )
+        write_cache = Mock()
+        download_official = Mock(
+            side_effect=[
+                RuntimeError("Official TW failure"),
+                RuntimeError("Official TWO failure"),
+            ]
+        )
+        get_cache_age_days = Mock()
+        format_no_data_error = Mock(return_value=sentinel)
+
+        with self.assertRaises(data_loader.DataLoaderError) as caught:
+            fallback_orchestration.download_tw_stock(
+                " 2330 ",
+                period="1y",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=False,
+                verbose=False,
+                validate_inputs=validate_inputs,
+                symbol_candidates=symbol_candidates,
+                build_cache_path=build_cache_path,
+                is_cache_fresh=is_cache_fresh,
+                read_cache=read_cache,
+                prepare_ohlcv=prepare_ohlcv,
+                download_yfinance=download_yfinance,
+                write_cache=write_cache,
+                download_official=download_official,
+                get_cache_age_days=get_cache_age_days,
+                format_no_data_error=format_no_data_error,
+                default_auto_adjust=True,
+                max_stale_cache_days=14,
+            )
+
+        validate_inputs.assert_called_once_with(" 2330 ", "1y", "1d")
+        symbol_candidates.assert_called_once_with("2330")
+        self.assertEqual(
+            build_cache_path.call_args_list,
+            [
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+            ],
+        )
+        self.assertEqual(
+            download_yfinance.call_args_list,
+            [
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+            ],
+        )
+        self.assertEqual(
+            download_official.call_args_list,
+            [
+                call("2330", ".TW", "1y", "1d"),
+                call("2330", ".TWO", "1y", "1d"),
+            ],
+        )
+        format_no_data_error.assert_called_once_with(
+            "2330",
+            ["2330.TW", "2330.TWO"],
+            [
+                "2330.TW yfinance failed: Yahoo TW failure",
+                "2330.TWO has no data",
+                "2330.TW TWSE fallback failed: Official TW failure",
+                "2330.TWO TPEX fallback failed: Official TWO failure",
+            ],
+        )
+        self.assertIs(caught.exception, sentinel)
+        read_cache.assert_not_called()
+        prepare_ohlcv.assert_not_called()
+        write_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
