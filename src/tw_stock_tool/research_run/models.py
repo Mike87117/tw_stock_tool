@@ -217,14 +217,17 @@ class DataSourceRecord:
         _require_exact_bool("auto_adjust", self.auto_adjust)
         _require_exact_bool("success", self.success)
 
-        if self.source_kind not in ("live", "cache"):
-            raise ResearchRunModelError(f"source_kind must be 'live' or 'cache', got {self.source_kind!r}")
-        if self.cache_state not in ("not_applicable", "fresh", "stale"):
-            raise ResearchRunModelError(f"cache_state must be 'not_applicable', 'fresh', or 'stale', got {self.cache_state!r}")
+        source_kind = _require_clean_string("source_kind", self.source_kind)
+        cache_state = _require_clean_string("cache_state", self.cache_state)
 
-        if self.source_kind == "live" and self.cache_state != "not_applicable":
+        if source_kind not in ("live", "cache"):
+            raise ResearchRunModelError(f"source_kind must be 'live' or 'cache', got {source_kind!r}")
+        if cache_state not in ("not_applicable", "fresh", "stale"):
+            raise ResearchRunModelError(f"cache_state must be 'not_applicable', 'fresh', or 'stale', got {cache_state!r}")
+
+        if source_kind == "live" and cache_state != "not_applicable":
             raise ResearchRunModelError("cache_state must be 'not_applicable' when source_kind is 'live'")
-        if self.source_kind == "cache" and self.cache_state not in ("fresh", "stale"):
+        if source_kind == "cache" and cache_state not in ("fresh", "stale"):
             raise ResearchRunModelError("cache_state must be 'fresh' or 'stale' when source_kind is 'cache'")
 
         if self.success:
@@ -286,8 +289,9 @@ class RunManifest:
         _validate_utc_timestamp("created_at", self.created_at)
         _require_clean_string("tool_version", self.tool_version)
 
-        if self.status not in ("success", "partial", "failure"):
-            raise ResearchRunModelError(f"status must be 'success', 'partial', or 'failure', got {self.status!r}")
+        status = _require_clean_string("status", self.status)
+        if status not in ("success", "partial", "failure"):
+            raise ResearchRunModelError(f"status must be 'success', 'partial', or 'failure', got {status!r}")
 
         if not isinstance(self.config, RunConfig):
             raise ResearchRunModelError(f"config must be RunConfig instance, got {type(self.config).__name__}")

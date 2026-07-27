@@ -1,5 +1,6 @@
 """Unit tests for research run core models and pure validation boundary."""
 
+from dataclasses import FrozenInstanceError
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,10 @@ from tw_stock_tool.research_run import (
     RunConfig,
     RunManifest,
 )
+
+
+class _StringSubclass(str):
+    pass
 
 
 def _build_valid_config() -> RunConfig:
@@ -97,7 +102,7 @@ class TestResearchRunModels(unittest.TestCase):
 
     def test_run_config_is_frozen(self):
         config = _build_valid_config()
-        with self.assertRaises(Exception):
+        with self.assertRaises(FrozenInstanceError):
             config.workflow = "daily"  # type: ignore[misc]
 
     def test_run_config_requires_exact_canonical_symbol_tuple(self):
@@ -183,6 +188,12 @@ class TestResearchRunModels(unittest.TestCase):
 
         with self.assertRaisesRegex(ResearchRunModelError, "auto_adjust must be exact bool"):
             RunConfig(auto_adjust=0, **base_args)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "force_refresh must be exact bool"):
+            RunConfig(auto_adjust=True, force_refresh=1, **{k: v for k, v in base_args.items() if k != "force_refresh"})  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "force_refresh must be exact bool"):
+            RunConfig(auto_adjust=True, force_refresh=0, **{k: v for k, v in base_args.items() if k != "force_refresh"})  # type: ignore[arg-type]
 
     def test_run_config_validates_optional_strings(self):
         base_args = dict(
@@ -302,6 +313,18 @@ class TestResearchRunModels(unittest.TestCase):
         with self.assertRaisesRegex(ResearchRunModelError, "Unsupported runtime value"):
             RunConfig(workflow_options={"df": pd.DataFrame()}, **base_args)
 
+        with self.assertRaisesRegex(ResearchRunModelError, "Unsupported runtime value"):
+            RunConfig(workflow_options={"fn": lambda: None}, **base_args)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "Unsupported runtime value"):
+            RunConfig(workflow_options={"obj": object()}, **base_args)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "Unsupported runtime value"):
+            RunConfig(workflow_options={"b": b"bytes"}, **base_args)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "Unsupported runtime value"):
+            RunConfig(workflow_options={"ba": bytearray(b"bytes")}, **base_args)
+
     # DataSourceRecord Tests (5)
 
     def test_data_source_record_accepts_valid_live_source(self):
@@ -382,8 +405,23 @@ class TestResearchRunModels(unittest.TestCase):
         with self.assertRaisesRegex(ResearchRunModelError, "auto_adjust must be exact bool"):
             DataSourceRecord(auto_adjust=1, **base_args)  # type: ignore[arg-type]
 
+        with self.assertRaisesRegex(ResearchRunModelError, "success must be exact bool"):
+            DataSourceRecord(auto_adjust=True, success=1, **{k: v for k, v in base_args.items() if k != "success"})  # type: ignore[arg-type]
+
         with self.assertRaisesRegex(ResearchRunModelError, "source_kind must be 'live' or 'cache'"):
             DataSourceRecord(auto_adjust=True, source_kind="network", cache_state="not_applicable", success=True, error=None, canonical_symbol="2330.TW", requested_symbol="2330", provider="yfinance", period="1y", interval="1d")  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "cache_state must be 'not_applicable', 'fresh', or 'stale'"):
+            DataSourceRecord(auto_adjust=True, source_kind="live", cache_state="invalid", success=True, error=None, canonical_symbol="2330.TW", requested_symbol="2330", provider="yfinance", period="1y", interval="1d")
+
+        with self.assertRaisesRegex(ResearchRunModelError, "source_kind must be exact str"):
+            DataSourceRecord(auto_adjust=True, source_kind=_StringSubclass("live"), cache_state="not_applicable", success=True, error=None, canonical_symbol="2330.TW", requested_symbol="2330", provider="yfinance", period="1y", interval="1d")  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "cache_state must be exact str"):
+            DataSourceRecord(auto_adjust=True, source_kind="live", cache_state=_StringSubclass("not_applicable"), success=True, error=None, canonical_symbol="2330.TW", requested_symbol="2330", provider="yfinance", period="1y", interval="1d")  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "source_kind must be 'live' or 'cache'"):
+            DataSourceRecord(auto_adjust=True, source_kind="LIVE", cache_state="not_applicable", success=True, error=None, canonical_symbol="2330.TW", requested_symbol="2330", provider="yfinance", period="1y", interval="1d")
 
     def test_data_source_record_enforces_success_error_consistency(self):
         base_args = dict(
@@ -401,6 +439,15 @@ class TestResearchRunModels(unittest.TestCase):
 
         with self.assertRaisesRegex(ResearchRunModelError, "error must be a clean non-blank string"):
             DataSourceRecord(success=False, error=None, **base_args)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "error must be a clean non-blank string"):
+            DataSourceRecord(success=False, error="", **base_args)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "error must be a clean non-blank string"):
+            DataSourceRecord(success=False, error=" failure ", **base_args)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "error must be exact str"):
+            DataSourceRecord(success=False, error=123, **base_args)  # type: ignore[arg-type]
 
     # ArtifactReference Tests (4)
 
@@ -421,6 +468,18 @@ class TestResearchRunModels(unittest.TestCase):
         with self.assertRaisesRegex(ResearchRunModelError, "artifact_type must be exact str"):
             ArtifactReference(123, "output/daily.json", "application/json", 1)  # type: ignore[arg-type]
 
+        with self.assertRaisesRegex(ResearchRunModelError, "artifact_type must be a clean non-blank string"):
+            ArtifactReference("", "output/daily.json", "application/json", 1)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "path must be a clean non-blank string"):
+            ArtifactReference("daily_report_json", "", "application/json", 1)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "path must be a clean non-blank string"):
+            ArtifactReference("daily_report_json", " output/daily.json ", "application/json", 1)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "media_type must be a clean non-blank string"):
+            ArtifactReference("daily_report_json", "output/daily.json", "", 1)
+
     def test_artifact_reference_rejects_invalid_schema_versions(self):
         with self.assertRaisesRegex(ResearchRunModelError, "schema_version must be int, str, or None, got bool"):
             ArtifactReference("daily_report_json", "output/daily.json", "application/json", True)  # type: ignore[arg-type]
@@ -428,9 +487,21 @@ class TestResearchRunModels(unittest.TestCase):
         with self.assertRaisesRegex(ResearchRunModelError, "schema_version integer must be positive"):
             ArtifactReference("daily_report_json", "output/daily.json", "application/json", 0)
 
+        with self.assertRaisesRegex(ResearchRunModelError, "schema_version integer must be positive"):
+            ArtifactReference("daily_report_json", "output/daily.json", "application/json", -1)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "schema_version must be a clean non-blank string"):
+            ArtifactReference("daily_report_json", "output/daily.json", "application/json", "")
+
+        with self.assertRaisesRegex(ResearchRunModelError, "schema_version must be a clean non-blank string"):
+            ArtifactReference("daily_report_json", "output/daily.json", "application/json", " v1 ")
+
+        with self.assertRaisesRegex(ResearchRunModelError, "schema_version must be int, str, or None, got float"):
+            ArtifactReference("daily_report_json", "output/daily.json", "application/json", 1.0)  # type: ignore[arg-type]
+
     def test_artifact_reference_is_frozen(self):
         ref = _build_valid_artifact()
-        with self.assertRaises(Exception):
+        with self.assertRaises(FrozenInstanceError):
             ref.path = "output/new.json"  # type: ignore[misc]
 
     # RunManifest Tests (12)
@@ -443,7 +514,7 @@ class TestResearchRunModels(unittest.TestCase):
 
     def test_run_manifest_is_frozen(self):
         manifest = _build_valid_manifest()
-        with self.assertRaises(Exception):
+        with self.assertRaises(FrozenInstanceError):
             manifest.status = "failure"  # type: ignore[misc]
 
     def test_run_manifest_validates_canonical_uuid_v4(self):
@@ -485,15 +556,123 @@ class TestResearchRunModels(unittest.TestCase):
                 limitations=base_manifest.limitations,
             )
 
+        # Braces UUID (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "must be canonical lowercase rendering"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id="{550e8400-e29b-41d4-a716-446655440000}",
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        # Malformed UUID (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "Invalid UUID string"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id="not-a-uuid",
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        # Non-string UUID (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "run_id must be exact str"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=12345,  # type: ignore[arg-type]
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
     def test_run_manifest_validates_exact_utc_second_timestamp(self):
         base_manifest = _build_valid_manifest()
 
-        # Invalid offset (rejected)
+        # Offset +08:00 (rejected)
         with self.assertRaisesRegex(ResearchRunModelError, "must match exact UTC RFC 3339 timestamp format"):
             RunManifest(
                 schema_version=base_manifest.schema_version,
                 run_id=base_manifest.run_id,
                 created_at="2026-07-27T20:00:00+08:00",
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        # Offset +00:00 (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "must match exact UTC RFC 3339 timestamp format"):
+            RunManifest(
+                created_at="2026-07-27T20:00:00+00:00",
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        # Fractional seconds (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "must match exact UTC RFC 3339 timestamp format"):
+            RunManifest(
+                created_at="2026-07-27T20:00:00.123Z",
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        # Lowercase z (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "must match exact UTC RFC 3339 timestamp format"):
+            RunManifest(
+                created_at="2026-07-27T20:00:00z",
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
                 tool_version=base_manifest.tool_version,
                 status=base_manifest.status,
                 config=base_manifest.config,
@@ -512,6 +691,24 @@ class TestResearchRunModels(unittest.TestCase):
                 schema_version=base_manifest.schema_version,
                 run_id=base_manifest.run_id,
                 created_at="2026-02-30T20:00:00Z",
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        # Non-string timestamp (rejected)
+        with self.assertRaisesRegex(ResearchRunModelError, "created_at must be exact str"):
+            RunManifest(
+                created_at=1700000000,  # type: ignore[arg-type]
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
                 tool_version=base_manifest.tool_version,
                 status=base_manifest.status,
                 config=base_manifest.config,
@@ -561,6 +758,21 @@ class TestResearchRunModels(unittest.TestCase):
                 limitations=base_manifest.limitations,
             )
 
+        with self.assertRaisesRegex(ResearchRunModelError, "status must be exact str"):
+            RunManifest(status=_StringSubclass("success"), schema_version=base_manifest.schema_version, run_id=base_manifest.run_id, created_at=base_manifest.created_at, tool_version=base_manifest.tool_version, config=base_manifest.config, data_sources=base_manifest.data_sources, success_count=base_manifest.success_count, failure_count=base_manifest.failure_count, partial_count=base_manifest.partial_count, artifacts=base_manifest.artifacts, errors=base_manifest.errors, limitations=base_manifest.limitations)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "status must be exact str"):
+            RunManifest(status=1, schema_version=base_manifest.schema_version, run_id=base_manifest.run_id, created_at=base_manifest.created_at, tool_version=base_manifest.tool_version, config=base_manifest.config, data_sources=base_manifest.data_sources, success_count=base_manifest.success_count, failure_count=base_manifest.failure_count, partial_count=base_manifest.partial_count, artifacts=base_manifest.artifacts, errors=base_manifest.errors, limitations=base_manifest.limitations)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(ResearchRunModelError, "status must be 'success', 'partial', or 'failure'"):
+            RunManifest(status="SUCCESS", schema_version=base_manifest.schema_version, run_id=base_manifest.run_id, created_at=base_manifest.created_at, tool_version=base_manifest.tool_version, config=base_manifest.config, data_sources=base_manifest.data_sources, success_count=base_manifest.success_count, failure_count=base_manifest.failure_count, partial_count=base_manifest.partial_count, artifacts=base_manifest.artifacts, errors=base_manifest.errors, limitations=base_manifest.limitations)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "status must be a clean non-blank string"):
+            RunManifest(status=" success ", schema_version=base_manifest.schema_version, run_id=base_manifest.run_id, created_at=base_manifest.created_at, tool_version=base_manifest.tool_version, config=base_manifest.config, data_sources=base_manifest.data_sources, success_count=base_manifest.success_count, failure_count=base_manifest.failure_count, partial_count=base_manifest.partial_count, artifacts=base_manifest.artifacts, errors=base_manifest.errors, limitations=base_manifest.limitations)
+
+        with self.assertRaisesRegex(ResearchRunModelError, "schema_version must be exact str"):
+            RunManifest(schema_version=1.0, status=base_manifest.status, run_id=base_manifest.run_id, created_at=base_manifest.created_at, tool_version=base_manifest.tool_version, config=base_manifest.config, data_sources=base_manifest.data_sources, success_count=base_manifest.success_count, failure_count=base_manifest.failure_count, partial_count=base_manifest.partial_count, artifacts=base_manifest.artifacts, errors=base_manifest.errors, limitations=base_manifest.limitations)  # type: ignore[arg-type]
+
     def test_run_manifest_requires_run_config(self):
         base_manifest = _build_valid_manifest()
         with self.assertRaisesRegex(ResearchRunModelError, "config must be RunConfig instance"):
@@ -599,6 +811,57 @@ class TestResearchRunModels(unittest.TestCase):
                 limitations=base_manifest.limitations,
             )
 
+        with self.assertRaisesRegex(ResearchRunModelError, "artifacts must be exact tuple"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=list(base_manifest.artifacts),  # type: ignore[arg-type]
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "errors must be exact tuple"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=list(base_manifest.errors),  # type: ignore[arg-type]
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "limitations must be exact tuple"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=list(base_manifest.limitations),  # type: ignore[arg-type]
+            )
+
     def test_run_manifest_validates_tuple_member_types(self):
         base_manifest = _build_valid_manifest()
         with self.assertRaisesRegex(ResearchRunModelError, "data_sources\\[0\\] must be DataSourceRecord instance"):
@@ -616,6 +879,91 @@ class TestResearchRunModels(unittest.TestCase):
                 artifacts=base_manifest.artifacts,
                 errors=base_manifest.errors,
                 limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "artifacts\\[0\\] must be ArtifactReference instance"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=("invalid_artifact",),  # type: ignore[arg-type]
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "errors\\[0\\] must be a clean non-blank string"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=("",),
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "errors\\[0\\] must be a clean non-blank string"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=(" err ",),
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "limitations\\[0\\] must be exact str"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=(123,),  # type: ignore[arg-type]
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "limitations\\[0\\] must be a clean non-blank string"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=("",),
             )
 
     def test_run_manifest_requires_exact_nonnegative_counts(self):
@@ -637,6 +985,40 @@ class TestResearchRunModels(unittest.TestCase):
                 limitations=base_manifest.limitations,
             )
 
+        with self.assertRaisesRegex(ResearchRunModelError, "failure_count must be exact int"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=True,  # type: ignore[arg-type]
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "partial_count must be exact int"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=True,  # type: ignore[arg-type]
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
         with self.assertRaisesRegex(ResearchRunModelError, "success_count must be non-negative"):
             RunManifest(
                 schema_version=base_manifest.schema_version,
@@ -649,6 +1031,40 @@ class TestResearchRunModels(unittest.TestCase):
                 success_count=-1,
                 failure_count=base_manifest.failure_count,
                 partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "failure_count must be non-negative"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=-1,
+                partial_count=base_manifest.partial_count,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "partial_count must be non-negative"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status=base_manifest.status,
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=base_manifest.success_count,
+                failure_count=base_manifest.failure_count,
+                partial_count=-1,
                 artifacts=base_manifest.artifacts,
                 errors=base_manifest.errors,
                 limitations=base_manifest.limitations,
@@ -672,6 +1088,40 @@ class TestResearchRunModels(unittest.TestCase):
                 errors=base_manifest.errors,
                 limitations=base_manifest.limitations,
             )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "When status is 'success', failure_count and partial_count must be 0"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status="success",
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=1,
+                failure_count=0,
+                partial_count=1,
+                artifacts=base_manifest.artifacts,
+                errors=base_manifest.errors,
+                limitations=base_manifest.limitations,
+            )
+
+        m_zero = RunManifest(
+            schema_version=base_manifest.schema_version,
+            run_id=base_manifest.run_id,
+            created_at=base_manifest.created_at,
+            tool_version=base_manifest.tool_version,
+            status="success",
+            config=base_manifest.config,
+            data_sources=(),
+            success_count=0,
+            failure_count=0,
+            partial_count=0,
+            artifacts=(),
+            errors=(),
+            limitations=(),
+        )
+        self.assertEqual(m_zero.success_count, 0)
 
     def test_run_manifest_enforces_failure_count_and_error_consistency(self):
         base_manifest = _build_valid_manifest()
@@ -710,6 +1160,74 @@ class TestResearchRunModels(unittest.TestCase):
                 errors=(),
                 limitations=base_manifest.limitations,
             )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "When status is 'failure', success_count and partial_count must be 0"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status="failure",
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=1,
+                failure_count=1,
+                partial_count=0,
+                artifacts=base_manifest.artifacts,
+                errors=("Download failed",),
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "When status is 'failure', success_count and partial_count must be 0"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status="failure",
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=0,
+                failure_count=1,
+                partial_count=1,
+                artifacts=base_manifest.artifacts,
+                errors=("Download failed",),
+                limitations=base_manifest.limitations,
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "errors\\[0\\] must be a clean non-blank string"):
+            RunManifest(
+                schema_version=base_manifest.schema_version,
+                run_id=base_manifest.run_id,
+                created_at=base_manifest.created_at,
+                tool_version=base_manifest.tool_version,
+                status="failure",
+                config=base_manifest.config,
+                data_sources=base_manifest.data_sources,
+                success_count=0,
+                failure_count=1,
+                partial_count=0,
+                artifacts=base_manifest.artifacts,
+                errors=("",),
+                limitations=base_manifest.limitations,
+            )
+
+        valid_failure = RunManifest(
+            schema_version=base_manifest.schema_version,
+            run_id=base_manifest.run_id,
+            created_at=base_manifest.created_at,
+            tool_version=base_manifest.tool_version,
+            status="failure",
+            config=base_manifest.config,
+            data_sources=base_manifest.data_sources,
+            success_count=0,
+            failure_count=1,
+            partial_count=0,
+            artifacts=base_manifest.artifacts,
+            errors=("Network error",),
+            limitations=base_manifest.limitations,
+        )
+        self.assertEqual(valid_failure.status, "failure")
 
     def test_run_manifest_enforces_partial_count_consistency(self):
         base_manifest = _build_valid_manifest()
@@ -789,6 +1307,27 @@ class TestResearchRunModels(unittest.TestCase):
                 manifest=manifest,
                 domain_result=None,
                 generated_artifacts=(other_art,),
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "generated_artifacts must be exact tuple"):
+            ResearchRunResult(
+                manifest=manifest,
+                domain_result=None,
+                generated_artifacts=list(manifest.artifacts),  # type: ignore[arg-type]
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "generated_artifacts\\[0\\] must be ArtifactReference instance"):
+            ResearchRunResult(
+                manifest=manifest,
+                domain_result=None,
+                generated_artifacts=("invalid_artifact",),  # type: ignore[arg-type]
+            )
+
+        with self.assertRaisesRegex(ResearchRunModelError, "manifest must be RunManifest instance"):
+            ResearchRunResult(
+                manifest="not_a_manifest",  # type: ignore[arg-type]
+                domain_result=None,
+                generated_artifacts=(),
             )
 
     def test_research_run_result_keeps_opaque_domain_result_reference(self):
