@@ -2043,5 +2043,130 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
+    def test_period_start_uses_normalized_today_and_current_month_mapping(
+        self,
+    ) -> None:
+        with patch.object(
+            data_loader.pd.Timestamp,
+            "today",
+            return_value=pd.Timestamp("2024-06-15 13:45:30"),
+        ):
+            expected = {
+                "1d": pd.Timestamp("2024-05-15"),
+                "5d": pd.Timestamp("2024-05-15"),
+                "1mo": pd.Timestamp("2024-05-15"),
+                "3mo": pd.Timestamp("2024-03-15"),
+                "6mo": pd.Timestamp("2023-12-15"),
+                "1y": pd.Timestamp("2023-06-15"),
+                "2y": pd.Timestamp("2022-06-15"),
+                "5y": pd.Timestamp("2019-06-15"),
+                "10y": pd.Timestamp("2014-06-15"),
+                "max": pd.Timestamp("2009-06-15"),
+            }
+            for period, expected_ts in expected.items():
+                with self.subTest(period=period):
+                    self.assertEqual(
+                        data_loader._period_start(period),
+                        expected_ts,
+                    )
+
+    def test_period_start_ytd_and_unknown_period_use_current_contract(
+        self,
+    ) -> None:
+        with patch.object(
+            data_loader.pd.Timestamp,
+            "today",
+            return_value=pd.Timestamp("2024-06-15 13:45:30"),
+        ):
+            self.assertEqual(
+                data_loader._period_start("ytd"),
+                pd.Timestamp("2024-01-01"),
+            )
+            self.assertEqual(
+                data_loader._period_start("unexpected"),
+                pd.Timestamp("2023-06-15"),
+            )
+
+    def test_month_starts_normalizes_to_first_and_is_inclusive_across_years(
+        self,
+    ) -> None:
+        actual = data_loader._month_starts(
+            pd.Timestamp("2023-12-31 22:30:00"),
+            pd.Timestamp("2024-02-15 08:00:00"),
+        )
+        self.assertEqual(
+            actual,
+            [
+                pd.Timestamp("2023-12-01"),
+                pd.Timestamp("2024-01-01"),
+                pd.Timestamp("2024-02-01"),
+            ],
+        )
+
+    def test_month_starts_returns_empty_when_start_month_is_after_end_month(
+        self,
+    ) -> None:
+        actual = data_loader._month_starts(
+            pd.Timestamp("2024-03-10"),
+            pd.Timestamp("2024-02-20"),
+        )
+        self.assertEqual(actual, [])
+
+    def test_parse_roc_date_handles_whitespace_and_exact_malformed_error(
+        self,
+    ) -> None:
+        actual = data_loader._parse_roc_date(" 113 / 01 / 02 ")
+        self.assertEqual(actual, pd.Timestamp("2024-01-02"))
+
+        with self.assertRaises(ValueError) as ctx:
+            data_loader._parse_roc_date("113-01-02")
+        self.assertEqual(str(ctx.exception), "Invalid ROC date: 113-01-02")
+
+    def test_parse_tpex_date_uses_patchable_roc_date_helper_for_three_part_slash(
+        self,
+    ) -> None:
+        expected = pd.Timestamp("2024-01-02")
+        with patch.object(
+            data_loader,
+            "_parse_roc_date",
+            return_value=expected,
+        ) as parse_roc:
+            actual = data_loader._parse_tpex_date("113/01/02")
+
+        parse_roc.assert_called_once_with("113/01/02")
+        self.assertIs(actual, expected)
+
+    def test_parse_tpex_date_two_part_slash_requires_month(
+        self,
+    ) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            data_loader._parse_tpex_date("01/02")
+        self.assertEqual(str(ctx.exception), "Invalid TPEX date: 01/02")
+
+    def test_to_float_preserves_current_numeric_cleaning_and_error_contracts(
+        self,
+    ) -> None:
+        self.assertEqual(data_loader._to_float(" 1,234.50 "), 1234.5)
+        self.assertEqual(data_loader._to_float(42), 42.0)
+
+        self.assertTrue(pd.isna(data_loader._to_float("--")))
+        self.assertTrue(pd.isna(data_loader._to_float("   ")))
+
+        with self.assertRaises(ValueError):
+            data_loader._to_float("not-a-number")
+
+    def test_to_int_uses_patchable_to_float_helper_and_current_int_conversion(
+        self,
+    ) -> None:
+        with patch.object(
+            data_loader,
+            "_to_float",
+            return_value=12.9,
+        ) as to_float:
+            actual = data_loader._to_int("ignored")
+
+        to_float.assert_called_once_with("ignored")
+        self.assertEqual(actual, 12)
+
 if __name__ == "__main__":
     unittest.main()
