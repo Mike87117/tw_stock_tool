@@ -7,6 +7,7 @@ import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.data import cache_runtime as _cache_runtime
+from tw_stock_tool.data import fallback_orchestration as _fallback_orchestration
 from tw_stock_tool.data import ohlcv_normalization as _ohlcv_normalization
 from tw_stock_tool.data import official_parsing as _official_parsing
 from tw_stock_tool.data.providers import (
@@ -223,81 +224,25 @@ def download_tw_stock(
     force_refresh: bool = False,
     verbose: bool = False,
 ) -> tuple[pd.DataFrame, str]:
-    _validate_inputs(stock_id, period, interval)
-    original_stock_id = stock_id.strip()
-    if auto_adjust is None:
-        auto_adjust = DEFAULT_AUTO_ADJUST
-
-    candidates = _symbol_candidates(original_stock_id)
-    tried_symbols = [symbol for symbol, _, _ in candidates]
-    errors: list[str] = []
-
-    for symbol, _, _ in candidates:
-        cache_path = _cache_path(symbol, period, interval, auto_adjust)
-        if not force_refresh and _is_cache_fresh(cache_path):
-            try:
-                cached_df = _read_cache(cache_path)
-                if verbose:
-                    print(f"{symbol}: From cache")
-                return _prepare_ohlcv(cached_df, symbol), symbol
-            except Exception as exc:
-                errors.append(f"{symbol} cache read failed: {exc}")
-
-        try:
-            df = _download_yfinance_quiet(symbol, period, interval, auto_adjust)
-            if not df.empty:
-                df = _prepare_ohlcv(df, symbol)
-                try:
-                    _write_cache(df, cache_path)
-                except Exception as exc:
-                    errors.append(f"{symbol} cache write failed: {exc}")
-                if verbose:
-                    print(f"{symbol}: Downloaded")
-                return df, symbol
-            errors.append(f"{symbol} has no data")
-        except Exception as exc:
-            errors.append(f"{symbol} yfinance failed: {exc}")
-
-    if not auto_adjust:
-        for symbol, base_stock_id, suffix in candidates:
-            cache_path = _cache_path(symbol, period, interval, auto_adjust)
-            try:
-                df = _download_official_stock(base_stock_id, suffix, period, interval)
-                try:
-                    _write_cache(df, cache_path)
-                except Exception as exc:
-                    errors.append(f"{symbol} cache write failed: {exc}")
-                if verbose:
-                    source = "TWSE" if suffix == ".TW" else "TPEX"
-                    print(f"{symbol}: Downloaded from {source} fallback")
-                return df, symbol
-            except Exception as exc:
-                source = "TWSE" if suffix == ".TW" else "TPEX"
-                errors.append(f"{symbol} {source} fallback failed: {exc}")
-
-    if not force_refresh:
-        for symbol, _, _ in candidates:
-            cache_path = _cache_path(symbol, period, interval, auto_adjust)
-            if cache_path.exists():
-                try:
-                    age_days = _get_cache_age_days(cache_path)
-                except Exception as exc:
-                    errors.append(f"{symbol} stale cache mtime read failed: {exc}")
-                    continue
-
-                if age_days > MAX_STALE_CACHE_DAYS:
-                    errors.append(f"{symbol} stale cache rejected: {age_days:.1f} days old (exceeds {MAX_STALE_CACHE_DAYS} day limit)")
-                    continue
-
-                try:
-                    cached_df = _read_cache(cache_path)
-                    import sys
-                    print(f"[WARNING] All live data sources failed for {symbol}. Using {age_days:.1f}-day-old stale cached data from {cache_path} (max stale age: {MAX_STALE_CACHE_DAYS} days).", file=sys.stderr)
-                    if verbose:
-                        print(f"{symbol}: From stale cache")
-                    return _prepare_ohlcv(cached_df, symbol), symbol
-                except Exception as exc:
-                    errors.append(f"{symbol} stale cache read failed: {exc}")
-
-    raise _format_no_data_error(original_stock_id, tried_symbols, errors)
+    return _fallback_orchestration.download_tw_stock(
+        stock_id,
+        period,
+        interval,
+        auto_adjust,
+        force_refresh,
+        verbose,
+        validate_inputs=_validate_inputs,
+        symbol_candidates=_symbol_candidates,
+        build_cache_path=_cache_path,
+        is_cache_fresh=_is_cache_fresh,
+        read_cache=_read_cache,
+        prepare_ohlcv=_prepare_ohlcv,
+        download_yfinance=_download_yfinance_quiet,
+        write_cache=_write_cache,
+        download_official=_download_official_stock,
+        get_cache_age_days=_get_cache_age_days,
+        format_no_data_error=_format_no_data_error,
+        default_auto_adjust=DEFAULT_AUTO_ADJUST,
+        max_stale_cache_days=MAX_STALE_CACHE_DAYS,
+    )
 
