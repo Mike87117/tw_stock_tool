@@ -2400,6 +2400,23 @@ class DataLoaderTest(unittest.TestCase):
             )
 
         self.assertEqual(
+            cache_path_helper.call_args_list,
+            [
+                call(
+                    "6510.TW",
+                    "1y",
+                    "1d",
+                    True,
+                ),
+                call(
+                    "6510.TWO",
+                    "1y",
+                    "1d",
+                    True,
+                ),
+            ],
+        )
+        self.assertEqual(
             yahoo.call_args_list,
             [
                 call(
@@ -2826,6 +2843,40 @@ class DataLoaderTest(unittest.TestCase):
                     force_refresh=False,
                 )
 
+        self.assertEqual(
+            yahoo.call_args_list,
+            [
+                call(
+                    "2330.TW",
+                    "1y",
+                    "1d",
+                    False,
+                ),
+                call(
+                    "2330.TWO",
+                    "1y",
+                    "1d",
+                    False,
+                ),
+            ],
+        )
+        self.assertEqual(
+            official.call_args_list,
+            [
+                call(
+                    "2330",
+                    ".TW",
+                    "1y",
+                    "1d",
+                ),
+                call(
+                    "2330",
+                    ".TWO",
+                    "1y",
+                    "1d",
+                ),
+            ],
+        )
         formatter.assert_called_once_with(
             "2330",
             [
