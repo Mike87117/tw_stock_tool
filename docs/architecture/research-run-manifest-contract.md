@@ -6,7 +6,7 @@
 
 其目的在於：
 1. 根據 repository 目前真實的 workflow、artifact、schema、CLI 與 GUI boundaries，鎖定可重現研究（Reproducible Research）與 Run Manifest 的邊界與資料結構。
-2. 規範未來 Phase 55.2Sub-phases（55.2B ~ 55.2J）在建立 Python Data Models、JSON Serializers、Application Services 與各 Workflow 整合時的責任歸屬、欄位契約與向下相容性要求。
+2. 規範未來 Phase 55.2 sub-phases（55.2B ~ 55.2J）在建立 Python Data Models、JSON Serializers、Application Services 與各 Workflow 整合時的責任歸屬、欄位契約與向下相容性要求。
 3. 確保所有 Phase 55.2 的變更在不破壞既有 Domain Result Models、Artifact Exporters、CLI/GUI 行為與測試的前提下，完成可重現執行紀錄的機械式導入。
 
 ---
@@ -32,20 +32,25 @@
 
 ## 3. Current Workflow Inventory
 
-下表盤點目前 repository 中真實存在的各主要 workflow entrypoints、輸出模型、產出 artifact、市場資料存取點與版本狀態：
+Installed console entrypoint:
+`twstock = tw_stock_tool.cli.twstock_cli:main`
 
-| Workflow | Public Entrypoint | CLI Command | GUI Entrypoint | Primary Result Model | Generated Artifacts | Market-Data Access Point | Existing Schema/Version | Current Run-Level Metadata |
+下表盤點目前 repository 中真實存在的各主要 workflow entrypoints、console commands、module entrypoints、輸出模型、產出 artifact、市場資料存取點與版本狀態：
+
+| Workflow | Public Entrypoint | Installed Console Command | Legacy / Module Invocation | Primary Result Model | Generated Artifacts | Market-Data Access Point | Existing Schema/Version | Current Run-Level Metadata |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Scan** | `tw_stock_tool.cli.run_scan` | `tw-stock-tool scan` | Not yet centralized | `pandas.DataFrame` | stdout / Markdown / CSV / JSON | `data_loader.download_tw_stock` | N/A | None |
-| **Daily Report** | `tw_stock_tool.cli.run_daily` | `tw-stock-tool daily` | Not yet centralized | `DailyReport` | `daily_report.md` / `daily_report.json` | `data_loader.download_tw_stock` | `schema_version = 1` | `generated_at`, `stock_count` |
-| **Backtest** | `tw_stock_tool.cli.run_backtest` | `tw-stock-tool backtest` | Not yet centralized | `BacktestResult` | stdout / Markdown / Excel / JSON | `data_loader.download_tw_stock` | `schema_version = 1` | `strategy_name`, `timestamp` |
-| **Parameter Sweep** | `tw_stock_tool.cli.run_parameter_sweep` | `tw-stock-tool parameter-sweep` / `parameter_sweep_report.py` | Not yet centralized | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `strategy`, `period` |
-| **Walk Forward** | `tw_stock_tool.cli.run_walk_forward` | `tw-stock-tool walk-forward` / `walk_forward_report.py` | Not yet centralized | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `strategy`, `period` |
-| **ML Baseline** | `tw_stock_tool.cli.run_ml` | `tw-stock-tool ml` / `ml_predict.py` | Not yet centralized | `pandas.DataFrame` | CSV / Excel | `data_loader.download_tw_stock` | N/A | `horizon`, `train_size` |
-| **Single-Symbol Paper Trading** | `tw_stock_tool.cli.run_simulated_paper_trading` | `tw-stock-tool simulated-paper-trading` / `simulated_paper_trading.py` | Not yet centralized | `PaperTradingResult` | JSON / CSV / Markdown | `data_loader.download_tw_stock` | `schema_version = 3` | `timestamp`, `strategy` |
-| **Multi-Symbol Portfolio Trading** | `tw_stock_tool.cli.run_simulated_portfolio_trading` | `tw-stock-tool simulated-portfolio-trading` / `simulated_portfolio_trading.py` | Not yet centralized | `PortfolioResult` | JSON / CSV / Markdown | `data_loader.download_tw_stock` | `schema_version = 1` | `timestamp`, `initial_cash` |
+| **Scan** | `tw_stock_tool.cli.scan_stocks.main` | `twstock scan` | N/A | `pandas.DataFrame` | stdout / Markdown / CSV / JSON | `data_loader.download_tw_stock` | N/A | None |
+| **Daily Report** | `tw_stock_tool.cli.daily_report_cli.main` | `twstock daily` | N/A | `DailyReport` | `daily_report.md` / `daily_report.json` | `data_loader.download_tw_stock` | `schema_version = 1` | `generated_at`, `stock_count` |
+| **Backtest Report** | `tw_stock_tool.cli.backtest_report.main` | `twstock backtest-report` | N/A | `BacktestResult` | stdout / Markdown / Excel / JSON | `data_loader.download_tw_stock` | `schema_version = 1` | `strategy_name`, `timestamp` |
+| **Parameter Sweep** | `tw_stock_tool.cli.parameter_sweep_report.main` | `twstock parameter-sweep` | `python parameter_sweep_report.py` | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `strategy`, `period` |
+| **Walk Forward** | `tw_stock_tool.cli.walk_forward_report.main` | `twstock walk-forward` | `python walk_forward_report.py` | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `strategy`, `period` |
+| **AI Scan** | `tw_stock_tool.ml.ai_stock_scanner.main` | `twstock ai-scan` | N/A | `pandas.DataFrame` | CSV / Excel | `data_loader.download_tw_stock` | N/A | `horizon`, `train_size` |
+| **AI Report** | `tw_stock_tool.reports.ai_prediction_report.main` | `twstock ai-report` | N/A | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `horizon`, `stock` |
+| **ML Dataset** | `tw_stock_tool.ml.ml_dataset.main` | `twstock ml-dataset` | N/A | `pandas.DataFrame` | CSV | `data_loader.download_tw_stock` | N/A | `period`, `horizon` |
+| **Single-Symbol Paper Trading** | `tw_stock_tool.cli.simulated_paper_trading_cli.main` | `twstock simulated-paper-trading` | `python simulated_paper_trading.py` | `PaperTradingResult` | JSON / CSV / Markdown | `data_loader.download_tw_stock` | `schema_version = 3` | `timestamp`, `strategy` |
+| **Multi-Symbol Portfolio Trading** | `tw_stock_tool.cli.simulated_portfolio_trading_cli.main` | `twstock simulated-portfolio-trading` | N/A | `PortfolioResult` | JSON / CSV / Markdown | `data_loader.download_tw_stock` | `schema_version = 1` | `timestamp`, `initial_cash` |
 
-*註：`GUI Entrypoint` 目前由 Tkinter UI 控制層依工作流程獨立調用，尚未收攏至統一的 Application Service。*
+*註：GUI entrypoints 目前由 Tkinter UI（`src/tw_stock_tool/gui/`）內部控制層依工作流程獨立調用，標示為 Not yet centralized。*
 
 ---
 
@@ -128,7 +133,7 @@ class DataSourceRecord:
 ```python
 class ArtifactReference:
     artifact_type: str  # e.g., "daily_report_json", "backtest_result_json", "markdown_report", "excel_report"
-    path: str  # normalized relative path string
+    path: str  # A normalized path string using forward slashes
     media_type: str  # e.g., "application/json", "text/markdown", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     schema_version: int | str | None  # existing artifact schema_version (e.g., 1 or 3)
 ```
@@ -144,7 +149,7 @@ class RunManifest:
     schema_version: str  # Frozen to "1.0"
     run_id: str  # Canonical UUID v4 string
     created_at: str  # UTC RFC 3339 timestamp (ending with 'Z')
-    tool_version: str  # Package version (e.g., "0.1.0")
+    tool_version: str  # Package version (authoritative runtime source: installed package metadata for "tw-stock-tool"; baseline example: "0.4.0")
     status: str  # Enum: "success" | "partial" | "failure"
     config: RunConfig
     data_sources: list[DataSourceRecord]
@@ -177,20 +182,27 @@ class ResearchRunResult:
 
 ### 6.1 Run ID 契約
 
-* **格式**：UUID Version 4 Canonical Lowercase String（例如：`"f81d4fae-7dec-11d0-a765-00a0c91e6bf6"`）。
+* **格式**：UUID Version 4 Canonical Lowercase String（例如：`"550e8400-e29b-41d4-a716-446655440000"`）。
 * **原則**：不得單獨使用股票代號、策略名稱或時間戳作為唯一 Run ID。
+* **驗證規則**：
+  * Parsed UUID version must equal 4.
+  * Canonical lowercase rendering must equal the original value.
 
 ### 6.2 Timestamp 契約
 
 * **格式**：UTC RFC 3339 Timestamp，精確至秒，且必須以字母 `Z` 結尾（例如：`"2026-07-27T20:00:00Z"`）。
 * **原則**：不得包含本機時區（Local Timezone）偏移渲染（如 `+08:00`）。
 
-### 6.3 Schema Version 契約
+### 6.3 Schema Version 與 Tool Version 契約
 
 * **`RunManifest.schema_version`**：固定為字串 `"1.0"`。
+* **`RunManifest.tool_version`**：
+  * `tool_version` records the package version used for the run.
+  * Its authoritative runtime source is installed package metadata for the `"tw-stock-tool"` distribution.
+  * The repository baseline source is `pyproject.toml` `[project].version` (e.g., `"0.4.0"`).
 * **層級區隔**：
   * `schema_version` (`"1.0"`)：專指 Run Manifest 結構的版本。
-  * `tool_version` (`"0.1.0"`)：專指 `tw_stock_tool` 套件版本。
+  * `tool_version` (`"0.4.0"`)：專指 `tw_stock_tool` 套件目前 baseline 版本。
   * `ArtifactReference.schema_version` (如整數 `1` 或 `3`)：專指各個產出的 domain artifact 本身的 schema 版本。
 
 ---
@@ -275,12 +287,18 @@ RunManifest
 └── artifacts: list[ArtifactReference]
 ```
 
-### 關聯原則
+### 關聯與 Path 過渡政策原則
 
 1. **不修改舊 Schema**：不得為了併入 Run 概念而修改既有 domain artifacts（如 Daily Report JSON, Backtest Result JSON）的結構去強制注入 `run_id`。
 2. **不內嵌 Payload**：`RunManifest` 的 `artifacts` 串列僅記錄 `ArtifactReference`，絕不內嵌整個 artifact 的檔案內容。
 3. **離線驗證解耦**：驗證 artifact 檔案存在或讀取內容時，不得觸發工作流程重新執行。
 4. **Serializer 解耦**：`RunManifest` 的序列化器不得直接依賴特定的 Daily 或 Backtest domain result classes。
+5. **Path 過渡政策**：
+   * 未來有 run directory 或明確 workspace root 時，優先儲存相對於該 root 的 path。
+   * Phase 55.3 Workspace 尚未建立前，允許保存 exporter 目前實際產生的 output path。
+   * Phase 55.2B 不得假設所有 artifact paths 都已能轉成 run-relative path。
+   * Path 只記錄參照，不得讀取或內嵌 artifact payload。
+   * Windows path 序列化時統一使用 `/`，但不得因此改變實際 filesystem location。
 
 ---
 
@@ -298,6 +316,11 @@ RunManifest
 * **Enum 序列化**：Enum 統一轉為純字串。
 * **Timestamp 序列化**：以 ISO 8601 / RFC 3339 UTC 字串（結尾 `Z`）儲存。
 * **Path 序列化**：Path 物件統一轉為跨平台 normalized path 字串（使用正斜線 `/`）。
+* **Tuple 序列化**：
+  * Tuple serialization: Python tuples are serialized as JSON arrays.
+* **Unknown Extra Fields 政策**：
+  * Unknown extra fields: The exact read-back policy is intentionally deferred to Phase 55.2B, where it must be selected based on existing repository serializer conventions and frozen by tests.
+  * Unknown schema versions remain fail-closed regardless of the extra-field policy.
 
 ---
 
@@ -436,3 +459,9 @@ Phase 55.2 的子階段執行順序鎖定如下：
 - [x] Compatibility surfaces are listed.
 - [x] Phase 55.2 sub-phase order is defined (55.2A through 55.2J).
 - [x] Broker integration and real trading remain excluded.
+- [x] Workflow inventory matches production entrypoints and installed console commands.
+- [x] UUID v4 example is valid and version validation rules are explicit.
+- [x] Tool version authoritative source and baseline example ("0.4.0") are explicit.
+- [x] Artifact path transitional policy is defined.
+- [x] Tuple serialization is defined (JSON array).
+- [x] Unknown extra-field policy is explicitly deferred to Phase 55.2B.
