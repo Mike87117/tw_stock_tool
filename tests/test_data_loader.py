@@ -1154,5 +1154,400 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
+    def test_tpex_monthly_requests_get_patch_surface_and_exact_request_contract(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.raise_calls = 0
+
+            def raise_for_status(self) -> None:
+                self.raise_calls += 1
+
+            def json(self) -> dict:
+                return {
+                    "stat": "ok",
+                    "tables": [
+                        {
+                            "data": [
+                                [
+                                    "113/01/02",
+                                    "1,000",
+                                    "ignored",
+                                    "10.00",
+                                    "12.00",
+                                    "9.00",
+                                    "11.00",
+                                ],
+                            ],
+                        },
+                    ],
+                }
+
+        response = Response()
+        start = pd.Timestamp("2024-01-01")
+        month = pd.Timestamp("2024-01-01")
+
+        with patch.object(data_loader, "_period_start", return_value=start) as period_start:
+            with patch.object(data_loader, "_month_starts", return_value=[month]):
+                with patch.object(data_loader, "_download_tpex_latest_quote") as latest_quote:
+                    with patch.object(data_loader.requests, "get", return_value=response) as request_get:
+                        result = data_loader._download_tpex_stock(
+                            "6488",
+                            "1mo",
+                            "1d",
+                        )
+
+        period_start.assert_called_once_with("1mo")
+        request_get.assert_called_once_with(
+            "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock",
+            params={
+                "response": "json",
+                "date": "2024/01/01",
+                "id": "6488",
+            },
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
+        )
+        self.assertEqual(response.raise_calls, 1)
+        latest_quote.assert_not_called()
+        self.assertEqual(result.index[0], pd.Timestamp("2024-01-02"))
+        self.assertEqual(int(result.iloc[0]["Volume"]), 1000)
+        self.assertEqual(float(result.iloc[0]["Close"]), 11.0)
+
+    def test_tpex_non_ok_month_is_skipped_before_later_success(self) -> None:
+        class Response:
+            def __init__(self, payload: dict) -> None:
+                self.payload = payload
+                self.raise_calls = 0
+
+            def raise_for_status(self) -> None:
+                self.raise_calls += 1
+
+            def json(self) -> dict:
+                return self.payload
+
+        resp1 = Response({"stat": "not ok", "tables": []})
+        resp2 = Response(
+            {
+                "stat": "OK",
+                "tables": [
+                    {
+                        "data": [
+                            [
+                                "113/02/05",
+                                "2,000",
+                                "ignored",
+                                "20.00",
+                                "22.00",
+                                "19.00",
+                                "21.00",
+                            ],
+                        ],
+                    },
+                ],
+            }
+        )
+
+        months = [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-02-01")]
+        with patch.object(data_loader, "_period_start", return_value=pd.Timestamp("2024-01-01")):
+            with patch.object(data_loader, "_month_starts", return_value=months):
+                with patch.object(data_loader, "_download_tpex_latest_quote") as latest_quote:
+                    with patch.object(
+                        data_loader.requests,
+                        "get",
+                        side_effect=[resp1, resp2],
+                    ) as request_get:
+                        result = data_loader._download_tpex_stock("6488", "2mo", "1d")
+
+        self.assertEqual(request_get.call_count, 2)
+        self.assertEqual(
+            request_get.call_args_list[0][1]["params"]["date"],
+            "2024/01/01",
+        )
+        self.assertEqual(
+            request_get.call_args_list[1][1]["params"]["date"],
+            "2024/02/01",
+        )
+        self.assertEqual(resp1.raise_calls, 1)
+        self.assertEqual(resp2.raise_calls, 1)
+        latest_quote.assert_not_called()
+        self.assertEqual(result.index[0], pd.Timestamp("2024-02-05"))
+        self.assertEqual(float(result.iloc[0]["Close"]), 21.0)
+
+    def test_tpex_short_rows_are_skipped_before_latest_quote(self) -> None:
+        class Response:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict:
+                return {
+                    "stat": "ok",
+                    "tables": [
+                        {
+                            "data": [
+                                [
+                                    "113/01/02",
+                                    "1,000",
+                                    "ignored",
+                                    "10.00",
+                                    "12.00",
+                                    "9.00",
+                                ],
+                            ],
+                        },
+                    ],
+                }
+
+        expected = _download_df()
+        start = pd.Timestamp("2024-01-01")
+
+        with patch.object(data_loader, "_period_start", return_value=start):
+            with patch.object(data_loader, "_month_starts", return_value=[start]):
+                with patch.object(data_loader.requests, "get", return_value=Response()):
+                    with patch.object(
+                        data_loader,
+                        "_download_tpex_latest_quote",
+                        return_value=expected,
+                    ) as latest:
+                        actual = data_loader._download_tpex_stock("6488", "1mo", "1d")
+
+        latest.assert_called_once_with("6488", "1mo", start)
+        self.assertIs(actual, expected)
+
+    def test_tpex_monthly_http_error_propagates_before_json_or_latest_quote(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.json_calls = 0
+
+            def raise_for_status(self) -> None:
+                raise data_loader.requests.HTTPError("tpex monthly http failure")
+
+            def json(self) -> dict:
+                self.json_calls += 1
+                return {"stat": "ok", "tables": []}
+
+        resp = Response()
+        with patch.object(data_loader, "_period_start", return_value=pd.Timestamp("2024-01-01")):
+            with patch.object(data_loader, "_month_starts", return_value=[pd.Timestamp("2024-01-01")]):
+                with patch.object(data_loader, "_download_tpex_latest_quote") as latest_quote:
+                    with patch.object(data_loader, "_finalize_official_rows") as finalize:
+                        with patch.object(data_loader.requests, "get", return_value=resp):
+                            with self.assertRaisesRegex(
+                                data_loader.requests.HTTPError,
+                                "tpex monthly http failure",
+                            ):
+                                data_loader._download_tpex_stock("6488", "1mo", "1d")
+
+        self.assertEqual(resp.json_calls, 0)
+        latest_quote.assert_not_called()
+        finalize.assert_not_called()
+
+    def test_tpex_non_daily_interval_rejects_before_network(self) -> None:
+        with patch.object(data_loader.requests, "get") as request_get:
+            with patch.object(data_loader, "_period_start") as period_start:
+                with patch.object(data_loader, "_month_starts") as month_starts:
+                    with patch.object(data_loader, "_download_tpex_latest_quote") as latest_quote:
+                        with self.assertRaisesRegex(
+                            data_loader.DataLoaderError,
+                            r"^TPEX fallback only supports 1d interval\.$",
+                        ):
+                            data_loader._download_tpex_stock("6488", "1mo", "1wk")
+
+        request_get.assert_not_called()
+        period_start.assert_not_called()
+        month_starts.assert_not_called()
+        latest_quote.assert_not_called()
+
+    def test_parse_tpex_date_supports_all_current_formats(self) -> None:
+        expected = pd.Timestamp("2024-01-02")
+
+        self.assertEqual(
+            data_loader._parse_tpex_date("113/01/02"),
+            expected,
+        )
+
+        self.assertEqual(
+            data_loader._parse_tpex_date(
+                "01/02",
+                pd.Timestamp("2024-01-01"),
+            ),
+            expected,
+        )
+
+        self.assertEqual(
+            data_loader._parse_tpex_date("1130102"),
+            expected,
+        )
+
+        self.assertEqual(
+            data_loader._parse_tpex_date("20240102"),
+            expected,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^Invalid TPEX date: invalid$",
+        ):
+            data_loader._parse_tpex_date("invalid")
+
+    def test_tpex_latest_quote_exact_request_and_matching_contract(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.raise_calls = 0
+
+            def raise_for_status(self) -> None:
+                self.raise_calls += 1
+
+            def json(self) -> list[dict]:
+                return [
+                    {
+                        "SecuritiesCompanyCode": "1234",
+                        "Date": "20240103",
+                        "Open": "1",
+                        "High": "2",
+                        "Low": "0",
+                        "Close": "1",
+                        "TradingShares": "10",
+                    },
+                    {
+                        "SecuritiesCompanyCode": " 6488 ",
+                        "Date": "20240103",
+                        "Open": "10",
+                        "High": "12",
+                        "Low": "9",
+                        "Close": "11",
+                        "TradingShares": "1,234",
+                    },
+                ]
+
+        response = Response()
+        expected = _download_df()
+        start = pd.Timestamp("2024-01-01")
+
+        with patch.object(
+            data_loader.requests,
+            "get",
+            return_value=response,
+        ) as request_get:
+            with patch.object(
+                data_loader,
+                "_finalize_official_rows",
+                return_value=expected,
+            ) as finalize:
+                actual = data_loader._download_tpex_latest_quote(
+                    "6488",
+                    "1mo",
+                    start,
+                )
+
+        request_get.assert_called_once_with(
+            "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
+        )
+        self.assertEqual(response.raise_calls, 1)
+        finalize.assert_called_once_with(
+            [
+                {
+                    "Date": pd.Timestamp("2024-01-03"),
+                    "Open": 10.0,
+                    "High": 12.0,
+                    "Low": 9.0,
+                    "Close": 11.0,
+                    "Volume": 1234,
+                },
+            ],
+            "6488",
+            ".TWO",
+            start,
+            "1mo",
+        )
+        self.assertIs(actual, expected)
+
+    def test_tpex_latest_quote_http_error_propagates_before_json(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.json_calls = 0
+
+            def raise_for_status(self) -> None:
+                raise data_loader.requests.HTTPError("tpex latest http failure")
+
+            def json(self) -> list[dict]:
+                self.json_calls += 1
+                return []
+
+        resp = Response()
+        start = pd.Timestamp("2024-01-01")
+
+        with patch.object(data_loader, "_finalize_official_rows") as finalize:
+            with patch.object(data_loader.requests, "get", return_value=resp):
+                with self.assertRaisesRegex(
+                    data_loader.requests.HTTPError,
+                    "tpex latest http failure",
+                ):
+                    data_loader._download_tpex_latest_quote(
+                        "6488",
+                        "1mo",
+                        start,
+                    )
+
+        self.assertEqual(resp.json_calls, 0)
+        finalize.assert_not_called()
+
+    def test_tpex_latest_quote_no_match_raises_exact_error(self) -> None:
+        class Response:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> list[dict]:
+                return [
+                    {
+                        "SecuritiesCompanyCode": "1234",
+                        "Date": "20240103",
+                        "Open": "1",
+                        "High": "2",
+                        "Low": "0",
+                        "Close": "1",
+                        "TradingShares": "10",
+                    },
+                ]
+
+        start = pd.Timestamp("2024-01-01")
+
+        with patch.object(data_loader, "_finalize_official_rows") as finalize:
+            with patch.object(data_loader.requests, "get", return_value=Response()):
+                with self.assertRaisesRegex(
+                    data_loader.DataLoaderError,
+                    r"^TPEX fallback has no data: 6488\.TWO$",
+                ):
+                    data_loader._download_tpex_latest_quote(
+                        "6488",
+                        "1mo",
+                        start,
+                    )
+
+        finalize.assert_not_called()
+
+    def test_official_dispatch_uses_patchable_tpex_helper(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "_download_tpex_stock",
+            return_value=expected,
+        ) as tpex_download:
+            actual = data_loader._download_official_stock(
+                "6488",
+                ".TWO",
+                "6mo",
+                "1d",
+            )
+
+        tpex_download.assert_called_once_with(
+            "6488",
+            "6mo",
+            "1d",
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
