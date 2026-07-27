@@ -1605,5 +1605,443 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
+    def test_normalize_columns_flattens_multiindex_and_preserves_identity(
+        self,
+    ) -> None:
+        columns = pd.MultiIndex.from_tuples(
+            [
+                ("Open", "2330.TW"),
+                ("High", "2330.TW"),
+                ("Low", "2330.TW"),
+                ("Close", "2330.TW"),
+                ("Volume", "2330.TW"),
+            ]
+        )
+
+        frame = pd.DataFrame(
+            [[10.0, 12.0, 9.0, 11.0, 1000]],
+            columns=columns,
+        )
+
+        actual = data_loader._normalize_columns(frame)
+
+        self.assertIs(actual, frame)
+        self.assertEqual(
+            list(actual.columns),
+            ["Open", "High", "Low", "Close", "Volume"],
+        )
+
+    def test_prepare_ohlcv_selects_exact_columns_drops_unusable_rows_and_converts_index(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            {
+                "Volume": [None, 2000],
+                "Close": [11.0, 21.0],
+                "Open": [10.0, None],
+                "Extra": ["keep-out", "keep-out"],
+                "Low": [9.0, 19.0],
+                "High": [12.0, 22.0],
+            },
+            index=[
+                "2024-01-02",
+                "2024-01-03",
+            ],
+        )
+
+        actual = data_loader._prepare_ohlcv(
+            frame,
+            "2330.TW",
+        )
+
+        self.assertEqual(
+            list(actual.columns),
+            ["Open", "High", "Low", "Close", "Volume"],
+        )
+        self.assertEqual(len(actual), 1)
+        self.assertIsInstance(actual.index, pd.DatetimeIndex)
+        self.assertEqual(actual.index[0], pd.Timestamp("2024-01-02"))
+        self.assertEqual(actual.index.name, "Date")
+        self.assertTrue(pd.isna(actual.iloc[0]["Volume"]))
+        self.assertNotIn("Extra", actual.columns)
+
+    def test_prepare_ohlcv_missing_columns_raise_exact_error(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0],
+                "Low": [9.0],
+                "Close": [11.0],
+            },
+            index=["2024-01-02"],
+        )
+
+        with self.assertRaises(data_loader.DataLoaderError) as caught:
+            data_loader._prepare_ohlcv(frame, "2330.TW")
+
+        self.assertEqual(
+            str(caught.exception),
+            "Missing data columns: ['High', 'Volume']",
+        )
+
+    def test_prepare_ohlcv_no_usable_ohlc_raises_exact_error(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            {
+                "Open": [None, 10.0],
+                "High": [12.0, None],
+                "Low": [9.0, 9.0],
+                "Close": [11.0, 11.0],
+                "Volume": [1000, 1000],
+            },
+            index=["2024-01-02", "2024-01-03"],
+        )
+
+        with self.assertRaises(data_loader.DataLoaderError) as caught:
+            data_loader._prepare_ohlcv(
+                frame,
+                "6488.TWO",
+            )
+
+        self.assertEqual(
+            str(caught.exception),
+            "6488.TWO has no usable OHLC data.",
+        )
+
+    def test_prepare_ohlcv_invalid_index_raises_exact_error(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0],
+                "High": [12.0],
+                "Low": [9.0],
+                "Close": [11.0],
+                "Volume": [1000],
+            },
+            index=["not-a-date"],
+        )
+
+        with self.assertRaises(data_loader.DataLoaderError) as caught:
+            data_loader._prepare_ohlcv(frame, "2330.TW")
+
+        self.assertEqual(
+            str(caught.exception),
+            "2330.TW index is not a valid DatetimeIndex.",
+        )
+
+    def test_prepare_ohlcv_uses_patchable_normalize_columns_helper(
+        self,
+    ) -> None:
+        source = pd.DataFrame(
+            {"raw": [1]},
+            index=["2024-01-02"],
+        )
+
+        normalized = pd.DataFrame(
+            {
+                "Open": [10.0],
+                "High": [12.0],
+                "Low": [9.0],
+                "Close": [11.0],
+                "Volume": [1000],
+            },
+            index=["2024-01-02"],
+        )
+
+        with patch.object(
+            data_loader,
+            "_normalize_columns",
+            return_value=normalized,
+        ) as normalize:
+            actual = data_loader._prepare_ohlcv(
+                source,
+                "2330.TW",
+            )
+
+        normalize.assert_called_once_with(source)
+        self.assertEqual(
+            list(actual.columns),
+            ["Open", "High", "Low", "Close", "Volume"],
+        )
+        self.assertIsInstance(actual.index, pd.DatetimeIndex)
+        self.assertEqual(actual.index.name, "Date")
+
+    def test_finalize_official_rows_empty_rows_raise_exact_error(
+        self,
+    ) -> None:
+        with patch.object(data_loader, "_prepare_ohlcv") as prepare:
+            with self.assertRaises(data_loader.DataLoaderError) as caught:
+                data_loader._finalize_official_rows(
+                    [],
+                    "2330",
+                    ".TW",
+                    pd.Timestamp("2024-01-01"),
+                    "1mo",
+                )
+
+        self.assertEqual(
+            str(caught.exception),
+            "Official fallback has no data: 2330.TW",
+        )
+        prepare.assert_not_called()
+
+    def test_finalize_official_rows_deduplicates_sorts_filters_and_limits_periods(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "Date": pd.Timestamp("2024-01-03"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 30.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-01"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 10.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-02"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 20.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-03"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 300.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-04"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 40.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-05"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 50.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-06"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 60.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-07"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 70.0,
+                "Volume": 1000,
+            },
+        ]
+
+        start = pd.Timestamp("2024-01-02")
+
+        actual_1mo = data_loader._finalize_official_rows(
+            rows,
+            "2330",
+            ".TW",
+            start,
+            "1mo",
+        )
+
+        expected_dates = [
+            pd.Timestamp("2024-01-02"),
+            pd.Timestamp("2024-01-03"),
+            pd.Timestamp("2024-01-04"),
+            pd.Timestamp("2024-01-05"),
+            pd.Timestamp("2024-01-06"),
+            pd.Timestamp("2024-01-07"),
+        ]
+
+        self.assertEqual(list(actual_1mo.index), expected_dates)
+        self.assertEqual(actual_1mo.index.name, "Date")
+        self.assertEqual(
+            list(actual_1mo.columns),
+            ["Open", "High", "Low", "Close", "Volume"],
+        )
+        self.assertEqual(actual_1mo.loc[pd.Timestamp("2024-01-03"), "Close"], 30.0)
+
+        actual_1d = data_loader._finalize_official_rows(
+            rows,
+            "2330",
+            ".TW",
+            start,
+            "1d",
+        )
+        self.assertEqual(list(actual_1d.index), [pd.Timestamp("2024-01-07")])
+
+        actual_5d = data_loader._finalize_official_rows(
+            rows,
+            "2330",
+            ".TW",
+            start,
+            "5d",
+        )
+        self.assertEqual(
+            list(actual_5d.index),
+            expected_dates[-5:],
+        )
+
+    def test_finalize_official_rows_uses_patchable_prepare_ohlcv_helper(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "Date": pd.Timestamp("2024-01-01"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 10.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-02"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 20.0,
+                "Volume": 1000,
+            },
+            {
+                "Date": pd.Timestamp("2024-01-03"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 30.0,
+                "Volume": 1000,
+            },
+        ]
+
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+            return_value=expected,
+        ) as prepare:
+            actual = data_loader._finalize_official_rows(
+                rows,
+                "2330",
+                ".TW",
+                pd.Timestamp("2024-01-02"),
+                "1d",
+            )
+
+        prepare.assert_called_once()
+        call_args = prepare.call_args[0]
+        passed_df = call_args[0]
+        passed_symbol = call_args[1]
+
+        self.assertIsInstance(passed_df, pd.DataFrame)
+        self.assertEqual(passed_symbol, "2330.TW")
+        self.assertEqual(passed_df.index.name, "Date")
+        self.assertEqual(list(passed_df.index), [pd.Timestamp("2024-01-03")])
+        self.assertEqual(len(passed_df), 1)
+        self.assertIs(actual, expected)
+
+    def test_normalize_columns_helper_delegates_to_normalization_module(
+        self,
+    ) -> None:
+        frame = pd.DataFrame({"raw": [1]})
+        expected = pd.DataFrame({"Open": [1]})
+
+        with patch.object(
+            data_loader._ohlcv_normalization,
+            "normalize_columns",
+            return_value=expected,
+        ) as normalize:
+            actual = data_loader._normalize_columns(frame)
+
+        normalize.assert_called_once_with(frame)
+        self.assertIs(actual, expected)
+
+    def test_prepare_ohlcv_helper_delegates_to_normalization_module(
+        self,
+    ) -> None:
+        frame = pd.DataFrame({"raw": [1]})
+        expected = _download_df()
+
+        with patch.object(
+            data_loader._ohlcv_normalization,
+            "prepare_ohlcv",
+            return_value=expected,
+        ) as prepare:
+            actual = data_loader._prepare_ohlcv(
+                frame,
+                "2330.TW",
+            )
+
+        prepare.assert_called_once_with(
+            frame,
+            "2330.TW",
+            normalize_columns=data_loader._normalize_columns,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
+    def test_finalize_official_rows_helper_delegates_to_normalization_module(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "Date": pd.Timestamp("2024-01-02"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 11.0,
+                "Volume": 1000,
+            },
+        ]
+        start = pd.Timestamp("2024-01-01")
+        expected = _download_df()
+
+        with patch.object(
+            data_loader._ohlcv_normalization,
+            "finalize_official_rows",
+            return_value=expected,
+        ) as finalize:
+            actual = data_loader._finalize_official_rows(
+                rows,
+                "2330",
+                ".TW",
+                start,
+                "1mo",
+            )
+
+        finalize.assert_called_once_with(
+            rows,
+            "2330",
+            ".TW",
+            start,
+            "1mo",
+            prepare_ohlcv=data_loader._prepare_ohlcv,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()

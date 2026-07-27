@@ -7,6 +7,7 @@ import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.data import cache_runtime as _cache_runtime
+from tw_stock_tool.data import ohlcv_normalization as _ohlcv_normalization
 from tw_stock_tool.data.providers import (
     tpex_provider,
     twse_provider,
@@ -19,9 +20,7 @@ class DataLoaderError(Exception):
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    return df
+    return _ohlcv_normalization.normalize_columns(df)
 
 
 def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
@@ -57,23 +56,12 @@ def _read_cache(path: Path) -> pd.DataFrame:
 def _write_cache(df: pd.DataFrame, path: Path) -> None:
     _cache_runtime._write_cache(df, path)
 def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
-    df = _normalize_columns(df)
-    required = ["Open", "High", "Low", "Close", "Volume"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise DataLoaderError(f"Missing data columns: {missing}")
-    out = df[required].dropna(subset=["Open", "High", "Low", "Close"])
-    if out.empty:
-        raise DataLoaderError(f"{symbol} has no usable OHLC data.")
-
-    if not pd.api.types.is_datetime64_any_dtype(out.index):
-        try:
-            out.index = pd.to_datetime(out.index)
-        except Exception:
-            raise DataLoaderError(f"{symbol} index is not a valid DatetimeIndex.")
-
-    out.index.name = "Date"
-    return out
+    return _ohlcv_normalization.prepare_ohlcv(
+        df,
+        symbol,
+        normalize_columns=_normalize_columns,
+        error_type=DataLoaderError,
+    )
 
 
 def _period_start(period: str) -> pd.Timestamp:
@@ -146,17 +134,15 @@ def _finalize_official_rows(
     start: pd.Timestamp,
     period: str,
 ) -> pd.DataFrame:
-    if not rows:
-        raise DataLoaderError(f"Official fallback has no data: {stock_id}{suffix}")
-
-    df = pd.DataFrame(rows).drop_duplicates(subset=["Date"])
-    df = df.set_index("Date").sort_index()
-    df = df[df.index >= start]
-    if period == "1d":
-        df = df.tail(1)
-    elif period == "5d":
-        df = df.tail(5)
-    return _prepare_ohlcv(df, f"{stock_id}{suffix}")
+    return _ohlcv_normalization.finalize_official_rows(
+        rows,
+        stock_id,
+        suffix,
+        start,
+        period,
+        prepare_ohlcv=_prepare_ohlcv,
+        error_type=DataLoaderError,
+    )
 
 
 def _download_twse_stock(stock_id: str, period: str, interval: str) -> pd.DataFrame:
