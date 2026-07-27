@@ -1963,5 +1963,85 @@ class DataLoaderTest(unittest.TestCase):
         self.assertEqual(len(passed_df), 1)
         self.assertIs(actual, expected)
 
+    def test_normalize_columns_helper_delegates_to_normalization_module(
+        self,
+    ) -> None:
+        frame = pd.DataFrame({"raw": [1]})
+        expected = pd.DataFrame({"Open": [1]})
+
+        with patch.object(
+            data_loader._ohlcv_normalization,
+            "normalize_columns",
+            return_value=expected,
+        ) as normalize:
+            actual = data_loader._normalize_columns(frame)
+
+        normalize.assert_called_once_with(frame)
+        self.assertIs(actual, expected)
+
+    def test_prepare_ohlcv_helper_delegates_to_normalization_module(
+        self,
+    ) -> None:
+        frame = pd.DataFrame({"raw": [1]})
+        expected = _download_df()
+
+        with patch.object(
+            data_loader._ohlcv_normalization,
+            "prepare_ohlcv",
+            return_value=expected,
+        ) as prepare:
+            actual = data_loader._prepare_ohlcv(
+                frame,
+                "2330.TW",
+            )
+
+        prepare.assert_called_once_with(
+            frame,
+            "2330.TW",
+            normalize_columns=data_loader._normalize_columns,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
+    def test_finalize_official_rows_helper_delegates_to_normalization_module(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "Date": pd.Timestamp("2024-01-02"),
+                "Open": 10.0,
+                "High": 12.0,
+                "Low": 9.0,
+                "Close": 11.0,
+                "Volume": 1000,
+            },
+        ]
+        start = pd.Timestamp("2024-01-01")
+        expected = _download_df()
+
+        with patch.object(
+            data_loader._ohlcv_normalization,
+            "finalize_official_rows",
+            return_value=expected,
+        ) as finalize:
+            actual = data_loader._finalize_official_rows(
+                rows,
+                "2330",
+                ".TW",
+                start,
+                "1mo",
+            )
+
+        finalize.assert_called_once_with(
+            rows,
+            "2330",
+            ".TW",
+            start,
+            "1mo",
+            prepare_ohlcv=data_loader._prepare_ohlcv,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
