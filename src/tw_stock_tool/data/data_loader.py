@@ -7,7 +7,11 @@ import yfinance as yf
 
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.data import cache_runtime as _cache_runtime
-from tw_stock_tool.data.providers import twse_provider, yfinance_provider
+from tw_stock_tool.data.providers import (
+    tpex_provider,
+    twse_provider,
+    yfinance_provider,
+)
 
 
 class DataLoaderError(Exception):
@@ -171,47 +175,19 @@ def _download_twse_stock(stock_id: str, period: str, interval: str) -> pd.DataFr
 
 
 def _download_tpex_stock(stock_id: str, period: str, interval: str) -> pd.DataFrame:
-    if interval != "1d":
-        raise DataLoaderError("TPEX fallback only supports 1d interval.")
-
-    start = _period_start(period)
-    rows: list[dict[str, Any]] = []
-    for month in _month_starts(start, pd.Timestamp.today().normalize()):
-        params = {
-            "response": "json",
-            "date": month.strftime("%Y/%m/01"),
-            "id": stock_id,
-        }
-        response = requests.get(
-            "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock",
-            params=params,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=20,
-        )
-        if hasattr(response, "raise_for_status"):
-            response.raise_for_status()
-        data = response.json()
-        if str(data.get("stat", "")).lower() != "ok":
-            continue
-        tables = data.get("tables", [])
-        month_rows = tables[0].get("data", []) if tables else []
-        for row in month_rows:
-            if len(row) < 7:
-                continue
-            rows.append(
-                {
-                    "Date": _parse_tpex_date(row[0], month),
-                    "Open": _to_float(row[3]),
-                    "High": _to_float(row[4]),
-                    "Low": _to_float(row[5]),
-                    "Close": _to_float(row[6]),
-                    "Volume": _to_int(row[1]),
-                }
-            )
-
-    if rows:
-        return _finalize_official_rows(rows, stock_id, ".TWO", start, period)
-    return _download_tpex_latest_quote(stock_id, period, start)
+    return tpex_provider.download_tpex_stock(
+        stock_id,
+        period,
+        interval,
+        period_start=_period_start,
+        month_starts=_month_starts,
+        parse_tpex_date=_parse_tpex_date,
+        to_float=_to_float,
+        to_int=_to_int,
+        finalize_official_rows=_finalize_official_rows,
+        download_latest_quote=_download_tpex_latest_quote,
+        error_type=DataLoaderError,
+    )
 
 
 def _download_tpex_latest_quote(
@@ -219,29 +195,16 @@ def _download_tpex_latest_quote(
     period: str,
     start: pd.Timestamp,
 ) -> pd.DataFrame:
-    response = requests.get(
-        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
-        headers={"User-Agent": "Mozilla/5.0"},
-        timeout=20,
+    return tpex_provider.download_tpex_latest_quote(
+        stock_id,
+        period,
+        start,
+        parse_tpex_date=_parse_tpex_date,
+        to_float=_to_float,
+        to_int=_to_int,
+        finalize_official_rows=_finalize_official_rows,
+        error_type=DataLoaderError,
     )
-    if hasattr(response, "raise_for_status"):
-        response.raise_for_status()
-    data = response.json()
-    for row in data:
-        if str(row.get("SecuritiesCompanyCode", "")).strip() != stock_id:
-            continue
-        rows = [
-            {
-                "Date": _parse_tpex_date(str(row["Date"])),
-                "Open": _to_float(row["Open"]),
-                "High": _to_float(row["High"]),
-                "Low": _to_float(row["Low"]),
-                "Close": _to_float(row["Close"]),
-                "Volume": _to_int(row["TradingShares"]),
-            }
-        ]
-        return _finalize_official_rows(rows, stock_id, ".TWO", start, period)
-    raise DataLoaderError(f"TPEX fallback has no data: {stock_id}.TWO")
 
 
 def _download_official_stock(stock_id: str, suffix: str, period: str, interval: str) -> pd.DataFrame:
