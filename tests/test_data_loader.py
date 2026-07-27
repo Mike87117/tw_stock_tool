@@ -2168,5 +2168,99 @@ class DataLoaderTest(unittest.TestCase):
         to_float.assert_called_once_with("ignored")
         self.assertEqual(actual, 12)
 
+    def test_period_start_helper_delegates_to_official_parsing_module(
+        self,
+    ) -> None:
+        expected = pd.Timestamp("2024-01-02")
+        with patch.object(
+            data_loader._official_parsing,
+            "period_start",
+            return_value=expected,
+        ) as period_start:
+            actual = data_loader._period_start("6mo")
+
+        period_start.assert_called_once_with("6mo")
+        self.assertIs(actual, expected)
+
+    def test_month_starts_helper_delegates_to_official_parsing_module(
+        self,
+    ) -> None:
+        start = pd.Timestamp("2024-01-15")
+        end = pd.Timestamp("2024-03-20")
+        expected = [pd.Timestamp("2024-01-01")]
+        with patch.object(
+            data_loader._official_parsing,
+            "month_starts",
+            return_value=expected,
+        ) as month_starts:
+            actual = data_loader._month_starts(start, end)
+
+        month_starts.assert_called_once_with(start, end)
+        self.assertIs(actual, expected)
+
+    def test_parse_roc_date_helper_delegates_to_official_parsing_module(
+        self,
+    ) -> None:
+        expected = pd.Timestamp("2024-01-02")
+        with patch.object(
+            data_loader._official_parsing,
+            "parse_roc_date",
+            return_value=expected,
+        ) as parse_roc:
+            actual = data_loader._parse_roc_date("113/01/02")
+
+        parse_roc.assert_called_once_with("113/01/02")
+        self.assertIs(actual, expected)
+
+    def test_parse_tpex_date_helper_delegates_to_official_parsing_module(
+        self,
+    ) -> None:
+        month = pd.Timestamp("2024-01-01")
+        expected = pd.Timestamp("2024-01-02")
+        with patch.object(
+            data_loader._official_parsing,
+            "parse_tpex_date",
+            return_value=expected,
+        ) as parse_tpex:
+            actual = data_loader._parse_tpex_date("01/02", month)
+
+        parse_tpex.assert_called_once_with(
+            "01/02",
+            month,
+            parse_roc_date=data_loader._parse_roc_date,
+        )
+        self.assertIs(actual, expected)
+
+    def test_to_float_helper_delegates_to_official_parsing_module(
+        self,
+    ) -> None:
+        expected = float("1234.5")
+        with patch.object(
+            data_loader._official_parsing,
+            "to_float",
+            return_value=expected,
+        ) as to_float:
+            actual = data_loader._to_float("1,234.5")
+
+        to_float.assert_called_once_with("1,234.5")
+        self.assertIs(actual, expected)
+
+    def test_to_int_helper_delegates_to_official_parsing_module(
+        self,
+    ) -> None:
+        expected = int("987654321")
+        with patch.object(
+            data_loader._official_parsing,
+            "to_int",
+            return_value=expected,
+        ) as to_int:
+            actual = data_loader._to_int("987,654,321")
+
+        to_int.assert_called_once_with(
+            "987,654,321",
+            to_float=data_loader._to_float,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
