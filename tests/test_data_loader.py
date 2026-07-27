@@ -1549,5 +1549,61 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
+    def test_tpex_stock_helper_delegates_to_provider_module(self) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader.tpex_provider,
+            "download_tpex_stock",
+            return_value=expected,
+        ) as provider_download:
+            actual = data_loader._download_tpex_stock(
+                "6488",
+                "6mo",
+                "1d",
+            )
+
+        provider_download.assert_called_once_with(
+            "6488",
+            "6mo",
+            "1d",
+            period_start=data_loader._period_start,
+            month_starts=data_loader._month_starts,
+            parse_tpex_date=data_loader._parse_tpex_date,
+            to_float=data_loader._to_float,
+            to_int=data_loader._to_int,
+            finalize_official_rows=data_loader._finalize_official_rows,
+            download_latest_quote=data_loader._download_tpex_latest_quote,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
+    def test_tpex_latest_quote_helper_delegates_to_provider_module(self) -> None:
+        expected = _download_df()
+        start = pd.Timestamp("2024-01-01")
+
+        with patch.object(
+            data_loader.tpex_provider,
+            "download_tpex_latest_quote",
+            return_value=expected,
+        ) as provider_download:
+            actual = data_loader._download_tpex_latest_quote(
+                "6488",
+                "6mo",
+                start,
+            )
+
+        provider_download.assert_called_once_with(
+            "6488",
+            "6mo",
+            start,
+            parse_tpex_date=data_loader._parse_tpex_date,
+            to_float=data_loader._to_float,
+            to_int=data_loader._to_int,
+            finalize_official_rows=data_loader._finalize_official_rows,
+            error_type=data_loader.DataLoaderError,
+        )
+        self.assertIs(actual, expected)
+
 if __name__ == "__main__":
     unittest.main()
