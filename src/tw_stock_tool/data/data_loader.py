@@ -8,6 +8,7 @@ import yfinance as yf
 from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
 from tw_stock_tool.data import cache_runtime as _cache_runtime
 from tw_stock_tool.data import ohlcv_normalization as _ohlcv_normalization
+from tw_stock_tool.data import official_parsing as _official_parsing
 from tw_stock_tool.data.providers import (
     tpex_provider,
     twse_provider,
@@ -65,66 +66,34 @@ def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 
 def _period_start(period: str) -> pd.Timestamp:
-    today = pd.Timestamp.today().normalize()
-    months = {
-        "1d": 1,
-        "5d": 1,
-        "1mo": 1,
-        "3mo": 3,
-        "6mo": 6,
-        "1y": 12,
-        "2y": 24,
-        "5y": 60,
-        "10y": 120,
-        "max": 180,
-    }
-    if period == "ytd":
-        return pd.Timestamp(year=today.year, month=1, day=1)
-    return today - pd.DateOffset(months=months.get(period, 12))
+    return _official_parsing.period_start(period)
 
 
 def _month_starts(start: pd.Timestamp, end: pd.Timestamp) -> list[pd.Timestamp]:
-    cursor = pd.Timestamp(year=start.year, month=start.month, day=1)
-    final = pd.Timestamp(year=end.year, month=end.month, day=1)
-    months = []
-    while cursor <= final:
-        months.append(cursor)
-        cursor += pd.DateOffset(months=1)
-    return months
+    return _official_parsing.month_starts(start, end)
 
 
 def _parse_roc_date(value: str) -> pd.Timestamp:
-    parts = value.strip().split("/")
-    if len(parts) != 3:
-        raise ValueError(f"Invalid ROC date: {value}")
-    year, month, day = (int(part.strip()) for part in parts)
-    return pd.Timestamp(year + 1911, month, day)
+    return _official_parsing.parse_roc_date(value)
 
 
 def _parse_tpex_date(value: str, month: pd.Timestamp | None = None) -> pd.Timestamp:
-    text = str(value).strip()
-    if "/" in text:
-        parts = text.split("/")
-        if len(parts) == 3:
-            return _parse_roc_date(text)
-        if len(parts) == 2 and month is not None:
-            return pd.Timestamp(month.year, int(parts[0]), int(parts[1]))
-    if text.isdigit() and len(text) == 7:
-        return pd.Timestamp(int(text[:3]) + 1911, int(text[3:5]), int(text[5:7]))
-    if text.isdigit() and len(text) == 8:
-        return pd.Timestamp(int(text[:4]), int(text[4:6]), int(text[6:8]))
-    raise ValueError(f"Invalid TPEX date: {value}")
+    return _official_parsing.parse_tpex_date(
+        value,
+        month,
+        parse_roc_date=_parse_roc_date,
+    )
 
 
 def _to_float(value: Any) -> float:
-    text = str(value).replace(",", "").replace("--", "").strip()
-    if not text:
-        return float("nan")
-    return float(text)
+    return _official_parsing.to_float(value)
 
 
 def _to_int(value: Any) -> int:
-    return int(_to_float(value))
+    return _official_parsing.to_int(
+        value,
+        to_float=_to_float,
+    )
 
 
 def _finalize_official_rows(
