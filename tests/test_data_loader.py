@@ -6,11 +6,11 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 import pandas as pd
 
-from tw_stock_tool.data import data_loader
+from tw_stock_tool.data import data_loader, fallback_orchestration
 
 
 def _download_df() -> pd.DataFrame:
@@ -2261,6 +2261,817 @@ class DataLoaderTest(unittest.TestCase):
             to_float=data_loader._to_float,
         )
         self.assertIs(actual, expected)
+
+    def test_orchestration_fresh_cache_short_circuits_live_sources(
+        self,
+    ) -> None:
+        candidates = [
+            ("2330.TW", "2330", ".TW"),
+            ("2330.TWO", "2330", ".TWO"),
+        ]
+        cache_path = Path("fresh-2330-tw.csv")
+        cached = pd.DataFrame({"raw": [1]})
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "_validate_inputs",
+        ) as validate_inputs, patch.object(
+            data_loader,
+            "_symbol_candidates",
+            return_value=candidates,
+        ) as symbol_candidates, patch.object(
+            data_loader,
+            "_cache_path",
+            return_value=cache_path,
+        ) as cache_path_helper, patch.object(
+            data_loader,
+            "_is_cache_fresh",
+            return_value=True,
+        ) as is_fresh, patch.object(
+            data_loader,
+            "_read_cache",
+            return_value=cached,
+        ) as read_cache, patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+            return_value=expected,
+        ) as prepare, patch.object(
+            data_loader,
+            "_download_yfinance_quiet",
+        ) as yahoo, patch.object(
+            data_loader,
+            "_download_official_stock",
+        ) as official, patch.object(
+            data_loader,
+            "_write_cache",
+        ) as write_cache, patch.object(
+            data_loader,
+            "_get_cache_age_days",
+        ) as get_cache_age_days:
+            actual_df, actual_symbol = data_loader.download_tw_stock(
+                "2330",
+                period="6mo",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=False,
+                verbose=False,
+            )
+
+        validate_inputs.assert_called_once_with(
+            "2330",
+            "6mo",
+            "1d",
+        )
+        symbol_candidates.assert_called_once_with("2330")
+        cache_path_helper.assert_called_once_with(
+            "2330.TW",
+            "6mo",
+            "1d",
+            False,
+        )
+        is_fresh.assert_called_once_with(cache_path)
+        read_cache.assert_called_once_with(cache_path)
+        prepare.assert_called_once_with(
+            cached,
+            "2330.TW",
+        )
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "2330.TW")
+
+        yahoo.assert_not_called()
+        official.assert_not_called()
+        write_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
+
+    def test_orchestration_yahoo_candidate_order_and_cache_write_contract(
+        self,
+    ) -> None:
+        candidates = [
+            ("6510.TW", "6510", ".TW"),
+            ("6510.TWO", "6510", ".TWO"),
+        ]
+        tw_path = Path("6510-tw.csv")
+        two_path = Path("6510-two.csv")
+        raw_two = pd.DataFrame({"raw": [2]})
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "_validate_inputs",
+        ) as validate_inputs, patch.object(
+            data_loader,
+            "_symbol_candidates",
+            return_value=candidates,
+        ) as symbol_candidates, patch.object(
+            data_loader,
+            "_cache_path",
+            side_effect=[tw_path, two_path],
+        ) as cache_path_helper, patch.object(
+            data_loader,
+            "_is_cache_fresh",
+            side_effect=[False, False],
+        ) as is_fresh, patch.object(
+            data_loader,
+            "_read_cache",
+        ) as read_cache, patch.object(
+            data_loader,
+            "_download_yfinance_quiet",
+            side_effect=[pd.DataFrame(), raw_two],
+        ) as yahoo, patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+            return_value=expected,
+        ) as prepare, patch.object(
+            data_loader,
+            "_write_cache",
+        ) as write_cache, patch.object(
+            data_loader,
+            "_download_official_stock",
+        ) as official, patch.object(
+            data_loader,
+            "_get_cache_age_days",
+        ) as get_cache_age_days:
+            actual_df, actual_symbol = data_loader.download_tw_stock(
+                "6510",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+            )
+
+        self.assertEqual(
+            cache_path_helper.call_args_list,
+            [
+                call(
+                    "6510.TW",
+                    "1y",
+                    "1d",
+                    True,
+                ),
+                call(
+                    "6510.TWO",
+                    "1y",
+                    "1d",
+                    True,
+                ),
+            ],
+        )
+        self.assertEqual(
+            yahoo.call_args_list,
+            [
+                call(
+                    "6510.TW",
+                    "1y",
+                    "1d",
+                    True,
+                ),
+                call(
+                    "6510.TWO",
+                    "1y",
+                    "1d",
+                    True,
+                ),
+            ],
+        )
+        prepare.assert_called_once_with(
+            raw_two,
+            "6510.TWO",
+        )
+        write_cache.assert_called_once_with(
+            expected,
+            two_path,
+        )
+        official.assert_not_called()
+        read_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
+
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "6510.TWO")
+
+    def test_orchestration_default_auto_adjust_and_official_fallback_order(
+        self,
+    ) -> None:
+        candidates = [
+            ("6488.TW", "6488", ".TW"),
+            ("6488.TWO", "6488", ".TWO"),
+        ]
+        tw_live_path = Path("6488-tw-live.csv")
+        two_live_path = Path("6488-two-live.csv")
+        tw_official_path = Path("6488-tw-official.csv")
+        two_official_path = Path("6488-two-official.csv")
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "DEFAULT_AUTO_ADJUST",
+            False,
+        ), patch.object(
+            data_loader,
+            "_validate_inputs",
+        ) as validate_inputs, patch.object(
+            data_loader,
+            "_symbol_candidates",
+            return_value=candidates,
+        ) as symbol_candidates, patch.object(
+            data_loader,
+            "_cache_path",
+            side_effect=[
+                tw_live_path,
+                two_live_path,
+                tw_official_path,
+                two_official_path,
+            ],
+        ) as cache_path_helper, patch.object(
+            data_loader,
+            "_is_cache_fresh",
+            side_effect=[False, False],
+        ) as is_fresh, patch.object(
+            data_loader,
+            "_read_cache",
+        ) as read_cache, patch.object(
+            data_loader,
+            "_download_yfinance_quiet",
+            side_effect=[pd.DataFrame(), pd.DataFrame()],
+        ) as yahoo, patch.object(
+            data_loader,
+            "_download_official_stock",
+            side_effect=[
+                data_loader.DataLoaderError("TWSE unavailable"),
+                expected,
+            ],
+        ) as official, patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+        ) as prepare, patch.object(
+            data_loader,
+            "_write_cache",
+        ) as write_cache, patch.object(
+            data_loader,
+            "_get_cache_age_days",
+        ) as get_cache_age_days:
+            actual_df, actual_symbol = data_loader.download_tw_stock(
+                " 6488 ",
+                period="6mo",
+                interval="1d",
+                auto_adjust=None,
+                force_refresh=False,
+            )
+
+        validate_inputs.assert_called_once_with(
+            " 6488 ",
+            "6mo",
+            "1d",
+        )
+        symbol_candidates.assert_called_once_with("6488")
+        self.assertEqual(
+            yahoo.call_args_list,
+            [
+                call(
+                    "6488.TW",
+                    "6mo",
+                    "1d",
+                    False,
+                ),
+                call(
+                    "6488.TWO",
+                    "6mo",
+                    "1d",
+                    False,
+                ),
+            ],
+        )
+        self.assertEqual(
+            official.call_args_list,
+            [
+                call(
+                    "6488",
+                    ".TW",
+                    "6mo",
+                    "1d",
+                ),
+                call(
+                    "6488",
+                    ".TWO",
+                    "6mo",
+                    "1d",
+                ),
+            ],
+        )
+        write_cache.assert_called_once_with(
+            expected,
+            two_official_path,
+        )
+        prepare.assert_not_called()
+        read_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
+
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "6488.TWO")
+
+    def test_orchestration_stale_cache_runs_after_live_sources_and_warns(
+        self,
+    ) -> None:
+        class FakePath:
+            def __init__(self, label: str, exists: bool) -> None:
+                self.label = label
+                self._exists = exists
+
+            def exists(self) -> bool:
+                return self._exists
+
+            def __str__(self) -> str:
+                return self.label
+
+        tw_path = FakePath("2330-tw-cache.csv", True)
+        two_path = FakePath("2330-two-cache.csv", True)
+        candidates = [
+            ("2330.TW", "2330", ".TW"),
+            ("2330.TWO", "2330", ".TWO"),
+        ]
+        cached_two = pd.DataFrame({"raw": [2]})
+        expected = _download_df()
+        stderr = StringIO()
+
+        with patch.object(
+            data_loader,
+            "MAX_STALE_CACHE_DAYS",
+            14,
+        ), patch.object(
+            data_loader,
+            "_validate_inputs",
+        ) as validate_inputs, patch.object(
+            data_loader,
+            "_symbol_candidates",
+            return_value=candidates,
+        ) as symbol_candidates, patch.object(
+            data_loader,
+            "_cache_path",
+            side_effect=[
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+            ],
+        ) as cache_path_helper, patch.object(
+            data_loader,
+            "_is_cache_fresh",
+            side_effect=[False, False],
+        ) as is_fresh, patch.object(
+            data_loader,
+            "_download_yfinance_quiet",
+            side_effect=[
+                RuntimeError("TW Yahoo failure"),
+                pd.DataFrame(),
+            ],
+        ) as yahoo, patch.object(
+            data_loader,
+            "_download_official_stock",
+        ) as official, patch.object(
+            data_loader,
+            "_get_cache_age_days",
+            side_effect=[20.0, 2.0],
+        ) as get_cache_age_days, patch.object(
+            data_loader,
+            "_read_cache",
+            return_value=cached_two,
+        ) as read_cache, patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+            return_value=expected,
+        ) as prepare, patch.object(
+            data_loader,
+            "_write_cache",
+        ) as write_cache:
+            with redirect_stderr(stderr):
+                actual_df, actual_symbol = data_loader.download_tw_stock(
+                    "2330",
+                    period="1y",
+                    interval="1d",
+                    auto_adjust=True,
+                    force_refresh=False,
+                    verbose=False,
+                )
+
+        official.assert_not_called()
+        write_cache.assert_not_called()
+
+        self.assertEqual(
+            get_cache_age_days.call_args_list,
+            [
+                call(tw_path),
+                call(two_path),
+            ],
+        )
+        read_cache.assert_called_once_with(two_path)
+        prepare.assert_called_once_with(
+            cached_two,
+            "2330.TWO",
+        )
+
+        expected_warning = (
+            "[WARNING] All live data sources failed for 2330.TWO. "
+            "Using 2.0-day-old stale cached data from 2330-two-cache.csv "
+            "(max stale age: 14 days).\n"
+        )
+        self.assertEqual(stderr.getvalue(), expected_warning)
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "2330.TWO")
+
+    def test_orchestration_force_refresh_skips_fresh_and_stale_cache_reads(
+        self,
+    ) -> None:
+        candidates = [
+            ("2330.TW", "2330", ".TW"),
+        ]
+        cache_path = Path("force-refresh.csv")
+        raw = pd.DataFrame({"raw": [1]})
+        expected = _download_df()
+
+        with patch.object(
+            data_loader,
+            "_validate_inputs",
+        ) as validate_inputs, patch.object(
+            data_loader,
+            "_symbol_candidates",
+            return_value=candidates,
+        ) as symbol_candidates, patch.object(
+            data_loader,
+            "_cache_path",
+            return_value=cache_path,
+        ) as cache_path_helper, patch.object(
+            data_loader,
+            "_is_cache_fresh",
+        ) as is_fresh, patch.object(
+            data_loader,
+            "_read_cache",
+        ) as read_cache, patch.object(
+            data_loader,
+            "_get_cache_age_days",
+        ) as get_cache_age_days, patch.object(
+            data_loader,
+            "_download_yfinance_quiet",
+            return_value=raw,
+        ) as yahoo, patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+            return_value=expected,
+        ) as prepare, patch.object(
+            data_loader,
+            "_write_cache",
+        ) as write_cache, patch.object(
+            data_loader,
+            "_download_official_stock",
+        ) as official:
+            actual_df, actual_symbol = data_loader.download_tw_stock(
+                "2330",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                force_refresh=True,
+            )
+
+        cache_path_helper.assert_called_once_with(
+            "2330.TW",
+            "1y",
+            "1d",
+            True,
+        )
+        is_fresh.assert_not_called()
+        read_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
+        official.assert_not_called()
+
+        yahoo.assert_called_once_with(
+            "2330.TW",
+            "1y",
+            "1d",
+            True,
+        )
+        prepare.assert_called_once_with(
+            raw,
+            "2330.TW",
+        )
+        write_cache.assert_called_once_with(
+            expected,
+            cache_path,
+        )
+
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "2330.TW")
+
+    def test_orchestration_passes_exact_error_order_to_formatter(
+        self,
+    ) -> None:
+        class FakePath:
+            def __init__(self, label: str, exists: bool) -> None:
+                self.label = label
+                self._exists = exists
+
+            def exists(self) -> bool:
+                return self._exists
+
+            def __str__(self) -> str:
+                return self.label
+
+        tw_path = FakePath("missing-tw.csv", False)
+        two_path = FakePath("missing-two.csv", False)
+        candidates = [
+            ("2330.TW", "2330", ".TW"),
+            ("2330.TWO", "2330", ".TWO"),
+        ]
+        sentinel = data_loader.DataLoaderError("sentinel")
+
+        with patch.object(
+            data_loader,
+            "_validate_inputs",
+        ) as validate_inputs, patch.object(
+            data_loader,
+            "_symbol_candidates",
+            return_value=candidates,
+        ) as symbol_candidates, patch.object(
+            data_loader,
+            "_cache_path",
+            side_effect=[
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+            ],
+        ) as cache_path_helper, patch.object(
+            data_loader,
+            "_is_cache_fresh",
+            side_effect=[False, False],
+        ) as is_fresh, patch.object(
+            data_loader,
+            "_read_cache",
+        ) as read_cache, patch.object(
+            data_loader,
+            "_get_cache_age_days",
+        ) as get_cache_age_days, patch.object(
+            data_loader,
+            "_download_yfinance_quiet",
+            side_effect=[
+                RuntimeError("Yahoo TW failure"),
+                pd.DataFrame(),
+            ],
+        ) as yahoo, patch.object(
+            data_loader,
+            "_download_official_stock",
+            side_effect=[
+                RuntimeError("Official TW failure"),
+                RuntimeError("Official TWO failure"),
+            ],
+        ) as official, patch.object(
+            data_loader,
+            "_prepare_ohlcv",
+        ) as prepare, patch.object(
+            data_loader,
+            "_write_cache",
+        ) as write_cache, patch.object(
+            data_loader,
+            "_format_no_data_error",
+            return_value=sentinel,
+        ) as formatter:
+            with self.assertRaises(data_loader.DataLoaderError) as caught:
+                data_loader.download_tw_stock(
+                    "2330",
+                    period="1y",
+                    interval="1d",
+                    auto_adjust=False,
+                    force_refresh=False,
+                )
+
+        self.assertEqual(
+            yahoo.call_args_list,
+            [
+                call(
+                    "2330.TW",
+                    "1y",
+                    "1d",
+                    False,
+                ),
+                call(
+                    "2330.TWO",
+                    "1y",
+                    "1d",
+                    False,
+                ),
+            ],
+        )
+        self.assertEqual(
+            official.call_args_list,
+            [
+                call(
+                    "2330",
+                    ".TW",
+                    "1y",
+                    "1d",
+                ),
+                call(
+                    "2330",
+                    ".TWO",
+                    "1y",
+                    "1d",
+                ),
+            ],
+        )
+        formatter.assert_called_once_with(
+            "2330",
+            [
+                "2330.TW",
+                "2330.TWO",
+            ],
+            [
+                (
+                    "2330.TW yfinance failed: "
+                    "Yahoo TW failure"
+                ),
+                "2330.TWO has no data",
+                (
+                    "2330.TW TWSE fallback failed: "
+                    "Official TW failure"
+                ),
+                (
+                    "2330.TWO TPEX fallback failed: "
+                    "Official TWO failure"
+                ),
+            ],
+        )
+        self.assertIs(
+            caught.exception,
+            sentinel,
+        )
+        read_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
+        prepare.assert_not_called()
+        write_cache.assert_not_called()
+
+    def test_download_tw_stock_facade_delegates_to_fallback_orchestration_module(
+        self,
+    ) -> None:
+        expected = _download_df()
+
+        with patch.object(
+            data_loader._fallback_orchestration,
+            "download_tw_stock",
+            return_value=(
+                expected,
+                "2330.TW",
+            ),
+        ) as orchestrate:
+            actual_df, actual_symbol = data_loader.download_tw_stock(
+                " 2330 ",
+                period="6mo",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=True,
+                verbose=True,
+            )
+
+        orchestrate.assert_called_once_with(
+            " 2330 ",
+            "6mo",
+            "1d",
+            False,
+            True,
+            True,
+            validate_inputs=data_loader._validate_inputs,
+            symbol_candidates=data_loader._symbol_candidates,
+            build_cache_path=data_loader._cache_path,
+            is_cache_fresh=data_loader._is_cache_fresh,
+            read_cache=data_loader._read_cache,
+            prepare_ohlcv=data_loader._prepare_ohlcv,
+            download_yfinance=data_loader._download_yfinance_quiet,
+            write_cache=data_loader._write_cache,
+            download_official=data_loader._download_official_stock,
+            get_cache_age_days=data_loader._get_cache_age_days,
+            format_no_data_error=data_loader._format_no_data_error,
+            default_auto_adjust=data_loader.DEFAULT_AUTO_ADJUST,
+            max_stale_cache_days=data_loader.MAX_STALE_CACHE_DAYS,
+        )
+        self.assertIs(actual_df, expected)
+        self.assertEqual(actual_symbol, "2330.TW")
+
+    def test_fallback_orchestration_accepts_fully_injected_fake_dependencies(
+        self,
+    ) -> None:
+        class FakePath:
+            def __init__(self, label: str, exists: bool) -> None:
+                self.label = label
+                self._exists = exists
+
+            def exists(self) -> bool:
+                return self._exists
+
+            def __str__(self) -> str:
+                return self.label
+
+        tw_path = FakePath("missing-tw.csv", False)
+        two_path = FakePath("missing-two.csv", False)
+        candidates = [
+            ("2330.TW", "2330", ".TW"),
+            ("2330.TWO", "2330", ".TWO"),
+        ]
+        sentinel = data_loader.DataLoaderError("sentinel")
+
+        validate_inputs = Mock()
+        symbol_candidates = Mock(return_value=candidates)
+        build_cache_path = Mock(
+            side_effect=[
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+                tw_path,
+                two_path,
+            ]
+        )
+        is_cache_fresh = Mock(side_effect=[False, False])
+        read_cache = Mock()
+        prepare_ohlcv = Mock()
+        download_yfinance = Mock(
+            side_effect=[
+                RuntimeError("Yahoo TW failure"),
+                pd.DataFrame(),
+            ]
+        )
+        write_cache = Mock()
+        download_official = Mock(
+            side_effect=[
+                RuntimeError("Official TW failure"),
+                RuntimeError("Official TWO failure"),
+            ]
+        )
+        get_cache_age_days = Mock()
+        format_no_data_error = Mock(return_value=sentinel)
+
+        with self.assertRaises(data_loader.DataLoaderError) as caught:
+            fallback_orchestration.download_tw_stock(
+                " 2330 ",
+                period="1y",
+                interval="1d",
+                auto_adjust=False,
+                force_refresh=False,
+                verbose=False,
+                validate_inputs=validate_inputs,
+                symbol_candidates=symbol_candidates,
+                build_cache_path=build_cache_path,
+                is_cache_fresh=is_cache_fresh,
+                read_cache=read_cache,
+                prepare_ohlcv=prepare_ohlcv,
+                download_yfinance=download_yfinance,
+                write_cache=write_cache,
+                download_official=download_official,
+                get_cache_age_days=get_cache_age_days,
+                format_no_data_error=format_no_data_error,
+                default_auto_adjust=True,
+                max_stale_cache_days=14,
+            )
+
+        validate_inputs.assert_called_once_with(" 2330 ", "1y", "1d")
+        symbol_candidates.assert_called_once_with("2330")
+        self.assertEqual(
+            build_cache_path.call_args_list,
+            [
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+            ],
+        )
+        self.assertEqual(
+            download_yfinance.call_args_list,
+            [
+                call("2330.TW", "1y", "1d", False),
+                call("2330.TWO", "1y", "1d", False),
+            ],
+        )
+        self.assertEqual(
+            download_official.call_args_list,
+            [
+                call("2330", ".TW", "1y", "1d"),
+                call("2330", ".TWO", "1y", "1d"),
+            ],
+        )
+        format_no_data_error.assert_called_once_with(
+            "2330",
+            ["2330.TW", "2330.TWO"],
+            [
+                "2330.TW yfinance failed: Yahoo TW failure",
+                "2330.TWO has no data",
+                "2330.TW TWSE fallback failed: Official TW failure",
+                "2330.TWO TPEX fallback failed: Official TWO failure",
+            ],
+        )
+        self.assertIs(caught.exception, sentinel)
+        read_cache.assert_not_called()
+        prepare_ohlcv.assert_not_called()
+        write_cache.assert_not_called()
+        get_cache_age_days.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
