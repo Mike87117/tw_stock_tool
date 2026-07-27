@@ -35,22 +35,31 @@
 Installed console entrypoint:
 `twstock = tw_stock_tool.cli.twstock_cli:main`
 
-下表盤點目前 repository 中真實存在的各主要 workflow entrypoints、console commands、module entrypoints、輸出模型、產出 artifact、市場資料存取點與版本狀態：
+### 欄位語意界定
 
-| Workflow | Public Entrypoint | Installed Console Command | Legacy / Module Invocation | Primary Result Model | Generated Artifacts | Market-Data Access Point | Existing Schema/Version | Current Run-Level Metadata |
+* **Primary Runtime Result**：該 public execution entrypoint 或其直接呼叫的 workflow function 實際在記憶體中建立的主要 result 物件。
+* **Execution Entrypoint Output**：該 exact command 本身執行時實際寫出的檔案或 stdout。
+* **Adjacent Artifact Boundary**：由其他獨立 command／serializer／exporter 所提供的 artifact 能力（非該 exact execution command 所直接產出）。
+
+下表盤點目前 repository 中真實存在的各主要 workflow 資訊：
+
+| Workflow | Public Entrypoint | Installed Console Command | Legacy / Module Invocation | Primary Runtime Result | Execution Entrypoint Output | Adjacent Artifact Boundary | Existing Schema/Version | Current Run-Level Metadata |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Scan** | `tw_stock_tool.cli.scan_stocks.main` | `twstock scan` | N/A | `pandas.DataFrame` | stdout / Markdown / CSV / JSON | `data_loader.download_tw_stock` | N/A | None |
-| **Daily Report** | `tw_stock_tool.cli.daily_report_cli.main` | `twstock daily` | N/A | `DailyReport` | `daily_report.md` / `daily_report.json` | `data_loader.download_tw_stock` | `schema_version = 1` | `generated_at`, `stock_count` |
-| **Backtest Report** | `tw_stock_tool.cli.backtest_report.main` | `twstock backtest-report` | N/A | `BacktestResult` | stdout / Markdown / Excel / JSON | `data_loader.download_tw_stock` | `schema_version = 1` | `strategy_name`, `timestamp` |
-| **Parameter Sweep** | `tw_stock_tool.cli.parameter_sweep_report.main` | `twstock parameter-sweep` | `python parameter_sweep_report.py` | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `strategy`, `period` |
-| **Walk Forward** | `tw_stock_tool.cli.walk_forward_report.main` | `twstock walk-forward` | `python walk_forward_report.py` | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `strategy`, `period` |
-| **AI Scan** | `tw_stock_tool.ml.ai_stock_scanner.main` | `twstock ai-scan` | N/A | `pandas.DataFrame` | CSV / Excel | `data_loader.download_tw_stock` | N/A | `horizon`, `train_size` |
-| **AI Report** | `tw_stock_tool.reports.ai_prediction_report.main` | `twstock ai-report` | N/A | `pandas.DataFrame` | Markdown / Excel | `data_loader.download_tw_stock` | N/A | `horizon`, `stock` |
-| **ML Dataset** | `tw_stock_tool.ml.ml_dataset.main` | `twstock ml-dataset` | N/A | `pandas.DataFrame` | CSV | `data_loader.download_tw_stock` | N/A | `period`, `horizon` |
-| **Single-Symbol Paper Trading** | `tw_stock_tool.cli.simulated_paper_trading_cli.main` | `twstock simulated-paper-trading` | `python simulated_paper_trading.py` | `PaperTradingResult` | JSON / CSV / Markdown | `data_loader.download_tw_stock` | `schema_version = 3` | `timestamp`, `strategy` |
-| **Multi-Symbol Portfolio Trading** | `tw_stock_tool.cli.simulated_portfolio_trading_cli.main` | `twstock simulated-portfolio-trading` | N/A | `PortfolioResult` | JSON / CSV / Markdown | `data_loader.download_tw_stock` | `schema_version = 1` | `timestamp`, `initial_cash` |
+| **Scan** | `tw_stock_tool.cli.scan_stocks.main` | `twstock scan` | N/A | `pandas.DataFrame` (`ranking_df`) | stdout summary / Excel / CSV / HTML / optional `scan_errors.log` | None required for this inventory row | N/A | None at run level |
+| **Daily Report** | `tw_stock_tool.cli.daily_report_cli.main` (Workflow function: `tw_stock_tool.reports.daily_pipeline.run_daily_research_pipeline`) | `twstock daily` | N/A | `DailyPipelineResult` | Markdown / optional JSON Daily Report artifact v1 / optional Excel through `DailyPipelineConfig.output_excel` | N/A | Daily Report JSON `schema_version = 1` | `report_date`, `stock_universe`, `run_configuration`, `pipeline_run_summary`, `data_limitations` |
+| **Backtest Report** | `tw_stock_tool.cli.backtest_report.main` | `twstock backtest-report` | N/A | `dict[str, Any]` (normalized report payload) | stdout summary when no file output requested / optional Markdown / optional Excel | `BacktestResult` JSON v1 exists through separately authorized backtest artifact/export commands | N/A for exact execution command | `Stock`, `Strategy`, `Start Date`, `End Date`, `Parameters` |
+| **Parameter Sweep** | `tw_stock_tool.cli.parameter_sweep_report.main` | `twstock parameter-sweep` | `python -m tw_stock_tool.cli.parameter_sweep_report` | `pandas.DataFrame` (`sweep_df`) wrapped in `dict[str, Any]` for report exporters | stdout summary / optional Markdown / optional Excel | N/A | N/A | `Stock`, `Strategy`, `Parameters` |
+| **Walk Forward** | `tw_stock_tool.cli.walk_forward_report.main` | `twstock walk-forward` | `python -m tw_stock_tool.cli.walk_forward_report` | `pandas.DataFrame` (`wf_df`) wrapped in `dict[str, Any]` for report exporters | stdout summary / optional Markdown / optional Excel | N/A | N/A | `Stock`, `Strategy`, `Parameters` |
+| **AI Scan** | `tw_stock_tool.ml.ai_stock_scanner.main` | `twstock ai-scan` | N/A | `pandas.DataFrame` (`ranking`) | stdout table / optional Excel | N/A | N/A | None at run level |
+| **AI Report** | `tw_stock_tool.reports.ai_prediction_report.main` | `twstock ai-report` | N/A | `dict[str, pandas.DataFrame]` with Summary, Detail, Errors | stdout Summary and Detail / optional Excel | N/A | N/A | None at run level |
+| **ML Dataset** | `tw_stock_tool.ml.ml_dataset.main` | `twstock ml-dataset` | N/A | `pandas.DataFrame` (`dataset`) | stdout table / optional CSV encoded with `utf-8-sig` | N/A | N/A | None at run level |
+| **Single-Symbol Paper Trading** | `tw_stock_tool.cli.simulated_paper_trading_cli.main` | `twstock simulated-paper-trading` | `python -m tw_stock_tool.cli.simulated_paper_trading_cli` | `SimulatedPaperTradingResult` | stdout summary only | Simulated Paper Trading JSON schema v3 and CSV/Markdown export capabilities exist through separate serialization/export commands | N/A for exact execution command | No centralized run-level metadata |
+| **Multi-Symbol Portfolio Trading** | `tw_stock_tool.cli.simulated_portfolio_trading_cli.main` | `twstock simulated-portfolio-trading` | `python -m tw_stock_tool.cli.simulated_portfolio_trading_cli` | `SimulatedPortfolioTradingResult` | required JSON artifact / stdout summary | offline artifact command may inspect/export the existing JSON without rerunning simulation | Simulated Portfolio Trading JSON `schema_version = 1` | No centralized run-level metadata |
 
-*註：GUI entrypoints 目前由 Tkinter UI（`src/tw_stock_tool/gui/`）內部控制層依工作流程獨立調用，標示為 Not yet centralized。*
+### 市場資料存取點與 GUI 邊界附註
+
+* **Market-Data Access Point 附註**：部分 Workflow（如 Backtest Report, Parameter Sweep, Walk Forward, Paper Trading, AI Workflows）係透過 `analyze_stock`, `AnalysisSession` 或 Scanner 間接取得市場資料，其存取路徑為 `Indirect through analysis/session boundary to data_loader.download_tw_stock`。
+* **GUI Entrypoint 附註**：GUI entrypoints 目前由 Tkinter UI（`src/tw_stock_tool/gui/`）內部控制層依工作流程獨立調用，標示為 `Not yet centralized`。
 
 ---
 
@@ -91,17 +100,17 @@ Phase 55.2 鎖定以下五個核心 Data Models 及其責任邊界：
 class RunConfig:
     workflow: str  # e.g., "scan", "daily", "backtest", "parameter_sweep", "walk_forward", "ml", "paper_trading"
     universe: str | None  # e.g., "all", "twse", "tpex", "custom"
-    canonical_symbols: list[str]  # e.g., ["2330.TW", "2317.TW"]
+    canonical_symbols: tuple[str, ...]  # e.g., ("2330.TW", "2317.TW")
     period: str  # e.g., "1y"
     interval: str  # e.g., "1d"
     auto_adjust: bool  # resolved boolean value (DEFAULT_AUTO_ADJUST resolved)
     force_refresh: bool  # resolved boolean value
     strategy: str | None  # e.g., "ma_cross", "rsi", "macd", "score"
-    backtest: dict[str, Any] | None  # e.g., {"initial_capital": 100000.0, "fee_rate": 0.001425}
+    backtest: dict[str, Any] | None  # defensive snapshot dict
     parameter_sweep: dict[str, Any] | None
     walk_forward: dict[str, Any] | None
     ml: dict[str, Any] | None
-    workflow_options: dict[str, Any]  # additional resolved workflow flags
+    workflow_options: dict[str, Any]  # defensive snapshot dict
 ```
 
 *註：不適用的 workflow 欄位設為 `None` 或空字典 `{}`。所有 workflow 共用同一套 `RunConfig` schema，不得為不同 workflow 建立獨立的 config schema。*
@@ -152,13 +161,13 @@ class RunManifest:
     tool_version: str  # Package version (authoritative runtime source: installed package metadata for "tw-stock-tool"; baseline example: "0.4.0")
     status: str  # Enum: "success" | "partial" | "failure"
     config: RunConfig
-    data_sources: list[DataSourceRecord]
+    data_sources: tuple[DataSourceRecord, ...]
     success_count: int
     failure_count: int
     partial_count: int
-    artifacts: list[ArtifactReference]
-    errors: list[str]
-    limitations: list[str]
+    artifacts: tuple[ArtifactReference, ...]
+    errors: tuple[str, ...]
+    limitations: tuple[str, ...]
 ```
 
 *限制：Status Enum 僅包含 `"success"`, `"partial"`, `"failure"`。不包含 `"running"` 狀態；執行中的進度管理由 Application Service 負責處理。*
@@ -170,11 +179,33 @@ class RunManifest:
 ```python
 class ResearchRunResult:
     manifest: RunManifest
-    domain_result: Any | None  # existing domain model (e.g. BacktestResult, DailyReport, DataFrame)
-    generated_artifacts: list[ArtifactReference]
+    domain_result: Any | None  # opaque reference to existing domain model (e.g. BacktestResult, DailyReport, DataFrame)
+    generated_artifacts: tuple[ArtifactReference, ...]
 ```
 
-*限制：`ResearchRunResult` 僅用於 Application Service 的記憶體交接，不取代既有 domain result models，也不作為新的 universal trading result model。*
+### 5.6 Immutable Model Boundary 規則
+
+1. **Sequence Fields as Tuples**：
+   * `RunConfig.canonical_symbols: tuple[str, ...]`
+   * `RunManifest.data_sources: tuple[DataSourceRecord, ...]`
+   * `RunManifest.artifacts: tuple[ArtifactReference, ...]`
+   * `RunManifest.errors: tuple[str, ...]`
+   * `RunManifest.limitations: tuple[str, ...]`
+   * `ResearchRunResult.generated_artifacts: tuple[ArtifactReference, ...]`
+   *(JSON Serializer 將在 Phase 55.2C 將 tuple 序列化為 JSON array)*
+2. **Defensive Configuration Snapshot**：
+   * 對於 `backtest`, `parameter_sweep`, `walk_forward`, `ml`, `workflow_options` 等 dict 欄位，Model 在建構時必須建立 defensive snapshot。
+   * 內部包含的 nested lists 轉為 tuples 或等價不可變序列。
+   * 內部包含的 nested dicts 轉為 read-only mappings 或等價不可變字典。
+   * Keys 必須為 exact strings；Values 只允許 JSON-safe scalar, sequence 或 mapping。
+   * 所有 float 必須為 finite（禁止 `NaN`, `Infinity`）。
+   * 嚴格禁止 `DataFrame`, `Path`, `datetime`, `set`, `callback`, open file handle 或任意自訂 runtime 物件。
+   * Model 建構完成後，修改 caller 原始傳入的 list 或 dict 絕不得改變 Model 內部內容。
+3. **Opaque Domain Result**：
+   * `ResearchRunResult.domain_result` 為既有 domain result 物件（如 `DailyPipelineResult`, `SimulatedPaperTradingResult`, `DataFrame` 等）的 opaque reference。
+   * 不屬於 RunManifest 序列化範疇，不納入 `RunManifest` 深度不可變保證。
+   * 核心模型驗證不得對 `domain_result` 進行遞迴序列化或形態強迫。
+   * 不取代任何既有 domain models。
 
 ---
 
@@ -203,7 +234,50 @@ class ResearchRunResult:
 * **層級區隔**：
   * `schema_version` (`"1.0"`)：專指 Run Manifest 結構的版本。
   * `tool_version` (`"0.4.0"`)：專指 `tw_stock_tool` 套件目前 baseline 版本。
-  * `ArtifactReference.schema_version` (如整數 `1` 或 `3`)：專指各個產出的 domain artifact 本身的 schema 版本。
+  * `ArtifactReference.schema_version` (如整數 `1` 或 `3`)：專指各個產出的 domain artifact 本身之 schema 版本。
+
+### 6.4 Pure Model Validation Contract
+
+Phase 55.2B 的純模型建立時，必須強制執行以下驗證規則：
+
+1. **通用字串欄位驗證**：
+   * `workflow`, `period`, `interval`, `canonical_symbol`, `requested_symbol`, `provider`, `artifact_type`, `path`, `media_type`, `tool_version` 必須為 exact `str`（`type(x) is str`），且去除首尾空白後非空。
+   * 不進行自動隱式 trim；若傳入夾帶空白或非法字元直接拋出例外。
+   * Optional string 欄位若非 `None`，亦必須為非空 exact string。
+2. **Exact Boolean 驗證**：
+   * `auto_adjust`, `force_refresh`, `success` 必須為 exact `bool`（`type(x) is bool`）。整數 `0` 或 `1` 均屬非法並直接拒絕。
+3. **Canonical Symbols 驗證**：
+   * `RunConfig.canonical_symbols` 必須為 tuple。
+   * 每個元素必須為非空 exact string，且不允許重複。
+   * 保留 caller 傳入的確定性順序，且至少必須包含一個 symbol。
+   * Caller 必須傳入已解析完成的 canonical symbol（例如 `["2330.TW"]`）；Phase 55.2B 不重新解析 `.TW/.TWO`。
+4. **Enum 精確值斷言**：
+   * `RunManifest.status`: 只允許 exact `"success"`, `"partial"`, `"failure"`。
+   * `DataSourceRecord.source_kind`: 只允許 exact `"live"`, `"cache"`。
+   * `DataSourceRecord.cache_state`: 只允許 exact `"not_applicable"`, `"fresh"`, `"stale"`。
+   * 絕不安裝自動大小寫轉換或模糊匹配。
+5. **DataSourceRecord 內部一致性**：
+   * `source_kind = live` ──> `cache_state` 必須為 `not_applicable`。
+   * `source_kind = cache` ──> `cache_state` 必須為 `fresh` 或 `stale`。
+   * `success = true` ──> `error` 必須為 `None`。
+   * `success = false` ──> `error` 必須為非空 exact string。
+   * `provider` 對於快取的紀錄（如 `source_kind = cache`）仍必須為非空字串（如 `"cache"`）。
+6. **ArtifactReference 驗證**：
+   * `path` 必須使用以 `/` 分隔的 normalized representation，非空。
+   * `schema_version` 只允許 `None`、正整數（`type(x) is int and x > 0`，`bool` 屬非法）或非空 exact string。
+   * Phase 55.2B 只驗證 reference metadata 結構，不檢查實體檔案是否存在，亦不讀取 artifact payload。
+7. **Count 欄位語意與一致性**：
+   * `success_count`, `failure_count`, `partial_count` 必須為 exact 非負整數（`type(x) is int and x >= 0`），`bool` 屬非法。
+   * **Status Consistency Rules**：
+     * `status = success` ──> `failure_count == 0` 且 `partial_count == 0`。
+     * `status = failure` ──> `success_count == 0` 且 `partial_count == 0` 且 `failure_count >= 1`。
+     * `status = partial` ──> `partial_count >= 1` OR (`success_count >= 1` AND `failure_count >= 1`)。
+8. **Errors 與 Limitations 驗證**：
+   * 必須為 tuple，內部每個元素必須為非空 exact string。
+   * 當 `status = failure` 時，`errors` 至少必須包含一筆錯誤字串。
+   * `limitations` 可為空 tuple。
+9. **ResearchRunResult Artifact Consistency**：
+   * 斷言 `ResearchRunResult.generated_artifacts` 必須等於（`==`，Value Equality）`ResearchRunResult.manifest.artifacts`。
 
 ---
 
@@ -284,7 +358,7 @@ Return ResearchRunResult
 
 ```text
 RunManifest
-└── artifacts: list[ArtifactReference]
+└── artifacts: tuple[ArtifactReference, ...]
 ```
 
 ### 關聯與 Path 過渡政策原則
@@ -319,7 +393,7 @@ RunManifest
 * **Tuple 序列化**：
   * Tuple serialization: Python tuples are serialized as JSON arrays.
 * **Unknown Extra Fields 政策**：
-  * Unknown extra fields: The exact read-back policy is intentionally deferred to Phase 55.2B, where it must be selected based on existing repository serializer conventions and frozen by tests.
+  * Unknown extra fields: The exact read-back policy is intentionally deferred to Phase 55.2C, where it must be selected based on existing repository serializer conventions and frozen by tests.
   * Unknown schema versions remain fail-closed regardless of the extra-field policy.
 
 ---
@@ -459,9 +533,10 @@ Phase 55.2 的子階段執行順序鎖定如下：
 - [x] Compatibility surfaces are listed.
 - [x] Phase 55.2 sub-phase order is defined (55.2A through 55.2J).
 - [x] Broker integration and real trading remain excluded.
-- [x] Workflow inventory matches production entrypoints and installed console commands.
+- [x] Workflow inventory matches production entrypoints, primary runtime results, and execution outputs.
 - [x] UUID v4 example is valid and version validation rules are explicit.
 - [x] Tool version authoritative source and baseline example ("0.4.0") are explicit.
 - [x] Artifact path transitional policy is defined.
 - [x] Tuple serialization is defined (JSON array).
-- [x] Unknown extra-field policy is explicitly deferred to Phase 55.2B.
+- [x] Unknown extra-field policy is explicitly deferred to Phase 55.2C.
+- [x] Pure model validation contract is frozen (sequence tuples, defensive snapshots, opaque domain result, string/bool/enum/count/consistency rules).
