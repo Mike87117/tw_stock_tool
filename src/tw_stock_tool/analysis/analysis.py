@@ -38,6 +38,29 @@ def build_latest_summary(stock_id: str, symbol: str, latest: pd.Series) -> dict[
     }
 
 
+def build_stock_analysis(
+    *,
+    stock_id: str,
+    symbol: str,
+    raw_df: pd.DataFrame,
+) -> StockAnalysis:
+    indicator_df = add_indicators(raw_df)
+    signal_df = generate_signals(indicator_df).dropna(subset=SIGNAL_READY_COLUMNS)
+    if signal_df.empty:
+        raise ValueError("資料不足，無法得到有效訊號，請改用較長 period。")
+
+    latest = signal_df.iloc[-1]
+    return StockAnalysis(
+        stock_id=stock_id,
+        symbol=symbol,
+        raw_df=raw_df,
+        indicator_df=indicator_df,
+        signal_df=signal_df,
+        latest=latest,
+        summary=build_latest_summary(stock_id=stock_id, symbol=symbol, latest=latest),
+    )
+
+
 def analyze_stock(
     stock_id: str,
     period: str = DEFAULT_PERIOD,
@@ -52,19 +75,4 @@ def analyze_stock(
         auto_adjust=auto_adjust,
         force_refresh=force_refresh,
     )
-    indicator_df = add_indicators(raw_df)
-    signal_df = generate_signals(indicator_df).dropna(subset=SIGNAL_READY_COLUMNS)
-    if signal_df.empty:
-        raise ValueError("資料不足，無法得到有效訊號，請改用較長 period。")
-
-    latest = signal_df.iloc[-1]
-    summary = build_latest_summary(stock_id=stock_id, symbol=symbol, latest=latest)
-    return StockAnalysis(
-        stock_id=stock_id,
-        symbol=symbol,
-        raw_df=raw_df,
-        indicator_df=indicator_df,
-        signal_df=signal_df,
-        latest=latest,
-        summary=summary,
-    )
+    return build_stock_analysis(stock_id=stock_id, symbol=symbol, raw_df=raw_df)
