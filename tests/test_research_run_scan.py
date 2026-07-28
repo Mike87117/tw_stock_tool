@@ -177,26 +177,22 @@ class AdapterTests(unittest.TestCase):
         self.assertIsNotNone(result.data)
 
     def test_failed_fresh_read_then_stale_success_is_stale(self):
-        reads = iter([OSError("fresh read"), _df()])
         with TemporaryDirectory() as tmp:
             cache = Path(tmp) / "cache.csv"
             cache.write_text("x", encoding="utf-8")
-            with self._configured(cache_fresh=True, cache_path=cache, yf=Mock(side_effect=ValueError("down")), cache_df=None):
-                with patch.object(adapter.data_loader, "_read_cache", side_effect=lambda p: (_ for _ in ()).throw(next(reads)) if isinstance(next_value := next(reads, None), Exception) else next_value):
-                    # The explicit read wrapper below is deterministic and exercises both calls.
-                    pass
             first = True
+
             def read(path):
                 nonlocal first
                 if first:
                     first = False
                     raise OSError("fresh read")
                 return _df()
+
             with self._configured(cache_fresh=True, cache_path=cache, yf=Mock(side_effect=ValueError("down"))):
                 with patch.object(adapter.data_loader, "_read_cache", side_effect=read):
                     result = adapter.build_legacy_market_data_loader({"2330": "2330.TW"})("2330", "1y", "1d", True, False)
         self.assertEqual(result.source_record.cache_state, "stale")
-
 
 class ValidationTests(unittest.TestCase):
     def setUp(self):
@@ -209,12 +205,21 @@ class ValidationTests(unittest.TestCase):
         return options
 
     def test_valid_pairs_produce_expected_run_config(self):
-        with TemporaryDirectory() as tmp:
-            result = run_scan_research((("2330", "2330.TW"),), universe="tw", config=self.config, output_dir=tmp, market_data_loader=self.loader)
+        with patch.object(scan_module.importlib.metadata, "version", return_value="9.9.9") as metadata, patch.object(scan_module, "_source_tree_tool_version", return_value="0.4.0") as fallback:
+            with TemporaryDirectory() as tmp:
+                result = run_scan_research((("2330", "2330.TW"),), universe="tw", config=self.config, output_dir=tmp, market_data_loader=self.loader)
         self.assertEqual(result.manifest.config.workflow, "scan")
         self.assertEqual(result.manifest.config.canonical_symbols, ("2330.TW",))
         self.assertNotIn("analysis_provider", result.manifest.config.workflow_options)
+        self.assertEqual(result.manifest.tool_version, "9.9.9")
+        metadata.assert_called_once_with("tw-stock-tool")
+        fallback.assert_not_called()
 
+        with patch.object(scan_module.importlib.metadata, "version", side_effect=scan_module.importlib.metadata.PackageNotFoundError), patch.object(scan_module, "_source_tree_tool_version", return_value="0.4.0") as fallback:
+            with TemporaryDirectory() as tmp:
+                result = run_scan_research((("2330", "2330.TW"),), universe="tw", config=self.config, output_dir=tmp, market_data_loader=self.loader)
+        self.assertEqual(result.manifest.tool_version, "0.4.0")
+        fallback.assert_called_once_with()
     def test_symbol_requests_must_be_exact_tuple(self):
         with self.assertRaises(ScanResearchRunError):
             run_scan_research([("2330", "2330.TW")], **self.run_valid())
@@ -319,6 +324,16 @@ class OutcomeTests(unittest.TestCase):
         result2 = self.run_scan((("2330", "2330.TW"),), log_errors=False)
         self.assertNotIn("scan_error_log", [a.artifact_type for a in result2.manifest.artifacts])
 
+        pairs = (("2330", "2330.TW"), ("2317", "2317.TW"))
+        with TemporaryDirectory() as tmp, patch.object(scan_module, "_write_error_log", side_effect=OSError("cannot write error log")):
+            with self.assertRaises(ScanResearchRunError):
+                run_scan_research(pairs, universe="tw", config=ScanConfig(max_workers=1), output_dir=tmp, market_data_loader=_loader(pairs, {"2317"}), log_errors=True)
+            manifest = load_run_manifest_json(Path(tmp, "scan_run_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest.status, "partial")
+        self.assertEqual((manifest.success_count, manifest.failure_count, manifest.partial_count), (1, 1, 1))
+        self.assertIn("error_log: cannot write error log", manifest.errors)
+        self.assertEqual([artifact.artifact_type for artifact in manifest.artifacts], ["scan_ranking_excel", "scan_ranking_csv", "scan_ranking_html"])
+        self.assertNotIn("scan_error_log", [artifact.artifact_type for artifact in manifest.artifacts])
 
 class PersistenceAndBoundaryTests(unittest.TestCase):
     def test_manifest_round_trip(self):

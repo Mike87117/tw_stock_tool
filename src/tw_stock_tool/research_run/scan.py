@@ -53,25 +53,24 @@ def _created_at() -> str:
 
 
 
-def _tool_version() -> str:
+
+def _source_tree_tool_version() -> str:
     pyproject = Path(__file__).resolve().parents[2].parent / "pyproject.toml"
     try:
-        installed = importlib.metadata.version("tw-stock-tool")
-    except importlib.metadata.PackageNotFoundError:
-        installed = None
-    try:
         text = pyproject.read_text(encoding="utf-8")
-    except OSError:
-        if installed is not None:
-            return installed
-        raise ScanResearchRunError("Unable to determine tw-stock-tool package version")
+    except OSError as exc:
+        raise ScanResearchRunError("Unable to determine tw-stock-tool package version") from exc
     match = re.search(r'(?ms)^\[project\].*?^version\s*=\s*["\']([^"\']+)["\']', text)
-    if match is None:
-        if installed is not None:
-            return installed
+    if match is None or not match.group(1).strip():
         raise ScanResearchRunError("Unable to determine tw-stock-tool package version")
-    source_version = match.group(1)
-    return source_version if installed != source_version else installed
+    return match.group(1)
+
+
+def _tool_version() -> str:
+    try:
+        return importlib.metadata.version("tw-stock-tool")
+    except importlib.metadata.PackageNotFoundError:
+        return _source_tree_tool_version()
 
 def _error_message(exc: Exception) -> str:
     return str(exc).strip() or type(exc).__name__
@@ -238,6 +237,11 @@ def _limitations(config: ScanConfig, completed: int, data_sources: int) -> tuple
         limitations.append("Some failed scan requests did not produce a valid DataSourceRecord.")
     return tuple(limitations)
 
+
+def _write_error_log(path: Path, errors: tuple[str, ...]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(errors) + "\n")
 
 def _make_manifest(
     *,
@@ -410,9 +414,7 @@ def run_scan_research(
 
     if log_errors and ranking_errors:
         try:
-            output_path.mkdir(parents=True, exist_ok=True)
-            with (output_path / "scan_errors.log").open("w", encoding="utf-8", newline="\n") as handle:
-                handle.write("\n".join(ranking_errors) + "\n")
+            _write_error_log(output_path / "scan_errors.log", ranking_errors)
             artifacts += (_artifact(output_path / "scan_errors.log", "scan_error_log", "text/plain"),)
         except Exception as exc:
             has_success = success_count > 0
