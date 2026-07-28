@@ -1,4 +1,4 @@
-"""Research-run model boundaries."""
+"""Research-run model and serialization boundaries."""
 
 from tw_stock_tool.research_run.models import (
     RUN_MANIFEST_SCHEMA_VERSION,
@@ -12,6 +12,13 @@ from tw_stock_tool.research_run.models import (
     RunStatus,
     SourceKind,
 )
+from tw_stock_tool.research_run.serialization import (
+    ResearchRunSerializationError,
+    deserialize_run_manifest,
+    export_run_manifest_json,
+    load_run_manifest_json,
+    serialize_run_manifest,
+)
 
 __all__ = [
     "RUN_MANIFEST_SCHEMA_VERSION",
@@ -24,4 +31,9 @@ __all__ = [
     "RunManifest",
     "RunStatus",
     "SourceKind",
+    "ResearchRunSerializationError",
+    "deserialize_run_manifest",
+    "export_run_manifest_json",
+    "load_run_manifest_json",
+    "serialize_run_manifest",
 ]

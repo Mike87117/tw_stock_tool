@@ -1355,8 +1355,13 @@ class TestResearchRunModels(unittest.TestCase):
             "RunStatus",
             "SourceKind",
         }
-        self.assertEqual(set(research_run.__all__), expected_exports)
+        actual_exports = set(research_run.__all__)
+        self.assertTrue(expected_exports.issubset(actual_exports))
+        for name in expected_exports:
+            self.assertTrue(hasattr(research_run, name))
         self.assertEqual(research_run.RUN_MANIFEST_SCHEMA_VERSION, "1.0")
+        self.assertNotIn("_freeze_json_value", actual_exports)
+        self.assertNotIn("_validate_uuid_v4", actual_exports)
 
 
 if __name__ == "__main__":
