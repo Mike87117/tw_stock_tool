@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from threading import Event
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Barrier, Event, Lock
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pandas as pd
 
@@ -20,6 +20,24 @@ import tw_stock_tool.research_run as research_run_pkg
 
 class _StringSubclass(str):
     pass
+
+
+class _TrackingFuture(Future[MarketDataLoadResult]):
+    """Tracking Future subclass to mechanically prove follower waiters."""
+
+    def __init__(self, expected_waiters: int) -> None:
+        super().__init__()
+        self._expected_waiters = expected_waiters
+        self._waiter_count = 0
+        self._waiter_lock = Lock()
+        self.all_waiters_entered = Event()
+
+    def result(self, timeout: float | None = None) -> MarketDataLoadResult:
+        with self._waiter_lock:
+            self._waiter_count += 1
+            if self._waiter_count == self._expected_waiters:
+                self.all_waiters_entered.set()
+        return super().result(timeout)
 
 
 def _make_sample_df() -> pd.DataFrame:
@@ -894,11 +912,14 @@ class TestResearchRunContext(unittest.TestCase):
 
     def test_concurrent_same_key_is_single_flight_and_shares_identity(self) -> None:
         num_callers = 5
+        num_followers = num_callers - 1
         df = _make_sample_df()
         loader_calls = 0
 
         owner_inside_loader = Event()
         release_loader = Event()
+
+        tracking_future = _TrackingFuture(expected_waiters=num_followers)
 
         def loader(
             requested_symbol: str,
@@ -918,7 +939,7 @@ class TestResearchRunContext(unittest.TestCase):
 
         ctx = ResearchRunContext(loader)
 
-        def worker_owner() -> pd.DataFrame:
+        def worker() -> pd.DataFrame:
             return ctx.load_market_data(
                 canonical_symbol="2330.TW",
                 requested_symbol="2330",
@@ -928,31 +949,25 @@ class TestResearchRunContext(unittest.TestCase):
                 force_refresh=False,
             )
 
-        def worker_follower() -> pd.DataFrame:
-            return ctx.load_market_data(
-                canonical_symbol="2330.TW",
-                requested_symbol="2330",
-                period="1y",
-                interval="1d",
-                auto_adjust=True,
-                force_refresh=False,
-            )
+        with patch("tw_stock_tool.research_run.context.Future", return_value=tracking_future):
+            with ThreadPoolExecutor(max_workers=num_callers) as pool:
+                # 1. Start owner
+                fut_owner = pool.submit(worker)
 
-        with ThreadPoolExecutor(max_workers=num_callers) as pool:
-            # Submit owner worker
-            fut_owner = pool.submit(worker_owner)
+                # 2. Wait until owner is blocked inside loader
+                self.assertTrue(owner_inside_loader.wait(timeout=5.0))
 
-            # Wait until owner thread is inside blocked loader
-            self.assertTrue(owner_inside_loader.wait(timeout=5.0))
+                # 3. Start four same-key followers
+                futs_followers = [pool.submit(worker) for _ in range(num_followers)]
 
-            # Submit followers while owner is blocked inside loader
-            futs_followers = [pool.submit(worker_follower) for _ in range(num_callers - 1)]
+                # 4. Wait until tracking future proves all four followers called future.result()
+                self.assertTrue(tracking_future.all_waiters_entered.wait(timeout=5.0))
 
-            # Release loader only after all followers have been submitted
-            release_loader.set()
+                # 5. Only then release owner loader
+                release_loader.set()
 
-            all_futures = [fut_owner] + futs_followers
-            results = [f.result(timeout=5.0) for f in all_futures]
+                all_futures = [fut_owner] + futs_followers
+                results = [f.result(timeout=5.0) for f in all_futures]
 
         self.assertEqual(loader_calls, 1)
         for res in results:
@@ -963,12 +978,15 @@ class TestResearchRunContext(unittest.TestCase):
 
     def test_concurrent_expected_failure_is_single_flight(self) -> None:
         num_callers = 5
+        num_followers = num_callers - 1
         exc = RuntimeError("concurrent failure")
         rec = _make_source_record(success=False, error="concurrent failure")
         loader_calls = 0
 
         owner_inside_loader = Event()
         release_loader = Event()
+
+        tracking_future = _TrackingFuture(expected_waiters=num_followers)
 
         def loader(
             requested_symbol: str,
@@ -985,7 +1003,7 @@ class TestResearchRunContext(unittest.TestCase):
 
         ctx = ResearchRunContext(loader)
 
-        def worker_owner() -> Exception:
+        def worker() -> Exception:
             try:
                 ctx.load_market_data(
                     canonical_symbol="2330.TW",
@@ -999,30 +1017,19 @@ class TestResearchRunContext(unittest.TestCase):
                 return e
             raise AssertionError("expected exception")
 
-        def worker_follower() -> Exception:
-            try:
-                ctx.load_market_data(
-                    canonical_symbol="2330.TW",
-                    requested_symbol="2330",
-                    period="1y",
-                    interval="1d",
-                    auto_adjust=True,
-                    force_refresh=False,
-                )
-            except RuntimeError as e:
-                return e
-            raise AssertionError("expected exception")
+        with patch("tw_stock_tool.research_run.context.Future", return_value=tracking_future):
+            with ThreadPoolExecutor(max_workers=num_callers) as pool:
+                fut_owner = pool.submit(worker)
+                self.assertTrue(owner_inside_loader.wait(timeout=5.0))
 
-        with ThreadPoolExecutor(max_workers=num_callers) as pool:
-            fut_owner = pool.submit(worker_owner)
-            self.assertTrue(owner_inside_loader.wait(timeout=5.0))
+                futs_followers = [pool.submit(worker) for _ in range(num_followers)]
 
-            futs_followers = [pool.submit(worker_follower) for _ in range(num_callers - 1)]
+                self.assertTrue(tracking_future.all_waiters_entered.wait(timeout=5.0))
 
-            release_loader.set()
+                release_loader.set()
 
-            all_futures = [fut_owner] + futs_followers
-            results = [f.result(timeout=5.0) for f in all_futures]
+                all_futures = [fut_owner] + futs_followers
+                results = [f.result(timeout=5.0) for f in all_futures]
 
         self.assertEqual(loader_calls, 1)
         for res in results:
