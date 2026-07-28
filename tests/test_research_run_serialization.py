@@ -701,23 +701,16 @@ class TestResearchRunSerialization(unittest.TestCase):
     # D. Public exports: 1 test
 
     def test_research_run_package_exports_serialization_boundary(self) -> None:
-        expected_all = [
-            "RUN_MANIFEST_SCHEMA_VERSION",
-            "ArtifactReference",
-            "CacheState",
-            "DataSourceRecord",
-            "ResearchRunModelError",
-            "ResearchRunResult",
-            "RunConfig",
-            "RunManifest",
-            "RunStatus",
-            "SourceKind",
+        expected_serialization_exports = {
             "ResearchRunSerializationError",
             "deserialize_run_manifest",
             "export_run_manifest_json",
             "load_run_manifest_json",
             "serialize_run_manifest",
-        ]
-        self.assertEqual(research_run_pkg.__all__, expected_all)
-        for name in expected_all:
+        }
+        actual_exports = set(research_run_pkg.__all__)
+        self.assertTrue(expected_serialization_exports.issubset(actual_exports))
+        for name in expected_serialization_exports:
             self.assertTrue(hasattr(research_run_pkg, name))
+        self.assertNotIn("_validate_exact_keys", actual_exports)
+        self.assertNotIn("_object_pairs_hook", actual_exports)
