@@ -633,10 +633,18 @@ class TestResearchRunContext(unittest.TestCase):
         self.assertEqual(len(ctx.data_sources), 1)
 
     def test_data_sources_and_resolved_keys_follow_first_request_order(self) -> None:
-        df1 = _make_sample_df()
-        df2 = _make_sample_df()
-        rec1 = _make_source_record(canonical_symbol="2330.TW", requested_symbol="2330")
-        rec2 = _make_source_record(canonical_symbol="2317.TW", requested_symbol="2317")
+        df_a = _make_sample_df()
+        df_b = _make_sample_df()
+        rec_a = _make_source_record(canonical_symbol="2330.TW", requested_symbol="2330")
+        rec_b = _make_source_record(canonical_symbol="2317.TW", requested_symbol="2317")
+        key_a = ("2330.TW", "1y", "1d", True, False)
+        key_b = ("2317.TW", "1y", "1d", True, False)
+
+        key_a_entered = Event()
+        key_b_entered = Event()
+        release_key_b = Event()
+        release_key_a = Event()
+        key_b_finished = Event()
 
         def loader(
             requested_symbol: str,
@@ -646,50 +654,99 @@ class TestResearchRunContext(unittest.TestCase):
             force_refresh: bool,
         ) -> MarketDataLoadResult:
             if requested_symbol == "2330":
-                return MarketDataLoadResult(data=df1, source_record=rec1)
-            return MarketDataLoadResult(data=df2, source_record=rec2)
+                key_a_entered.set()
+                self.assertTrue(release_key_a.wait(timeout=5.0))
+                return MarketDataLoadResult(data=df_a, source_record=rec_a)
+
+            key_b_entered.set()
+            self.assertTrue(release_key_b.wait(timeout=5.0))
+            res_b = MarketDataLoadResult(data=df_b, source_record=rec_b)
+            key_b_finished.set()
+            return res_b
 
         ctx = ResearchRunContext(loader)
-        ctx.load_market_data(
+
+        def load_a() -> pd.DataFrame:
+            return ctx.load_market_data(
+                canonical_symbol="2330.TW",
+                requested_symbol="2330",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                force_refresh=False,
+            )
+
+        def load_b() -> pd.DataFrame:
+            return ctx.load_market_data(
+                canonical_symbol="2317.TW",
+                requested_symbol="2317",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                force_refresh=False,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            # 1. Key A becomes owner first
+            fut_a = pool.submit(load_a)
+            self.assertTrue(key_a_entered.wait(timeout=5.0))
+
+            # 2. Key B becomes owner second
+            fut_b = pool.submit(load_b)
+            self.assertTrue(key_b_entered.wait(timeout=5.0))
+
+            # 3. Key B is deliberately allowed to complete first
+            release_key_b.set()
+            self.assertTrue(key_b_finished.wait(timeout=5.0))
+            self.assertIs(fut_b.result(), df_b)
+
+            # 4. Key A completes afterward
+            release_key_a.set()
+            self.assertIs(fut_a.result(), df_a)
+
+        # Assert ordering follows first owner request order (A then B)
+        self.assertEqual(ctx.resolved_keys, (key_a, key_b))
+        self.assertEqual(ctx.data_sources, (rec_a, rec_b))
+
+    # E. Validation, failure, and concurrency: 7 tests
+
+    def test_context_rejects_mismatched_source_record_metadata(self) -> None:
+        valid_df = _make_sample_df()
+        valid_rec = _make_source_record(
             canonical_symbol="2330.TW",
             requested_symbol="2330",
             period="1y",
             interval="1d",
             auto_adjust=True,
-            force_refresh=False,
-        )
-        ctx.load_market_data(
-            canonical_symbol="2317.TW",
-            requested_symbol="2317",
-            period="1y",
-            interval="1d",
-            auto_adjust=True,
-            force_refresh=False,
         )
 
-        self.assertEqual(ctx.data_sources, (rec1, rec2))
-        self.assertEqual(
-            ctx.resolved_keys,
-            (
-                ("2330.TW", "1y", "1d", True, False),
-                ("2317.TW", "1y", "1d", True, False),
-            ),
-        )
-
-    # E. Validation, failure, and concurrency: 7 tests
-
-    def test_context_rejects_mismatched_source_record_metadata(self) -> None:
         mismatched_records = [
-            _make_source_record(canonical_symbol="WRONG.TW"),
-            _make_source_record(requested_symbol="WRONG"),
-            _make_source_record(period="6m"),
-            _make_source_record(interval="1wk"),
-            _make_source_record(auto_adjust=False),
+            _make_source_record(canonical_symbol="WRONG.TW", requested_symbol="2330", period="1y", interval="1d", auto_adjust=True),
+            _make_source_record(canonical_symbol="2330.TW", requested_symbol="WRONG", period="1y", interval="1d", auto_adjust=True),
+            _make_source_record(canonical_symbol="2330.TW", requested_symbol="2330", period="6m", interval="1d", auto_adjust=True),
+            _make_source_record(canonical_symbol="2330.TW", requested_symbol="2330", period="1y", interval="1wk", auto_adjust=True),
+            _make_source_record(canonical_symbol="2330.TW", requested_symbol="2330", period="1y", interval="1d", auto_adjust=False),
         ]
 
+        # Repair 1A: Prove retry after each metadata mismatch field
         for bad_rec in mismatched_records:
-            loader = Mock(return_value=MarketDataLoadResult(data=_make_sample_df(), source_record=bad_rec))
+            calls = 0
+
+            def loader(
+                requested_symbol: str,
+                period: str,
+                interval: str,
+                auto_adjust: bool,
+                force_refresh: bool,
+            ) -> MarketDataLoadResult:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return MarketDataLoadResult(data=valid_df, source_record=bad_rec)
+                return MarketDataLoadResult(data=valid_df, source_record=valid_rec)
+
             ctx = ResearchRunContext(loader)
+
             with self.assertRaises(ResearchRunContextError):
                 ctx.load_market_data(
                     canonical_symbol="2330.TW",
@@ -699,8 +756,73 @@ class TestResearchRunContext(unittest.TestCase):
                     auto_adjust=True,
                     force_refresh=False,
                 )
+
             self.assertEqual(ctx.data_sources, ())
             self.assertEqual(ctx.resolved_keys, ())
+
+            res_df = ctx.load_market_data(
+                canonical_symbol="2330.TW",
+                requested_symbol="2330",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                force_refresh=False,
+            )
+            self.assertIs(res_df, valid_df)
+
+            self.assertEqual(calls, 2)
+            self.assertEqual(ctx.data_sources, (valid_rec,))
+            self.assertEqual(
+                ctx.resolved_keys, (("2330.TW", "1y", "1d", True, False),)
+            )
+
+        # Repair 1B: Prove retry after invalid loader return types
+        invalid_returns = ["not_a_result", 123, None, []]
+        for bad_ret in invalid_returns:
+            calls = 0
+
+            def bad_type_loader(
+                requested_symbol: str,
+                period: str,
+                interval: str,
+                auto_adjust: bool,
+                force_refresh: bool,
+            ) -> MarketDataLoadResult:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return bad_ret  # type: ignore[return-value]
+                return MarketDataLoadResult(data=valid_df, source_record=valid_rec)
+
+            ctx = ResearchRunContext(bad_type_loader)
+
+            with self.assertRaises(ResearchRunContextError):
+                ctx.load_market_data(
+                    canonical_symbol="2330.TW",
+                    requested_symbol="2330",
+                    period="1y",
+                    interval="1d",
+                    auto_adjust=True,
+                    force_refresh=False,
+                )
+
+            self.assertEqual(ctx.data_sources, ())
+            self.assertEqual(ctx.resolved_keys, ())
+
+            res_df = ctx.load_market_data(
+                canonical_symbol="2330.TW",
+                requested_symbol="2330",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                force_refresh=False,
+            )
+            self.assertIs(res_df, valid_df)
+            self.assertEqual(calls, 2)
+            self.assertEqual(ctx.data_sources, (valid_rec,))
+            self.assertEqual(
+                ctx.resolved_keys, (("2330.TW", "1y", "1d", True, False),)
+            )
 
     def test_unexpected_loader_exception_is_propagated_and_not_cached(self) -> None:
         exc = ValueError("unexpected exception")
@@ -771,9 +893,12 @@ class TestResearchRunContext(unittest.TestCase):
         self.assertEqual(ctx.data_sources, (rec,))
 
     def test_concurrent_same_key_is_single_flight_and_shares_identity(self) -> None:
+        num_callers = 5
         df = _make_sample_df()
         loader_calls = 0
-        event = Event()
+
+        owner_inside_loader = Event()
+        release_loader = Event()
 
         def loader(
             requested_symbol: str,
@@ -784,7 +909,8 @@ class TestResearchRunContext(unittest.TestCase):
         ) -> MarketDataLoadResult:
             nonlocal loader_calls
             loader_calls += 1
-            event.wait()
+            owner_inside_loader.set()
+            self.assertTrue(release_loader.wait(timeout=5.0))
             return MarketDataLoadResult(
                 data=df,
                 source_record=_make_source_record(),
@@ -792,7 +918,7 @@ class TestResearchRunContext(unittest.TestCase):
 
         ctx = ResearchRunContext(loader)
 
-        def worker() -> pd.DataFrame:
+        def worker_owner() -> pd.DataFrame:
             return ctx.load_market_data(
                 canonical_symbol="2330.TW",
                 requested_symbol="2330",
@@ -802,20 +928,47 @@ class TestResearchRunContext(unittest.TestCase):
                 force_refresh=False,
             )
 
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            futures = [pool.submit(worker) for _ in range(5)]
-            event.set()
-            results = [f.result() for f in futures]
+        def worker_follower() -> pd.DataFrame:
+            return ctx.load_market_data(
+                canonical_symbol="2330.TW",
+                requested_symbol="2330",
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                force_refresh=False,
+            )
+
+        with ThreadPoolExecutor(max_workers=num_callers) as pool:
+            # Submit owner worker
+            fut_owner = pool.submit(worker_owner)
+
+            # Wait until owner thread is inside blocked loader
+            self.assertTrue(owner_inside_loader.wait(timeout=5.0))
+
+            # Submit followers while owner is blocked inside loader
+            futs_followers = [pool.submit(worker_follower) for _ in range(num_callers - 1)]
+
+            # Release loader only after all followers have been submitted
+            release_loader.set()
+
+            all_futures = [fut_owner] + futs_followers
+            results = [f.result(timeout=5.0) for f in all_futures]
 
         self.assertEqual(loader_calls, 1)
         for res in results:
             self.assertIs(res, df)
 
+        self.assertEqual(len(ctx.data_sources), 1)
+        self.assertEqual(len(ctx.resolved_keys), 1)
+
     def test_concurrent_expected_failure_is_single_flight(self) -> None:
+        num_callers = 5
         exc = RuntimeError("concurrent failure")
         rec = _make_source_record(success=False, error="concurrent failure")
         loader_calls = 0
-        event = Event()
+
+        owner_inside_loader = Event()
+        release_loader = Event()
 
         def loader(
             requested_symbol: str,
@@ -826,12 +979,13 @@ class TestResearchRunContext(unittest.TestCase):
         ) -> MarketDataLoadResult:
             nonlocal loader_calls
             loader_calls += 1
-            event.wait()
+            owner_inside_loader.set()
+            self.assertTrue(release_loader.wait(timeout=5.0))
             return MarketDataLoadResult(data=None, source_record=rec, error=exc)
 
         ctx = ResearchRunContext(loader)
 
-        def worker() -> Exception:
+        def worker_owner() -> Exception:
             try:
                 ctx.load_market_data(
                     canonical_symbol="2330.TW",
@@ -845,14 +999,37 @@ class TestResearchRunContext(unittest.TestCase):
                 return e
             raise AssertionError("expected exception")
 
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            futures = [pool.submit(worker) for _ in range(5)]
-            event.set()
-            results = [f.result() for f in futures]
+        def worker_follower() -> Exception:
+            try:
+                ctx.load_market_data(
+                    canonical_symbol="2330.TW",
+                    requested_symbol="2330",
+                    period="1y",
+                    interval="1d",
+                    auto_adjust=True,
+                    force_refresh=False,
+                )
+            except RuntimeError as e:
+                return e
+            raise AssertionError("expected exception")
+
+        with ThreadPoolExecutor(max_workers=num_callers) as pool:
+            fut_owner = pool.submit(worker_owner)
+            self.assertTrue(owner_inside_loader.wait(timeout=5.0))
+
+            futs_followers = [pool.submit(worker_follower) for _ in range(num_callers - 1)]
+
+            release_loader.set()
+
+            all_futures = [fut_owner] + futs_followers
+            results = [f.result(timeout=5.0) for f in all_futures]
 
         self.assertEqual(loader_calls, 1)
         for res in results:
             self.assertIs(res, exc)
+
+        self.assertEqual(ctx.data_sources, (rec,))
+        self.assertEqual(ctx.resolved_keys, (("2330.TW", "1y", "1d", True, False),))
 
     def test_different_keys_can_load_concurrently(self) -> None:
         event_a_started = Event()
