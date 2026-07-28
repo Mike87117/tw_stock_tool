@@ -262,12 +262,12 @@ def deserialize_run_manifest(data: dict[str, Any]) -> RunManifest:
         _fail("$.config.canonical_symbols", "expected a list")
 
     strategy_raw = config_dict["strategy"]
-    if strategy_raw is not None:
-        if type(strategy_raw) is not dict:
-            _fail("$.config.strategy", "expected a dictionary or None")
-        strategy_val = _validate_json_native_value(strategy_raw, "$.config.strategy")
-    else:
-        strategy_val = None
+    if strategy_raw is not None and type(strategy_raw) is not str:
+        _fail(
+            "$.config.strategy",
+            "expected an exact string or None",
+        )
+    strategy_val = strategy_raw
 
     backtest_raw = config_dict["backtest"]
     if backtest_raw is not None:

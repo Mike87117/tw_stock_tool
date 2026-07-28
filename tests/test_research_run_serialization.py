@@ -22,6 +22,10 @@ from tw_stock_tool.research_run import (
 import tw_stock_tool.research_run as research_run_pkg
 
 
+class _StringSubclass(str):
+    pass
+
+
 def _make_valid_manifest(
     status: str = "success",
     success_count: int = 0,
@@ -29,6 +33,7 @@ def _make_valid_manifest(
     partial_count: int = 0,
     errors: tuple[str, ...] = (),
     limitations: tuple[str, ...] = ("僅供研究使用",),
+    strategy: str | None = None,
     workflow_options: dict | None = None,
 ) -> RunManifest:
     if workflow_options is None:
@@ -47,7 +52,7 @@ def _make_valid_manifest(
             interval="1d",
             auto_adjust=True,
             force_refresh=False,
-            strategy=None,
+            strategy=strategy,
             backtest=None,
             parameter_sweep=None,
             walk_forward=None,
@@ -68,7 +73,7 @@ class TestResearchRunSerialization(unittest.TestCase):
     # A. Serialization: 8 tests
 
     def test_serialize_run_manifest_returns_exact_ordered_payload(self) -> None:
-        manifest = _make_valid_manifest()
+        manifest = _make_valid_manifest(strategy="ma_cross")
         payload = serialize_run_manifest(manifest)
 
         expected_manifest_keys = [
@@ -104,12 +109,16 @@ class TestResearchRunSerialization(unittest.TestCase):
             "workflow_options",
         ]
         self.assertEqual(list(payload["config"].keys()), expected_config_keys)
+        self.assertEqual(payload["config"]["strategy"], "ma_cross")
+        self.assertIs(type(payload["config"]["strategy"]), str)
 
     def test_serialize_run_manifest_serializes_nested_config_values(self) -> None:
         manifest = _make_valid_manifest(
-            workflow_options={"levels": (1, 2), "meta": MappingProxyType({"a": 1})}
+            strategy="ma_cross",
+            workflow_options={"levels": (1, 2), "meta": MappingProxyType({"a": 1})},
         )
         payload = serialize_run_manifest(manifest)
+        self.assertEqual(payload["config"]["strategy"], "ma_cross")
         self.assertEqual(payload["config"]["workflow_options"]["levels"], [1, 2])
         self.assertEqual(payload["config"]["workflow_options"]["meta"], {"a": 1})
 
@@ -256,11 +265,12 @@ class TestResearchRunSerialization(unittest.TestCase):
     # B. Deserialization: 20 tests
 
     def test_deserialize_run_manifest_round_trips_success_manifest(self) -> None:
-        manifest = _make_valid_manifest()
+        manifest = _make_valid_manifest(strategy="ma_cross")
         payload = serialize_run_manifest(manifest)
         restored = deserialize_run_manifest(payload)
 
         self.assertEqual(restored, manifest)
+        self.assertEqual(restored.config.strategy, "ma_cross")
 
     def test_deserialize_run_manifest_round_trips_partial_and_failure_manifests(self) -> None:
         partial_manifest = _make_valid_manifest(
@@ -316,7 +326,7 @@ class TestResearchRunSerialization(unittest.TestCase):
     def test_deserialize_run_manifest_rejects_unknown_schema_version(self) -> None:
         manifest = _make_valid_manifest()
 
-        for bad_version in [1, 1.0, "1", "2.0", None]:
+        for bad_version in [1, 1.0, "1", "2.0", None, _StringSubclass("1.0")]:
             payload = serialize_run_manifest(manifest)
             payload["schema_version"] = bad_version
             with self.assertRaises(ResearchRunSerializationError):
@@ -324,11 +334,18 @@ class TestResearchRunSerialization(unittest.TestCase):
 
     def test_deserialize_run_manifest_requires_exact_schema_field_types(self) -> None:
         manifest = _make_valid_manifest()
-        payload = serialize_run_manifest(manifest)
-        payload["run_id"] = 12345
 
-        with self.assertRaises(ResearchRunSerializationError):
-            deserialize_run_manifest(payload)
+        for bad_field, bad_val in [
+            ("run_id", 12345),
+            ("created_at", 123),
+            ("tool_version", 123),
+            ("status", 123),
+            ("status", _StringSubclass("success")),
+        ]:
+            payload = serialize_run_manifest(manifest)
+            payload[bad_field] = bad_val
+            with self.assertRaises(ResearchRunSerializationError):
+                deserialize_run_manifest(payload)
 
     def test_deserialize_run_manifest_validates_exact_config_keys(self) -> None:
         manifest = _make_valid_manifest()
@@ -345,24 +362,64 @@ class TestResearchRunSerialization(unittest.TestCase):
 
     def test_deserialize_run_manifest_validates_config_field_types(self) -> None:
         manifest = _make_valid_manifest()
-        payload = serialize_run_manifest(manifest)
-        payload["config"]["canonical_symbols"] = ("2330.TW",)
 
+        # Tuple canonical_symbols rejected (must be list in payload)
+        payload1 = serialize_run_manifest(manifest)
+        payload1["config"]["canonical_symbols"] = ("2330.TW",)
         with self.assertRaises(ResearchRunSerializationError):
-            deserialize_run_manifest(payload)
+            deserialize_run_manifest(payload1)
+
+        # Valid strategy forms
+        payload_none = serialize_run_manifest(manifest)
+        payload_none["config"]["strategy"] = None
+        m_none = deserialize_run_manifest(payload_none)
+        self.assertIsNone(m_none.config.strategy)
+
+        payload_str = serialize_run_manifest(manifest)
+        payload_str["config"]["strategy"] = "ma_cross"
+        m_str = deserialize_run_manifest(payload_str)
+        self.assertEqual(m_str.config.strategy, "ma_cross")
+
+        # Invalid strategy forms
+        for bad_strat in [{}, [], 1, True, _StringSubclass("ma_cross")]:
+            payload_bad = serialize_run_manifest(manifest)
+            payload_bad["config"]["strategy"] = bad_strat
+            with self.assertRaises(ResearchRunSerializationError):
+                deserialize_run_manifest(payload_bad)
+
+        # Blank/unclean strategy wrapped
+        for invalid_strat in ["", " ma_cross "]:
+            payload_invalid = serialize_run_manifest(manifest)
+            payload_invalid["config"]["strategy"] = invalid_strat
+            with self.assertRaises(ResearchRunSerializationError) as ctx:
+                deserialize_run_manifest(payload_invalid)
+            self.assertIsInstance(ctx.exception.__cause__, ResearchRunModelError)
 
     def test_deserialize_run_manifest_validates_config_json_values(self) -> None:
         manifest = _make_valid_manifest()
 
-        payload_tuple = serialize_run_manifest(manifest)
-        payload_tuple["config"]["workflow_options"] = {"bad_tuple": (1, 2)}
-        with self.assertRaises(ResearchRunSerializationError):
-            deserialize_run_manifest(payload_tuple)
+        bad_payloads = [
+            {"bad_tuple": (1, 2)},
+            {"bad_nan": float("nan")},
+            {"bad_inf": float("inf")},
+            {"bad_neginf": float("-inf")},
+            {1: "bad"},
+            {"": "bad"},
+            {" bad ": "bad"},
+            {"bad_set": {1, 2}},
+        ]
+        for bad_opt in bad_payloads:
+            payload = serialize_run_manifest(manifest)
+            payload["config"]["workflow_options"] = bad_opt
+            with self.assertRaises(ResearchRunSerializationError):
+                deserialize_run_manifest(payload)
 
-        payload_nan = serialize_run_manifest(manifest)
-        payload_nan["config"]["workflow_options"] = {"bad_nan": float("nan")}
-        with self.assertRaises(ResearchRunSerializationError):
-            deserialize_run_manifest(payload_nan)
+        # workflow_options itself must be exact dict
+        for bad_wf in [MappingProxyType({"a": 1}), [1, 2]]:
+            payload_wf = serialize_run_manifest(manifest)
+            payload_wf["config"]["workflow_options"] = bad_wf
+            with self.assertRaises(ResearchRunSerializationError):
+                deserialize_run_manifest(payload_wf)
 
     def test_deserialize_run_manifest_validates_data_source_list_and_member_types(self) -> None:
         manifest = _make_valid_manifest()
@@ -379,24 +436,45 @@ class TestResearchRunSerialization(unittest.TestCase):
 
     def test_deserialize_run_manifest_validates_exact_data_source_keys(self) -> None:
         manifest = _make_valid_manifest()
-        payload = serialize_run_manifest(manifest)
-        payload["data_sources"] = [
-            {
-                "canonical_symbol": "2330.TW",
-                "requested_symbol": "2330",
-                "provider": "yfinance",
-                "period": "1y",
-                "interval": "1d",
-                "auto_adjust": True,
-                "source_kind": "live",
-                "cache_state": "not_applicable",
-                "success": True,
-                "error": None,
-                "extra": 1,
-            }
-        ]
+
+        valid_ds = {
+            "canonical_symbol": "2330.TW",
+            "requested_symbol": "2330",
+            "provider": "yfinance",
+            "period": "1y",
+            "interval": "1d",
+            "auto_adjust": True,
+            "source_kind": "live",
+            "cache_state": "not_applicable",
+            "success": True,
+            "error": None,
+        }
+
+        # Missing field
+        ds_missing = dict(valid_ds)
+        del ds_missing["provider"]
+        p_missing = serialize_run_manifest(manifest)
+        p_missing["data_sources"] = [ds_missing]
+        with self.assertRaises(ResearchRunSerializationError) as ctx_m:
+            deserialize_run_manifest(p_missing)
+        self.assertIn("missing field(s): provider", str(ctx_m.exception))
+
+        # Unknown field
+        ds_unknown = dict(valid_ds)
+        ds_unknown["extra"] = 1
+        p_unknown = serialize_run_manifest(manifest)
+        p_unknown["data_sources"] = [ds_unknown]
+        with self.assertRaises(ResearchRunSerializationError) as ctx_u:
+            deserialize_run_manifest(p_unknown)
+        self.assertIn("unknown field(s): extra", str(ctx_u.exception))
+
+        # Non-string key
+        ds_nonstr = dict(valid_ds)
+        ds_nonstr[123] = "bad"  # type: ignore[dict-item]
+        p_nonstr = serialize_run_manifest(manifest)
+        p_nonstr["data_sources"] = [ds_nonstr]
         with self.assertRaises(ResearchRunSerializationError):
-            deserialize_run_manifest(payload)
+            deserialize_run_manifest(p_nonstr)
 
     def test_deserialize_run_manifest_wraps_data_source_model_errors(self) -> None:
         manifest = _make_valid_manifest()
@@ -434,17 +512,39 @@ class TestResearchRunSerialization(unittest.TestCase):
 
     def test_deserialize_run_manifest_validates_exact_artifact_keys(self) -> None:
         manifest = _make_valid_manifest()
-        payload = serialize_run_manifest(manifest)
-        payload["artifacts"] = [
-            {
-                "artifact_type": "report",
-                "path": "output/daily.json",
-                "media_type": "application/json",
-                # missing schema_version
-            }
-        ]
+
+        valid_art = {
+            "artifact_type": "report",
+            "path": "output/daily.json",
+            "media_type": "application/json",
+            "schema_version": "1.0",
+        }
+
+        # Missing field
+        art_missing = dict(valid_art)
+        del art_missing["media_type"]
+        p_missing = serialize_run_manifest(manifest)
+        p_missing["artifacts"] = [art_missing]
+        with self.assertRaises(ResearchRunSerializationError) as ctx_m:
+            deserialize_run_manifest(p_missing)
+        self.assertIn("missing field(s): media_type", str(ctx_m.exception))
+
+        # Unknown field
+        art_unknown = dict(valid_art)
+        art_unknown["extra"] = 1
+        p_unknown = serialize_run_manifest(manifest)
+        p_unknown["artifacts"] = [art_unknown]
+        with self.assertRaises(ResearchRunSerializationError) as ctx_u:
+            deserialize_run_manifest(p_unknown)
+        self.assertIn("unknown field(s): extra", str(ctx_u.exception))
+
+        # Non-string key
+        art_nonstr = dict(valid_art)
+        art_nonstr[123] = "bad"  # type: ignore[dict-item]
+        p_nonstr = serialize_run_manifest(manifest)
+        p_nonstr["artifacts"] = [art_nonstr]
         with self.assertRaises(ResearchRunSerializationError):
-            deserialize_run_manifest(payload)
+            deserialize_run_manifest(p_nonstr)
 
     def test_deserialize_run_manifest_wraps_artifact_model_errors(self) -> None:
         manifest = _make_valid_manifest()
@@ -464,24 +564,60 @@ class TestResearchRunSerialization(unittest.TestCase):
     def test_deserialize_run_manifest_validates_errors_and_limitations_lists(self) -> None:
         manifest = _make_valid_manifest()
 
+        # Errors tuple rejected
         payload_tuple_err = serialize_run_manifest(manifest)
         payload_tuple_err["errors"] = ("err",)
         with self.assertRaises(ResearchRunSerializationError):
             deserialize_run_manifest(payload_tuple_err)
 
+        # Limitations tuple rejected
+        payload_tuple_lim = serialize_run_manifest(manifest)
+        payload_tuple_lim["limitations"] = ("lim",)
+        with self.assertRaises(ResearchRunSerializationError):
+            deserialize_run_manifest(payload_tuple_lim)
+
+        # Non-string error member
+        payload_non_str_err = serialize_run_manifest(manifest)
+        payload_non_str_err["errors"] = [123]
+        with self.assertRaises(ResearchRunSerializationError):
+            deserialize_run_manifest(payload_non_str_err)
+
+        # Non-string limitation member
         payload_non_str_lim = serialize_run_manifest(manifest)
         payload_non_str_lim["limitations"] = [123]
         with self.assertRaises(ResearchRunSerializationError):
             deserialize_run_manifest(payload_non_str_lim)
 
+        # Blank/unclean error wrapped
+        payload_blank_err = serialize_run_manifest(manifest)
+        payload_blank_err["errors"] = [" "]
+        with self.assertRaises(ResearchRunSerializationError) as ctx_err:
+            deserialize_run_manifest(payload_blank_err)
+        self.assertIsInstance(ctx_err.exception.__cause__, ResearchRunModelError)
+
+        # Blank/unclean limitation wrapped
+        payload_blank_lim = serialize_run_manifest(manifest)
+        payload_blank_lim["limitations"] = [" "]
+        with self.assertRaises(ResearchRunSerializationError) as ctx_lim:
+            deserialize_run_manifest(payload_blank_lim)
+        self.assertIsInstance(ctx_lim.exception.__cause__, ResearchRunModelError)
+
     def test_deserialize_run_manifest_validates_exact_counts(self) -> None:
         manifest = _make_valid_manifest()
 
-        for bad_count in [True, 1.0, "0"]:
-            payload = serialize_run_manifest(manifest)
-            payload["success_count"] = bad_count
-            with self.assertRaises(ResearchRunSerializationError):
-                deserialize_run_manifest(payload)
+        for count_field in ["success_count", "failure_count", "partial_count"]:
+            for bad_count in [True, 1.0, "0"]:
+                payload = serialize_run_manifest(manifest)
+                payload[count_field] = bad_count
+                with self.assertRaises(ResearchRunSerializationError):
+                    deserialize_run_manifest(payload)
+
+            # Negative int rejected by model and wrapped
+            payload_neg = serialize_run_manifest(manifest)
+            payload_neg[count_field] = -1
+            with self.assertRaises(ResearchRunSerializationError) as ctx_neg:
+                deserialize_run_manifest(payload_neg)
+            self.assertIsInstance(ctx_neg.exception.__cause__, ResearchRunModelError)
 
     def test_deserialize_run_manifest_wraps_manifest_model_errors(self) -> None:
         manifest = _make_valid_manifest()
@@ -511,7 +647,7 @@ class TestResearchRunSerialization(unittest.TestCase):
         self.assertIn("僅供研究使用", text)
         self.assertNotIn("\\u53f0", text)
 
-    def test_export_run_manifest_json_has_exactly_one_trailing_newline_and_is_deterministic(self) -> None:
+    def test_export_run_manifest_json_has_strictly_one_trailing_newline(self) -> None:
         manifest = _make_valid_manifest()
         text1 = export_run_manifest_json(manifest)
         text2 = export_run_manifest_json(manifest)
@@ -521,15 +657,22 @@ class TestResearchRunSerialization(unittest.TestCase):
         self.assertFalse(text1.endswith("\n\n"))
 
     def test_load_run_manifest_json_round_trips_manifest(self) -> None:
-        manifest = _make_valid_manifest()
+        manifest = _make_valid_manifest(strategy="ma_cross")
         text = export_run_manifest_json(manifest)
         loaded = load_run_manifest_json(text)
 
         self.assertEqual(loaded, manifest)
+        self.assertEqual(loaded.config.strategy, "ma_cross")
 
     def test_load_run_manifest_json_requires_exact_string(self) -> None:
+        manifest = _make_valid_manifest()
+        valid_text = export_run_manifest_json(manifest)
+
         with self.assertRaises(ResearchRunSerializationError):
             load_run_manifest_json(b'{"schema_version":"1.0"}')  # type: ignore[arg-type]
+
+        with self.assertRaises(ResearchRunSerializationError):
+            load_run_manifest_json(_StringSubclass(valid_text))
 
     def test_load_run_manifest_json_rejects_malformed_or_non_object_content(self) -> None:
         for bad_content in ["{", "[]", '"hello"', "null", "123"]:
@@ -540,9 +683,10 @@ class TestResearchRunSerialization(unittest.TestCase):
         manifest = _make_valid_manifest()
         valid_text = export_run_manifest_json(manifest)
 
-        nan_text = valid_text.replace('"force_refresh": false', '"force_refresh": NaN')
-        with self.assertRaises(ResearchRunSerializationError):
-            load_run_manifest_json(nan_text)
+        for const_name in ["NaN", "Infinity", "-Infinity"]:
+            const_text = valid_text.replace('"force_refresh": false', f'"force_refresh": {const_name}')
+            with self.assertRaises(ResearchRunSerializationError):
+                load_run_manifest_json(const_text)
 
         top_dup = '{"schema_version":"1.0","schema_version":"2.0"}'
         with self.assertRaises(ResearchRunSerializationError) as ctx:
