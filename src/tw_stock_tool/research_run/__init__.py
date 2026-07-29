@@ -18,6 +18,7 @@ from tw_stock_tool.research_run.models import (
     RunStatus,
     SourceKind,
 )
+from tw_stock_tool.research_run.backtest import BacktestResearchRunError, run_backtest_research
 from tw_stock_tool.research_run.scan import ScanResearchRunError, run_scan_research
 from tw_stock_tool.research_run.serialization import (
     ResearchRunSerializationError,
@@ -49,4 +50,6 @@ __all__ = [
     "ResearchRunContextError",
     "ScanResearchRunError",
     "run_scan_research",
+    "BacktestResearchRunError",
+    "run_backtest_research",
 ]
