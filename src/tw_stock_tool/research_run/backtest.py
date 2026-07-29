@@ -130,6 +130,49 @@ def _resolve_strategy(strategy: str) -> str:
     raise _BacktestValidationError(f"Unknown strategy: {strategy}")
 
 
+def _resolve_strategy_parameters(
+    resolved_strategy: str,
+    overrides: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if overrides is not None and not isinstance(overrides, Mapping):
+        raise _BacktestValidationError("strategy_parameters must be a Mapping or None")
+
+    caller_values = {} if overrides is None else dict(overrides)
+    try:
+        signature = inspect.signature(STRATEGIES[resolved_strategy])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _BacktestValidationError(
+            f"Unable to inspect strategy parameters for {resolved_strategy}"
+        ) from exc
+
+    resolved: dict[str, Any] = {}
+    accepted: set[str] = set()
+    missing: list[str] = []
+    for name, parameter in signature.parameters.items():
+        if name == "df":
+            continue
+        accepted.add(name)
+        if parameter.default is inspect.Parameter.empty:
+            if name not in caller_values:
+                missing.append(name)
+        else:
+            resolved[name] = parameter.default
+
+    unknown = sorted(set(caller_values) - accepted)
+    if unknown:
+        raise _BacktestValidationError(
+            f"Unsupported strategy parameter(s): {', '.join(unknown)}"
+        )
+    if missing:
+        raise _BacktestValidationError(
+            f"Missing required strategy parameter(s): {', '.join(missing)}"
+        )
+
+    resolved.update(caller_values)
+    _json_safe("strategy_parameters", resolved)
+    return resolved
+
+
 def _production_backtest_defaults() -> dict[str, Any]:
     parameters = inspect.signature(run_backtest).parameters
     return {
@@ -192,7 +235,7 @@ def _validate_and_build_config(
         raise _BacktestValidationError("strategy_parameters must be a Mapping or None")
     if backtest_parameters is not None and not isinstance(backtest_parameters, Mapping):
         raise _BacktestValidationError("backtest_parameters must be a Mapping or None")
-    strategy_snapshot = {} if strategy_parameters is None else dict(strategy_parameters)
+    strategy_snapshot = _resolve_strategy_parameters(resolved_strategy, strategy_parameters)
     backtest_overrides = {} if backtest_parameters is None else dict(backtest_parameters)
     _json_safe("strategy_parameters", strategy_snapshot)
     _json_safe("backtest_parameters", backtest_overrides)

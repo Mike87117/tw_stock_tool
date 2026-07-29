@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import inspect
 import math
 import unittest
 from unittest.mock import Mock, patch
@@ -120,6 +121,14 @@ class ValidationTests(unittest.TestCase):
                     _run(tmp, _loader(calls), strategy_parameters={"bad": value})
             self.assertEqual(calls, [])
 
+    def test_unknown_strategy_parameter_fails_before_loader_and_manifest(self):
+        calls = []
+        with TemporaryDirectory() as tmp:
+            with self.assertRaises(BacktestResearchRunError):
+                _run(tmp, _loader(calls), strategy_parameters={"unknown": 1})
+            self.assertFalse(Path(tmp, "backtest_run_manifest.json").exists())
+        self.assertEqual(calls, [])
+
     def test_unknown_engine_parameter_and_interval_conflict_are_rejected(self):
         for params in ({"unknown": 1}, {"interval": "1wk"}):
             with TemporaryDirectory() as tmp, self.subTest(params=params):
@@ -153,7 +162,34 @@ class ValidationTests(unittest.TestCase):
 
 
 class SuccessTests(unittest.TestCase):
+    def test_strategy_defaults_and_overrides_are_consistent(self):
+        cases = (
+            ("ma_cross", "ma_cross_strategy", {"short_window": 5, "long_window": 20}, None),
+            ("rsi", "rsi_strategy", {"buy_below": 30, "sell_above": 70}, None),
+            ("score", "score_strategy", {"buy_score": None, "sell_score": None}, None),
+            ("macd", "macd_strategy", {}, None),
+            ("ma_cross", "ma_cross_strategy", {"short_window": 8, "long_window": 20}, {"short_window": 8}),
+        )
+        for strategy, resolved_strategy, expected, overrides in cases:
+            with self.subTest(strategy=strategy):
+                strategy_spy = Mock(return_value=_df())
+                strategy_spy.__signature__ = inspect.signature(backtest_module.STRATEGIES[resolved_strategy])
+                with TemporaryDirectory() as tmp:
+                    with patch.object(backtest_module, "STRATEGIES", {resolved_strategy: strategy_spy}), patch.object(backtest_module, "run_backtest", return_value={"Initial Capital": 100000}):
+                        result = run_backtest_research(
+                            ("2330", "2330.TW"),
+                            strategy=strategy,
+                            output_dir=tmp,
+                            market_data_loader=_loader([]),
+                            strategy_parameters=overrides,
+                        )
+                self.assertEqual(result.manifest.config.strategy, resolved_strategy)
+                self.assertEqual(result.manifest.config.workflow_options["strategy_parameters"], expected)
+                self.assertEqual(result.domain_result["Parameters"]["strategy"], expected)
+                self.assertEqual(strategy_spy.call_args.kwargs, expected)
+
     def test_real_strategy_and_backtest_use_fake_loader_and_record_provenance(self):
+
         calls = []
         with TemporaryDirectory() as tmp:
             result = _run(tmp, _loader(calls), strategy_parameters={"short_window": 3, "long_window": 10})
@@ -223,6 +259,7 @@ class SuccessTests(unittest.TestCase):
         strategy_frame["entry_signal"] = False
         strategy_frame["exit_signal"] = False
         fake_strategy = Mock(return_value=strategy_frame)
+        fake_strategy.__signature__ = inspect.signature(backtest_module.STRATEGIES["ma_cross_strategy"])
         fake_result = {"Initial Capital": 100000}
         with TemporaryDirectory() as tmp:
             with patch.object(backtest_module, "build_stock_analysis", return_value=analysis) as build, patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": fake_strategy}), patch.object(backtest_module, "run_backtest", return_value=fake_result) as run:
@@ -266,7 +303,10 @@ class FailureTests(unittest.TestCase):
                 if stage == "analysis":
                     patches.append(patch.object(backtest_module, "build_stock_analysis", side_effect=error))
                 elif stage == "strategy":
-                    patches.append(patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": Mock(side_effect=error)}))
+                    def raising_strategy(df, short_window=5, long_window=20):
+                        raise error
+
+                    patches.append(patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": raising_strategy}))
                 else:
                     patches.append(patch.object(backtest_module, "run_backtest", side_effect=error))
                 with patches[0]:
