@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
+import inspect
 import importlib.metadata
 import math
 import os
@@ -16,6 +17,12 @@ from uuid import uuid4
 import pandas as pd
 
 from tw_stock_tool.analysis.analysis import StockAnalysis, build_stock_analysis
+from tw_stock_tool.backtesting.parameter_sweep import (
+    ma_cross_parameter_grid,
+    rsi_parameter_grid,
+    score_parameter_grid,
+)
+from tw_stock_tool.backtesting.strategies import STRATEGIES
 from tw_stock_tool.reports.daily_pipeline import (
     DailyPipelineConfig,
     DailyPipelineResult,
@@ -136,6 +143,44 @@ def _effective_excel_path(output_excel: object) -> str | None:
     return _path_value("config.output_excel", output_excel)[1]
 
 
+def _resolve_validation_strategy_parameters(strategy: str) -> dict[str, Any]:
+    resolved_name = f"{strategy}_strategy"
+    try:
+        signature = inspect.signature(STRATEGIES[resolved_name])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _DailyValidationError(
+            f"Unable to inspect validation strategy parameters for {strategy}"
+        ) from exc
+
+    resolved: dict[str, Any] = {}
+    for name, parameter in signature.parameters.items():
+        if name == "df":
+            continue
+        if parameter.default is inspect.Parameter.empty:
+            raise _DailyValidationError(
+                f"Validation strategy parameter {name} has no resolved default"
+            )
+        resolved[name] = parameter.default
+    _json_safe("validation_strategy_parameters", resolved)
+    return resolved
+
+
+def _resolve_validation_parameter_grid(strategy: str) -> list[dict[str, int]]:
+    if strategy == "ma_cross":
+        grid = ma_cross_parameter_grid()
+    elif strategy == "rsi":
+        grid = rsi_parameter_grid()
+    elif strategy == "score":
+        grid = score_parameter_grid()
+    elif strategy == "macd":
+        grid = []
+    else:
+        raise _DailyValidationError(f"Unsupported validation strategy: {strategy}")
+    snapshot = [dict(parameters) for parameters in grid]
+    _json_safe("validation_parameter_grid", snapshot)
+    return snapshot
+
+
 def _validate_and_build_config(
     symbol_requests: tuple[tuple[str, str], ...],
     universe: str | None,
@@ -229,9 +274,16 @@ def _validate_and_build_config(
         else datetime.now().strftime("%Y-%m-%d")
     )
     pipeline_config = replace(config, report_date=resolved_report_date, output_excel=None)
+    resolved_strategy_parameters = _resolve_validation_strategy_parameters(
+        config.validation_strategy
+    )
+    resolved_parameter_grid = _resolve_validation_parameter_grid(
+        config.validation_strategy
+    )
     backtest = {
         "enabled": config.validate_top > 0,
         "top": config.validate_top,
+        "strategy_parameters": resolved_strategy_parameters,
         "initial_capital": config.validation_initial_capital,
         "fee_rate": config.validation_fee_rate,
         "tax_rate": config.validation_tax_rate,
@@ -241,6 +293,11 @@ def _validate_and_build_config(
         "enabled": config.parameter_sweep_top > 0,
         "top": config.parameter_sweep_top,
         "sort_by": config.parameter_sweep_sort_by,
+        "parameter_grid": (
+            [dict(parameters) for parameters in resolved_parameter_grid]
+            if config.parameter_sweep_top > 0
+            else []
+        ),
     }
     walk_forward = {
         "enabled": config.walk_forward_top > 0,
@@ -253,6 +310,11 @@ def _validate_and_build_config(
             else config.walk_forward_test_days
         ),
         "sort_by": config.walk_forward_sort_by,
+        "parameter_grid": (
+            [dict(parameters) for parameters in resolved_parameter_grid]
+            if config.walk_forward_top > 0
+            else []
+        ),
     }
     workflow_options = {
         "signals": list(config.signals),

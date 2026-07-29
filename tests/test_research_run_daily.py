@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -7,6 +9,12 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 
+from tw_stock_tool.backtesting.parameter_sweep import (
+    ma_cross_parameter_grid,
+    rsi_parameter_grid,
+    score_parameter_grid,
+)
+from tw_stock_tool.backtesting.strategies import STRATEGIES
 from tw_stock_tool.reports.daily_pipeline import DailyPipelineConfig, DailyPipelineResult
 from tw_stock_tool.research_run import (
     DailyReportResearchRunError,
@@ -158,6 +166,72 @@ class ValidationTests(TestCase):
         self.assertEqual(options["json_path"], Path(tmp, "report.json").as_posix())
         self.assertIsNone(options["excel_path"])
 
+    def _manifest_for_config(self, config):
+        result = _result(summary={"Scan OK": 1})
+        with patch.object(daily_module, "run_daily_research_pipeline", return_value=result):
+            with patch.object(
+                daily_module,
+                "export_daily_report_markdown_file",
+                return_value=Path("daily_report.md"),
+            ):
+                with TemporaryDirectory() as tmp:
+                    return _run(tmp, _loader([]), config=config).manifest
+
+    def test_resolved_strategy_defaults_come_from_production_signatures(self):
+        for strategy in ("ma_cross", "rsi", "score", "macd"):
+            with self.subTest(strategy=strategy):
+                manifest = self._manifest_for_config(
+                    DailyPipelineConfig(validation_strategy=strategy, progress=False)
+                )
+                expected = {
+                    name: parameter.default
+                    for name, parameter in inspect.signature(
+                        STRATEGIES[f"{strategy}_strategy"]
+                    ).parameters.items()
+                    if name != "df"
+                }
+                self.assertEqual(manifest.config.strategy, strategy)
+                self.assertEqual(
+                    dict(manifest.config.backtest["strategy_parameters"]),
+                    expected,
+                )
+
+    def test_resolved_parameter_grids_are_complete_ordered_and_independent(self):
+        builders = {
+            "ma_cross": ma_cross_parameter_grid,
+            "rsi": rsi_parameter_grid,
+            "score": score_parameter_grid,
+        }
+        for strategy, builder in builders.items():
+            with self.subTest(strategy=strategy):
+                manifest = self._manifest_for_config(
+                    DailyPipelineConfig(
+                        validation_strategy=strategy,
+                        validate_top=1,
+                        parameter_sweep_top=1,
+                        walk_forward_top=1,
+                        progress=False,
+                    )
+                )
+                expected = builder()
+                sweep = manifest.config.parameter_sweep["parameter_grid"]
+                walk = manifest.config.walk_forward["parameter_grid"]
+                self.assertEqual([dict(item) for item in sweep], expected)
+                self.assertEqual([dict(item) for item in walk], expected)
+                self.assertIsNot(sweep, walk)
+                self.assertTrue(all(isinstance(item, Mapping) for item in sweep))
+                self.assertTrue(all(None not in item.values() for item in sweep))
+                expected[0].clear()
+                self.assertEqual([dict(item) for item in sweep], builder())
+
+        for strategy in ("ma_cross", "rsi", "score", "macd"):
+            with self.subTest(disabled=strategy):
+                manifest = self._manifest_for_config(
+                    DailyPipelineConfig(validation_strategy=strategy, progress=False)
+                )
+                self.assertEqual(manifest.config.parameter_sweep["parameter_grid"], ())
+                self.assertEqual(manifest.config.walk_forward["parameter_grid"], ())
+
     def test_pipeline_order_callback_and_shared_context(self):
         calls = []
         result = _result(summary={"Scan OK": 1})
@@ -292,13 +366,24 @@ class ValidationTests(TestCase):
         result = _result(summary={"Scan OK": 1}, limitations=["資料受限"])
         with patch.object(daily_module, "run_daily_research_pipeline", return_value=result),              patch.object(daily_module, "export_daily_report_markdown_file", return_value=Path("daily_report.md")):
             with TemporaryDirectory() as tmp:
-                output = _run(tmp, _loader([]))
+                output = _run(
+                    tmp,
+                    _loader([]),
+                    config=DailyPipelineConfig(
+                        validation_strategy="rsi", validate_top=1,
+                        parameter_sweep_top=1, walk_forward_top=1,
+                        progress=False,
+                    ),
+                )
                 raw = Path(tmp, "daily_report_run_manifest.json").read_bytes()
                 loaded = load_run_manifest_json(raw.decode("utf-8"))
         self.assertEqual(loaded, output.manifest)
         self.assertTrue(raw.endswith(b"\n"))
         self.assertNotIn(b"\r\n", raw)
         self.assertEqual(output.generated_artifacts, output.manifest.artifacts)
+        self.assertEqual(loaded.config.backtest["strategy_parameters"], output.manifest.config.backtest["strategy_parameters"])
+        self.assertEqual(loaded.config.parameter_sweep["parameter_grid"], output.manifest.config.parameter_sweep["parameter_grid"])
+        self.assertEqual(loaded.config.walk_forward["parameter_grid"], output.manifest.config.walk_forward["parameter_grid"])
 
 
 if __name__ == "__main__":
