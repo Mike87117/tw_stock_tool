@@ -1,8 +1,14 @@
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
+import io
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import tw_stock_tool.application as application_module
+from tw_stock_tool.application import research_run as application_research_run
 from tw_stock_tool.analysis.scanner import ScanConfig
 from tw_stock_tool.application import (
     BacktestRunRequest,
@@ -14,6 +20,46 @@ from tw_stock_tool.application import (
     run_scan,
 )
 from tw_stock_tool.reports.daily_pipeline import DailyPipelineConfig
+
+
+class ApplicationExportTests(unittest.TestCase):
+    def test_exact_exports_and_research_run_identity(self):
+        expected = [
+            "SymbolRequest",
+            "ScanRunRequest",
+            "DailyRunRequest",
+            "BacktestRunRequest",
+            "run_scan",
+            "run_daily",
+            "run_backtest",
+        ]
+        self.assertEqual(application_module.__all__, expected)
+        for name in expected:
+            with self.subTest(name=name):
+                self.assertIs(
+                    getattr(application_module, name),
+                    getattr(application_research_run, name),
+                )
+
+    def test_import_does_not_load_cli_or_gui_modules(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys\n"
+                    "import tw_stock_tool.application\n"
+                    "for name in sys.modules:\n"
+                    "    if name.startswith(('tw_stock_tool.cli', 'tw_stock_tool.gui')):\n"
+                    "        raise AssertionError(name)\n"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout, "")
+        self.assertEqual(completed.stderr, "")
 
 
 class ApplicationRequestTests(unittest.TestCase):
@@ -53,10 +99,18 @@ class ApplicationRequestTests(unittest.TestCase):
         class BoolInt(int):
             pass
 
-        with self.assertRaises(TypeError):
-            ScanRunRequest(self.symbols, None, ScanConfig(), "out", sheet_by_signal=1)
-        with self.assertRaises(TypeError):
-            BacktestRunRequest(self.symbols[0], "ma_cross", "out", auto_adjust=BoolInt(1))
+        factories = (
+            lambda value: ScanRunRequest(self.symbols, None, ScanConfig(), "out", sheet_by_signal=value),
+            lambda value: ScanRunRequest(self.symbols, None, ScanConfig(), "out", log_errors=value),
+            lambda value: DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out", json_overwrite=value),
+            lambda value: BacktestRunRequest(self.symbols[0], "ma_cross", "out", auto_adjust=value),
+            lambda value: BacktestRunRequest(self.symbols[0], "ma_cross", "out", force_refresh=value),
+        )
+        for factory in factories:
+            for value in (1, BoolInt(1)):
+                with self.subTest(factory=factory, value=value):
+                    with self.assertRaises(TypeError):
+                        factory(value)
 
         strategy = {"short_window": 3, "nested": {"value": 1}}
         request = BacktestRunRequest(self.symbols[0], "ma_cross", Path("out"), strategy_parameters=strategy)
@@ -67,11 +121,60 @@ class ApplicationRequestTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             request.strategy_parameters["short_window"] = 4
 
+    def test_backtest_mappings_and_clean_strings_are_validated(self):
+        for name in ("strategy_parameters", "backtest_parameters"):
+            with self.subTest(name=name):
+                with self.assertRaises(TypeError):
+                    BacktestRunRequest(
+                        self.symbols[0],
+                        "ma_cross",
+                        "out",
+                        **{name: [("value", 1)]},
+                    )
+        for name in ("strategy", "period", "interval"):
+            for value in ("", " dirty", "dirty "):
+                kwargs = {"strategy": "ma_cross", "output_dir": "out", name: value}
+                with self.subTest(name=name, value=value):
+                    with self.assertRaises(ValueError):
+                        BacktestRunRequest(self.symbols[0], **kwargs)
+
+    def test_output_and_optional_paths_are_validated(self):
+        invalid_requests = (
+            lambda: ScanRunRequest(self.symbols, None, ScanConfig(), ""),
+            lambda: DailyRunRequest(self.symbols, None, DailyPipelineConfig(), object()),
+            lambda: BacktestRunRequest(self.symbols[0], "ma_cross", " "),
+            lambda: ScanRunRequest(self.symbols, None, ScanConfig(), "out", manifest_path=""),
+            lambda: DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out", markdown_path=""),
+            lambda: DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out", json_path=b"json"),
+            lambda: DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out", manifest_path=" "),
+            lambda: BacktestRunRequest(self.symbols[0], "ma_cross", "out", markdown_path=""),
+            lambda: BacktestRunRequest(self.symbols[0], "ma_cross", "out", excel_path=b"xlsx"),
+            lambda: BacktestRunRequest(self.symbols[0], "ma_cross", "out", manifest_path=" "),
+        )
+        for factory in invalid_requests:
+            with self.subTest(factory=factory):
+                with self.assertRaises((TypeError, ValueError)):
+                    factory()
+
 
 class ApplicationServiceTests(unittest.TestCase):
     def setUp(self):
         self.symbols = (SymbolRequest("2330", "2330.TW"), SymbolRequest("0050", "0050.TW"))
         self.result = object()
+        self.invocation_boundaries = []
+        for target in (
+            "tw_stock_tool.data.stock_list_updater.update_stock_list",
+            "tw_stock_tool.data.stock_list_updater.fetch_twse_stock_list",
+            "tw_stock_tool.data.stock_list_updater.fetch_tpex_stock_list",
+            "requests.get",
+        ):
+            patcher = patch(target)
+            self.addCleanup(patcher.stop)
+            self.invocation_boundaries.append(patcher.start())
+
+    def assert_no_catalog_or_network_invocation(self):
+        for boundary in self.invocation_boundaries:
+            boundary.assert_not_called()
 
     def test_scan_delegates_once_and_preserves_identity(self):
         request = ScanRunRequest(self.symbols, "tw50", ScanConfig(), "out", "manifest.json", True, True)
@@ -85,6 +188,7 @@ class ApplicationServiceTests(unittest.TestCase):
             universe="tw50", config=request.config, output_dir="out", manifest_path="manifest.json",
             sheet_by_signal=True, log_errors=True, progress_callback=progress, market_data_loader=loader,
         )
+        self.assert_no_catalog_or_network_invocation()
 
     def test_daily_delegates_once_and_preserves_identity(self):
         request = DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out", "md", "json", "manifest", True)
@@ -98,6 +202,7 @@ class ApplicationServiceTests(unittest.TestCase):
             universe=None, config=request.config, output_dir="out", markdown_path="md", json_path="json",
             manifest_path="manifest", json_overwrite=True, status_callback=status, market_data_loader=loader,
         )
+        self.assert_no_catalog_or_network_invocation()
 
     def test_backtest_delegates_once_and_preserves_identity(self):
         request = BacktestRunRequest(
@@ -116,6 +221,7 @@ class ApplicationServiceTests(unittest.TestCase):
             backtest_parameters=request.backtest_parameters, output_dir="out", markdown_path="md",
             excel_path="xlsx", manifest_path="manifest", stage_callback=stage, market_data_loader=loader,
         )
+        self.assert_no_catalog_or_network_invocation()
 
     def test_wrong_request_and_namespace_are_rejected_without_output(self):
         cases = ((run_scan, DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out")),
@@ -126,15 +232,37 @@ class ApplicationServiceTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     function(request)
 
-    def test_workflow_exceptions_propagate_and_application_is_quiet(self):
-        request = ScanRunRequest(self.symbols, None, ScanConfig(), "out")
-        error = RuntimeError("workflow")
-        with patch("tw_stock_tool.application.research_run.run_scan_research", side_effect=error):
-            with self.assertRaisesRegex(RuntimeError, "workflow") as raised:
-                with self.assertLogs(level="CRITICAL") if False else unittest.mock.patch("sys.stdout") as stdout:
-                    run_scan(request)
-        self.assertIs(raised.exception, error)
-        self.assertEqual(stdout.write.call_count, 0)
+    def test_workflow_exception_identity_for_all_services(self):
+        cases = (
+            (run_scan, ScanRunRequest(self.symbols, None, ScanConfig(), "out"), "run_scan_research"),
+            (run_daily, DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out"), "run_daily_report_research"),
+            (run_backtest, BacktestRunRequest(self.symbols[0], "ma_cross", "out"), "run_backtest_research"),
+        )
+        for function, request, service_name in cases:
+            error = RuntimeError(service_name)
+            with self.subTest(function=function.__name__):
+                with patch.object(application_research_run, service_name, side_effect=error):
+                    with self.assertRaises(RuntimeError) as raised:
+                        function(request)
+                self.assertIs(raised.exception, error)
+        self.assert_no_catalog_or_network_invocation()
+
+    def test_all_services_are_quiet_when_delegated(self):
+        cases = (
+            (run_scan, ScanRunRequest(self.symbols, None, ScanConfig(), "out"), "run_scan_research"),
+            (run_daily, DailyRunRequest(self.symbols, None, DailyPipelineConfig(), "out"), "run_daily_report_research"),
+            (run_backtest, BacktestRunRequest(self.symbols[0], "ma_cross", "out"), "run_backtest_research"),
+        )
+        for function, request, service_name in cases:
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with self.subTest(function=function.__name__):
+                with patch.object(application_research_run, service_name, return_value=self.result):
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        function(request)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertEqual(stderr.getvalue(), "")
+        self.assert_no_catalog_or_network_invocation()
 
 
 if __name__ == "__main__":

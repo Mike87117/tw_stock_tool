@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import inspect
@@ -244,6 +245,20 @@ class SuccessTests(unittest.TestCase):
         self.assertTrue(raw.endswith(b"\n"))
         self.assertNotIn(b"\r\n", raw)
 
+    def test_callback_is_excluded_from_serialized_manifest(self):
+        stages = []
+
+        def callback(stage):
+            stages.append(stage)
+
+        with TemporaryDirectory() as tmp:
+            _run(tmp, _loader([]), stage_callback=callback)
+            serialized = Path(tmp, "backtest_run_manifest.json").read_text(encoding="utf-8")
+        self.assertEqual(stages, ["market_data", "strategy", "backtest"])
+        self.assertNotIn("stage_callback", serialized)
+        self.assertNotIn(str(id(callback)), serialized)
+        self.assertNotIn(repr(callback), serialized)
+
     def test_tool_version_installed_and_source_fallback(self):
         with patch.object(backtest_module.importlib.metadata, "version", return_value="9.9.9") as version:
             with TemporaryDirectory() as tmp:
@@ -289,28 +304,43 @@ class FailureTests(unittest.TestCase):
         for stage in ("market_data", "strategy", "backtest"):
             with TemporaryDirectory() as tmp, self.subTest(stage=stage):
                 calls = []
+                error = ValueError(f"{stage} callback failed")
 
                 def callback(current):
                     calls.append(current)
                     if current == stage:
-                        raise ValueError(f"{stage} callback failed")
+                        raise error
 
-                loader = _loader([])
-                strategy = Mock(return_value=_df())
+                loader = Mock(wraps=_loader([]))
+                analysis = Mock(wraps=backtest_module.build_stock_analysis)
+                strategy = Mock(wraps=backtest_module.STRATEGIES["ma_cross_strategy"])
                 strategy.__signature__ = inspect.signature(backtest_module.STRATEGIES["ma_cross_strategy"])
-                backtest = Mock(return_value={"Initial Capital": 100000})
-                patches = [patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": strategy}),
-                           patch.object(backtest_module, "run_backtest", backtest)]
-                with patches[0], patches[1]:
+                backtest = Mock(wraps=backtest_module.run_backtest)
+                with patch.object(backtest_module, "build_stock_analysis", analysis), patch.object(
+                    backtest_module,
+                    "STRATEGIES",
+                    {"ma_cross_strategy": strategy},
+                ), patch.object(backtest_module, "run_backtest", backtest):
                     with self.assertRaises(BacktestResearchRunError) as raised:
                         _run(tmp, loader, stage_callback=callback)
-                manifest = load_run_manifest_json(Path(tmp, "backtest_run_manifest.json").read_text(encoding="utf-8"))
+                manifest_path = Path(tmp, "backtest_run_manifest.json")
+                self.assertTrue(manifest_path.exists())
+                manifest = load_run_manifest_json(manifest_path.read_text(encoding="utf-8"))
             expected_calls = ["market_data"] if stage == "market_data" else ["market_data", "strategy"] if stage == "strategy" else ["market_data", "strategy", "backtest"]
             self.assertEqual(calls, expected_calls)
+            self.assertEqual(manifest.status, "failure")
+            self.assertEqual((manifest.success_count, manifest.failure_count, manifest.partial_count), (0, 1, 0))
+            self.assertEqual(manifest.artifacts, ())
             self.assertEqual(manifest.errors, (f"{stage}_callback: {stage} callback failed",))
-            self.assertIsInstance(raised.exception.__cause__, ValueError)
+            self.assertIs(raised.exception.__cause__, error)
+            if stage == "market_data":
+                loader.assert_not_called()
+                analysis.assert_not_called()
+                strategy.assert_not_called()
+                backtest.assert_not_called()
             if stage == "strategy":
                 strategy.assert_not_called()
+                backtest.assert_not_called()
             if stage == "backtest":
                 backtest.assert_not_called()
 
@@ -336,26 +366,52 @@ class FailureTests(unittest.TestCase):
         self.assertEqual(manifest.errors, ("market_data: 資料失敗",))
         self.assertIs(raised.exception.__cause__, original)
 
-    def test_analysis_strategy_and_backtest_failures_are_staged(self):
-        cases = [("analysis", ValueError("分析失敗")), ("strategy", ValueError("策略失敗")), ("backtest", ValueError("回測失敗"))]
-        for stage, error in cases:
+    def test_domain_failures_stop_at_the_exact_stage(self):
+        expected_stages = {
+            "market_data": ["market_data"],
+            "analysis": ["market_data"],
+            "strategy": ["market_data", "strategy"],
+            "backtest": ["market_data", "strategy", "backtest"],
+        }
+        for stage, stages in expected_stages.items():
+            error = ValueError(f"{stage} failed")
             with TemporaryDirectory() as tmp, self.subTest(stage=stage):
-                patches = []
-                if stage == "analysis":
-                    patches.append(patch.object(backtest_module, "build_stock_analysis", side_effect=error))
-                elif stage == "strategy":
-                    def raising_strategy(df, short_window=5, long_window=20):
-                        raise error
-
-                    patches.append(patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": raising_strategy}))
-                else:
-                    patches.append(patch.object(backtest_module, "run_backtest", side_effect=error))
-                with patches[0]:
+                calls = []
+                loader = Mock(wraps=_loader([], error=error if stage == "market_data" else None))
+                analysis = Mock(
+                    wraps=backtest_module.build_stock_analysis,
+                    side_effect=error if stage == "analysis" else None,
+                )
+                strategy = Mock(
+                    wraps=backtest_module.STRATEGIES["ma_cross_strategy"],
+                    side_effect=error if stage == "strategy" else None,
+                )
+                strategy.__signature__ = inspect.signature(backtest_module.STRATEGIES["ma_cross_strategy"])
+                backtest = Mock(
+                    wraps=backtest_module.run_backtest,
+                    side_effect=error if stage == "backtest" else None,
+                )
+                with ExitStack() as stack:
+                    stack.enter_context(patch.object(backtest_module, "build_stock_analysis", analysis))
+                    stack.enter_context(patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": strategy}))
+                    stack.enter_context(patch.object(backtest_module, "run_backtest", backtest))
                     with self.assertRaises(BacktestResearchRunError) as raised:
-                        _run(tmp, _loader([]))
+                        _run(tmp, loader, stage_callback=calls.append)
                 manifest = load_run_manifest_json(Path(tmp, "backtest_run_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest.errors, (f"{stage}: {error}",))
+            self.assertEqual(calls, stages)
+            self.assertEqual(manifest.errors, (f"{stage}: {stage} failed",))
             self.assertIs(raised.exception.__cause__, error)
+            if stage == "market_data":
+                analysis.assert_not_called()
+                strategy.assert_not_called()
+                backtest.assert_not_called()
+            elif stage == "analysis":
+                strategy.assert_not_called()
+                backtest.assert_not_called()
+            elif stage == "strategy":
+                backtest.assert_not_called()
+            else:
+                backtest.assert_called_once()
 
     def test_exporters_are_independent_and_successful_artifact_is_retained(self):
         with TemporaryDirectory() as tmp:
