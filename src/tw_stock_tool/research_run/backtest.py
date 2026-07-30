@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 import importlib.metadata
 import inspect
@@ -10,7 +10,7 @@ import math
 import os
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Literal, TypeAlias
 from uuid import uuid4
 
 from tw_stock_tool.analysis.analysis import build_stock_analysis
@@ -44,6 +44,14 @@ from tw_stock_tool.utils.config import (
 
 class BacktestResearchRunError(RuntimeError):
     """Raised when a Backtest Research Run cannot complete."""
+
+
+BacktestStage: TypeAlias = Literal[
+    "market_data",
+    "strategy",
+    "backtest",
+]
+BacktestStageCallback: TypeAlias = Callable[[BacktestStage], None]
 
 
 class _BacktestValidationError(ValueError):
@@ -200,6 +208,7 @@ def _validate_and_build_config(
     excel_path: str | Path | None,
     manifest_path: str | Path | None,
     market_data_loader: MarketDataLoader | None,
+    stage_callback: BacktestStageCallback | None,
 ) -> tuple[
     str,
     str,
@@ -230,6 +239,8 @@ def _validate_and_build_config(
         raise _BacktestValidationError("force_refresh must be an exact bool")
     if market_data_loader is not None and not callable(market_data_loader):
         raise _BacktestValidationError("market_data_loader must be callable or None")
+    if stage_callback is not None and not callable(stage_callback):
+        raise _BacktestValidationError("stage_callback must be callable or None")
 
     if strategy_parameters is not None and not isinstance(strategy_parameters, Mapping):
         raise _BacktestValidationError("strategy_parameters must be a Mapping or None")
@@ -414,6 +425,7 @@ def run_backtest_research(
     excel_path: str | Path | None = None,
     manifest_path: str | Path | None = None,
     market_data_loader: MarketDataLoader | None = None,
+    stage_callback: BacktestStageCallback | None = None,
 ) -> ResearchRunResult:
     try:
         (
@@ -440,6 +452,7 @@ def run_backtest_research(
             excel_path,
             manifest_path,
             market_data_loader,
+            stage_callback,
         )
     except Exception as exc:
         if isinstance(exc, BacktestResearchRunError):
@@ -451,6 +464,21 @@ def run_backtest_research(
     tool_version = _tool_version()
     loader = market_data_loader or build_legacy_market_data_loader({requested_symbol: canonical_symbol})
     context = ResearchRunContext(loader)
+
+    if stage_callback is not None:
+        try:
+            stage_callback("market_data")
+        except Exception as exc:
+            _raise_failure(
+                stage="market_data_callback",
+                original=exc,
+                run_id=run_id,
+                created_at=created_at,
+                tool_version=tool_version,
+                config=run_config,
+                context=context,
+                manifest_path=manifest_file,
+            )
 
     try:
         raw_df = context.load_market_data(
@@ -491,6 +519,21 @@ def run_backtest_research(
             manifest_path=manifest_file,
         )
 
+    if stage_callback is not None:
+        try:
+            stage_callback("strategy")
+        except Exception as exc:
+            _raise_failure(
+                stage="strategy_callback",
+                original=exc,
+                run_id=run_id,
+                created_at=created_at,
+                tool_version=tool_version,
+                config=run_config,
+                context=context,
+                manifest_path=manifest_file,
+            )
+
     try:
         strategy_df = STRATEGIES[run_config.strategy](analysis.indicator_df, **strategy_snapshot)  # type: ignore[index]
     except Exception as exc:
@@ -504,6 +547,21 @@ def run_backtest_research(
             context=context,
             manifest_path=manifest_file,
         )
+
+    if stage_callback is not None:
+        try:
+            stage_callback("backtest")
+        except Exception as exc:
+            _raise_failure(
+                stage="backtest_callback",
+                original=exc,
+                run_id=run_id,
+                created_at=created_at,
+                tool_version=tool_version,
+                config=run_config,
+                context=context,
+                manifest_path=manifest_file,
+            )
 
     try:
         raw_result = run_backtest(strategy_df, **resolved_backtest)

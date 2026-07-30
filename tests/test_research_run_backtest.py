@@ -202,6 +202,12 @@ class SuccessTests(unittest.TestCase):
         self.assertEqual(result.domain_result["Strategy"], "ma_cross")
         self.assertEqual(result.domain_result["Parameters"]["strategy"]["short_window"], 3)
 
+    def test_stage_callback_emits_in_order(self):
+        stages = []
+        with TemporaryDirectory() as tmp:
+            _run(tmp, _loader([]), stage_callback=stages.append)
+        self.assertEqual(stages, ["market_data", "strategy", "backtest"])
+
     def test_no_report_output_still_writes_success_manifest(self):
         with TemporaryDirectory() as tmp:
             result = _run(tmp, _loader([]))
@@ -273,6 +279,41 @@ class SuccessTests(unittest.TestCase):
 
 
 class FailureTests(unittest.TestCase):
+    def test_non_callable_stage_callback_fails_before_run_boundary(self):
+        with TemporaryDirectory() as tmp:
+            with self.assertRaises(BacktestResearchRunError):
+                _run(tmp, _loader([]), stage_callback=1)
+            self.assertFalse(Path(tmp, "backtest_run_manifest.json").exists())
+
+    def test_stage_callback_failure_writes_callback_manifest_and_stops_operation(self):
+        for stage in ("market_data", "strategy", "backtest"):
+            with TemporaryDirectory() as tmp, self.subTest(stage=stage):
+                calls = []
+
+                def callback(current):
+                    calls.append(current)
+                    if current == stage:
+                        raise ValueError(f"{stage} callback failed")
+
+                loader = _loader([])
+                strategy = Mock(return_value=_df())
+                strategy.__signature__ = inspect.signature(backtest_module.STRATEGIES["ma_cross_strategy"])
+                backtest = Mock(return_value={"Initial Capital": 100000})
+                patches = [patch.object(backtest_module, "STRATEGIES", {"ma_cross_strategy": strategy}),
+                           patch.object(backtest_module, "run_backtest", backtest)]
+                with patches[0], patches[1]:
+                    with self.assertRaises(BacktestResearchRunError) as raised:
+                        _run(tmp, loader, stage_callback=callback)
+                manifest = load_run_manifest_json(Path(tmp, "backtest_run_manifest.json").read_text(encoding="utf-8"))
+            expected_calls = ["market_data"] if stage == "market_data" else ["market_data", "strategy"] if stage == "strategy" else ["market_data", "strategy", "backtest"]
+            self.assertEqual(calls, expected_calls)
+            self.assertEqual(manifest.errors, (f"{stage}_callback: {stage} callback failed",))
+            self.assertIsInstance(raised.exception.__cause__, ValueError)
+            if stage == "strategy":
+                strategy.assert_not_called()
+            if stage == "backtest":
+                backtest.assert_not_called()
+
     def test_real_exporters_write_markdown_and_excel(self):
         with TemporaryDirectory() as tmp:
             markdown = Path(tmp) / "report.md"
