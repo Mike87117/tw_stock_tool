@@ -1,244 +1,137 @@
-import sys
-import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest.mock import Mock, patch
+import subprocess
+import sys
+import tempfile
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
+from tw_stock_tool.application.research_run import DailyRunRequest, SymbolRequest
 from tw_stock_tool.cli import daily_report_cli
 from tw_stock_tool.cli.daily_report_cli import _parse_args, main
+from tw_stock_tool.research_run.daily import DailyReportResearchRunError
+from tw_stock_tool.research_run.models import ArtifactReference
+
+
+def _result(*, json: bool = True, excel: bool = True):
+    artifacts = [ArtifactReference("daily_report_markdown", "reports/daily_report.md", "text/markdown", None)]
+    if json:
+        artifacts.append(ArtifactReference("daily_report_json", "reports/daily_report.json", "application/json", 1))
+    if excel:
+        artifacts.append(ArtifactReference("daily_report_excel", "reports/daily_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", None))
+    return SimpleNamespace(generated_artifacts=tuple(artifacts), domain_result=SimpleNamespace())
 
 
 class TestDailyReportCli(unittest.TestCase):
-    def test_parse_args_defaults_and_custom_values(self):
-        args = _parse_args([])
-        self.assertIsNone(args.stocks)
-        self.assertEqual(args.stock_market, "all")
-        self.assertEqual(args.output_dir, "output")
-        self.assertIsNone(args.output_md)
-        self.assertIsNone(args.output_json)
-        self.assertFalse(args.overwrite)
-        custom = _parse_args(["--stocks", "2330", "2317", "--output-md", "test.md"])
-        self.assertEqual(custom.stocks, ["2330", "2317"])
-        self.assertEqual(custom.output_md, "test.md")
+    def setUp(self) -> None:
+        self.symbols = (SymbolRequest("2330", "2330.TW"),)
 
-        json_default = _parse_args(["--output-json"])
-        self.assertEqual(json_default.output_json, "")
-        json_custom = _parse_args(["--output-json", "custom/report.json", "--overwrite"])
-        self.assertEqual(json_custom.output_json, "custom/report.json")
-        self.assertTrue(json_custom.overwrite)
+    def _args(self, extra: list[str] | None = None):
+        return _parse_args(["--stocks", "2330", *(extra or [])])
 
-    def test_config_adapter_converts_signals_to_tuple(self):
-        args = _parse_args(["--signals", "BUY", "WATCH", "--output-excel", "daily.xlsx"])
-        config = daily_report_cli._pipeline_config_from_args(args)
-        self.assertEqual(config.signals, ("BUY", "WATCH"))
-        self.assertEqual(config.output_excel, "daily.xlsx")
+    def test_parse_args_manifest_default_and_custom(self):
+        self.assertIsNone(_parse_args([]).manifest_path)
+        self.assertEqual(_parse_args(["--manifest-path", "custom/daily.json"]).manifest_path, "custom/daily.json")
 
-    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_calls_pipeline_and_writes_default_markdown(
-        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
-    ):
-        mock_run.return_value = Mock(markdown="# Report")
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-md"]):
-            result = main()
-        self.assertIsNone(result)
-        mock_collect.assert_called_once()
-        mock_run.assert_called_once()
-        config = mock_run.call_args.args[1]
-        self.assertEqual(config.signals, ("BUY", "WATCH"))
-        self.assertEqual(config.output_excel, None)
-        mock_open.assert_called_once_with(Path("output/daily_report.md"), "w", encoding="utf-8")
-        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
-        self.assertTrue(callable(mock_run.call_args.kwargs["status_callback"]))
-        mock_export.assert_not_called()
+    def test_main_builds_exact_request_and_calls_service_once(self):
+        args = self._args(["--stock-market", "twse", "--output-md", "custom/report.md", "--output-json", "custom/report.json", "--output-excel", "daily.xlsx", "--overwrite", "--manifest-path", "custom/manifest.json"])
+        with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+            with patch.object(daily_report_cli, "run_daily", return_value=_result()) as run:
+                with patch.object(daily_report_cli, "_parse_args", return_value=args):
+                    with redirect_stdout(StringIO()):
+                        self.assertIsNone(main())
+        run.assert_called_once()
+        request = run.call_args.args[0]
+        self.assertIsInstance(request, DailyRunRequest)
+        self.assertEqual(request.symbols, self.symbols)
+        self.assertEqual(request.universe, "twse")
+        self.assertEqual(request.output_dir, "output")
+        self.assertEqual(request.markdown_path, "custom/report.md")
+        self.assertEqual(request.json_path, "custom/report.json")
+        self.assertEqual(request.manifest_path, "custom/manifest.json")
+        self.assertTrue(request.json_overwrite)
+        self.assertEqual(request.config.output_excel, "daily.xlsx")
+        self.assertIs(run.call_args.kwargs["status_callback"], print)
 
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_writes_custom_markdown_and_forwards_excel(self, mock_open, mock_mkdir, mock_collect, mock_run):
-        mock_run.return_value = Mock(markdown="# Report")
-        with patch.object(sys, "argv", [
-            "daily_report_cli.py", "--stocks", "2330",
-            "--output-md", "custom/report.md", "--output-excel", "daily.xlsx",
-        ]):
-            result = main()
-        self.assertIsNone(result)
-        self.assertEqual(mock_run.call_args.args[1].output_excel, "daily.xlsx")
-        mock_open.assert_called_once_with(Path("custom/report.md"), "w", encoding="utf-8")
+    def test_default_and_empty_markdown_json_paths(self):
+        cases = [
+            ([], None, None),
+            (["--output-md"], None, None),
+            (["--output-md", "custom.md", "--output-json"], "custom.md", Path("output/daily_report.json")),
+            (["--output-json", "custom.json"], None, "custom.json"),
+        ]
+        for extra, expected_md, expected_json in cases:
+            with self.subTest(extra=extra):
+                with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+                    with patch.object(daily_report_cli, "run_daily", return_value=_result(json=expected_json is not None)) as run:
+                        with patch.object(daily_report_cli, "_parse_args", return_value=self._args(extra)):
+                            with redirect_stdout(StringIO()):
+                                self.assertIsNone(main())
+                request = run.call_args.args[0]
+                self.assertEqual(request.markdown_path, expected_md)
+                self.assertEqual(request.json_path, expected_json)
 
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_uses_custom_output_directory(self, mock_open, mock_mkdir, mock_collect, mock_run):
-        mock_run.return_value = Mock(markdown="# Report")
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-dir", "reports"]):
-            self.assertIsNone(main())
-        mock_open.assert_called_once_with(Path("reports/daily_report.md"), "w", encoding="utf-8")
-        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
-
-
-    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_exports_default_json_from_pipeline_result(
-        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
-    ):
-        report_data = {"sentinel": object()}
-        mock_run.return_value = Mock(markdown="# Report", report_data=report_data)
-        exported_path = Path("C:/exports/daily_report.json")
-        mock_export.return_value = exported_path
+    def test_success_prints_markdown_and_json_but_no_new_excel_line(self):
         output = StringIO()
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--output-json"]), patch.object(
-            sys, "stdout", output
-        ):
-            self.assertIsNone(main())
-        mock_export.assert_called_once_with(
-            report_data,
-            Path("output/daily_report.json"),
-            overwrite=False,
-        )
-        self.assertIs(mock_export.call_args.args[0], mock_run.return_value.report_data)
-        self.assertIn(str(exported_path), output.getvalue())
-        mock_run.assert_called_once()
+        with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+            with patch.object(daily_report_cli, "run_daily", return_value=_result()):
+                with patch.object(daily_report_cli, "_parse_args", return_value=self._args(["--output-json"])):
+                    with redirect_stdout(output):
+                        self.assertIsNone(main())
+        text = output.getvalue()
+        self.assertIn("Markdown report exported to reports/daily_report.md", text)
+        self.assertIn("JSON artifact exported to reports/daily_report.json", text)
+        self.assertIn("Process completed successfully.", text)
+        self.assertNotIn("Excel report:", text)
 
-    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_uses_output_dir_for_default_json_path(
-        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
-    ):
-        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-dir", "reports", "--output-json"]):
-            self.assertIsNone(main())
-        self.assertEqual(mock_export.call_args.args[1], Path("reports/daily_report.json"))
-
-    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_uses_custom_json_path_without_output_dir(
-        self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export
-    ):
-        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
-        with patch.object(sys, "argv", [
-            "daily_report_cli.py", "--output-dir", "reports", "--output-json", "custom/report.json",
-        ]):
-            self.assertIsNone(main())
-        self.assertEqual(mock_export.call_args.args[1], Path("custom/report.json"))
-
-    @patch("tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file")
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_main_forwards_json_overwrite(self, mock_open, mock_mkdir, mock_collect, mock_run, mock_export):
-        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-json", "--overwrite"]):
-            self.assertIsNone(main())
-        self.assertTrue(mock_export.call_args.kwargs["overwrite"])
-
-    @patch(
-        "tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file",
-        side_effect=FileExistsError("File already exists: report.json"),
-    )
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_json_file_exists_returns_one_and_mentions_overwrite(
-        self, mock_open, mock_collect, mock_run, mock_export
-    ):
-        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+    def test_no_input_is_rejected_before_service_call(self):
         output = StringIO()
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-json"]), patch.object(
-            sys, "stdout", output
-        ):
-            self.assertEqual(main(), 1)
-        self.assertIn("File already exists", output.getvalue())
-        self.assertIn("--overwrite", output.getvalue())
-        self.assertNotIn("Process completed successfully", output.getvalue())
+        with patch.object(daily_report_cli, "collect_symbol_requests", side_effect=ValueError("No stock ids provided. Use --stocks, --file, or --auto-stock-list.")):
+            with patch.object(daily_report_cli, "run_daily") as run:
+                with patch.object(daily_report_cli, "_parse_args", return_value=_parse_args([])):
+                    with redirect_stdout(output):
+                        self.assertEqual(main(), 1)
+        run.assert_not_called()
+        self.assertIn("No stock ids provided", output.getvalue())
 
-    @patch(
-        "tw_stock_tool.cli.daily_report_cli.export_daily_report_json_file",
-        side_effect=PermissionError("locked"),
-    )
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_json_export_failure_returns_one(self, mock_open, mock_collect, mock_run, mock_export):
-        mock_run.return_value = Mock(markdown="# Report", report_data={"ok": True})
+    def test_nested_file_exists_error_preserves_overwrite_guidance(self):
+        original = FileExistsError("File already exists: report.json")
+        error = DailyReportResearchRunError("json_export: File already exists: report.json")
+        error.__cause__ = original
         output = StringIO()
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--output-json"]), patch.object(
-            sys, "stdout", output
-        ):
-            self.assertEqual(main(), 1)
-        self.assertIn("locked", output.getvalue())
-        self.assertNotIn("Process completed successfully", output.getvalue())
+        with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+            with patch.object(daily_report_cli, "run_daily", side_effect=error):
+                with patch.object(daily_report_cli, "_parse_args", return_value=self._args(["--output-json"])):
+                    with redirect_stdout(output):
+                        self.assertEqual(main(), 1)
+        self.assertIn("Use --overwrite to replace existing files.", output.getvalue())
 
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline", return_value=Mock(markdown="# Report"))
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("builtins.open", side_effect=PermissionError("locked"))
-    def test_markdown_write_failure_returns_one(self, mock_open, mock_collect, mock_run):
+    def test_generic_wrapped_error_returns_one(self):
+        error = DailyReportResearchRunError("daily stage failed")
+        error.__cause__ = RuntimeError("network")
         output = StringIO()
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330"]), patch.object(
-            sys, "stdout", output
-        ):
-            result = main()
-        self.assertEqual(result, 1)
-        self.assertIn("Error:", output.getvalue())
-        self.assertIn("locked", output.getvalue())
+        with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+            with patch.object(daily_report_cli, "run_daily", side_effect=error):
+                with patch.object(daily_report_cli, "_parse_args", return_value=self._args()):
+                    with redirect_stdout(output):
+                        self.assertEqual(main(), 1)
+        self.assertIn("Error: daily stage failed", output.getvalue())
 
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=[])
-    def test_no_stocks_are_rejected_by_the_core_runner(self, mock_collect, mock_run):
-        mock_run.side_effect = ValueError("No stocks provided.")
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks"]):
-            result = main()
-        self.assertEqual(result, 1)
-        mock_run.assert_called_once()
-
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    def test_pipeline_exception_returns_one(self, mock_collect, mock_run):
-        mock_run.side_effect = RuntimeError("pipeline failed")
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330"]):
-            result = main()
-        self.assertEqual(result, 1)
-
-    def test_invalid_dependency_exits_two_before_pipeline(self):
-        with self.assertRaises(SystemExit) as raised:
-            _parse_args(["--parameter-sweep-top", "1"])
+    def test_argparse_failure_remains_system_exit_two(self):
+        with redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit) as raised:
+                _parse_args(["--validation-position-size", "0"])
         self.assertEqual(raised.exception.code, 2)
 
-    def test_parser_rejects_invalid_numeric_values(self):
-        for argv in (
-            ["--validate-top", "-1"],
-            ["--validation-initial-capital", "0"],
-            ["--validation-fee-rate", "-0.1"],
-            ["--validation-tax-rate", "nan"],
-            ["--validation-position-size", "1.1"],
-            ["--walk-forward-train-days", "0"],
-            ["--walk-forward-test-days", "0"],
-            ["--walk-forward-step-days", "0"],
-        ):
-            with self.subTest(argv=argv), self.assertRaises(SystemExit) as raised:
-                _parse_args(argv)
-            self.assertEqual(raised.exception.code, 2)
-
-    def test_macd_remains_valid_for_backtest_only(self):
-        args = _parse_args(["--validate-top", "1", "--validation-strategy", "macd"])
-        self.assertEqual(args.validation_strategy, "macd")
+    def test_package_and_unified_process_failure_exit_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = str(Path(directory) / "missing.txt")
+            package = subprocess.run([sys.executable, "-m", "tw_stock_tool.cli.daily_report_cli", "--file", missing], capture_output=True, text=True)
+            self.assertEqual(package.returncode, 1)
+            unified = subprocess.run([sys.executable, "-m", "tw_stock_tool.cli.twstock_cli", "daily", "--file", missing], capture_output=True, text=True)
+            self.assertEqual(unified.returncode, 1)
 
 
 if __name__ == "__main__":

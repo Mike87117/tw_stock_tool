@@ -2,8 +2,11 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from tw_stock_tool.application.research_run import BacktestRunRequest, run_backtest
+from tw_stock_tool.application.symbol_resolution import resolve_symbol_request
+from tw_stock_tool.cli._research_run_cli import artifact_path
 from tw_stock_tool.analysis.analysis import analyze_stock
-from tw_stock_tool.backtesting.backtest import run_backtest
+from tw_stock_tool.backtesting.backtest import run_backtest as legacy_run_backtest
 from tw_stock_tool.backtesting.strategies import STRATEGIES
 from tw_stock_tool.reports.backtest_report import (
     export_backtest_report_markdown,
@@ -23,9 +26,9 @@ def _normalize_result(
     strategy: str,
     start_date: str,
     end_date: str,
-    parameters: dict[str, Any]
+    parameters: dict[str, Any],
 ) -> dict[str, Any]:
-    """Ensure result dictionary has metadata for reporting."""
+    """Legacy result normalizer retained for compatibility imports."""
     result = raw_result.copy()
     result["Stock"] = stock
     result["Strategy"] = strategy
@@ -56,6 +59,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stop-loss-pct", type=float, default=None, help="Stop-loss threshold percentage")
     parser.add_argument("--take-profit-pct", type=float, default=None, help="Take-profit threshold percentage")
     parser.add_argument("--max-hold-days", type=int, default=None, help="Max holding days")
+    parser.add_argument("--manifest-path", default=None)
     return parser.parse_args(argv)
 
 
@@ -80,6 +84,16 @@ def _build_strategy_params(args: argparse.Namespace, strategy_name: str) -> dict
     return {}
 
 
+def _stage_callback(args: argparse.Namespace, strategy_name: str):
+    def stage_callback(stage: str) -> None:
+        if stage == "market_data":
+            print(f"Fetching data for {args.stock} (period={args.period})...")
+        elif stage == "strategy":
+            print(f"Applying strategy {strategy_name}...")
+        elif stage == "backtest":
+            print(f"Running backtest with initial capital {args.initial_capital}...")
+    return stage_callback
+
 
 def main() -> int | None:
     try:
@@ -92,63 +106,56 @@ def main() -> int | None:
             else:
                 raise ValueError(f"Unknown strategy: {args.strategy}")
 
-        strategy_func = STRATEGIES[strategy_name]
-
-        # Prepare strategy parameters
-        params = _build_strategy_params(args, strategy_name)
-
-        print(f"Fetching data for {args.stock} (period={args.period})...")
-        analysis = analyze_stock(
-            stock_id=args.stock,
+        resolved_symbol = resolve_symbol_request(
+            args.stock,
+            market_hint="all",
+        )
+        strategy_parameters = _build_strategy_params(args, strategy_name)
+        markdown_path = (
+            None
+            if args.output_md is None
+            else args.output_md or str(Path(args.output_dir) / "backtest_report.md")
+        )
+        excel_path = (
+            None
+            if args.output_excel is None
+            else args.output_excel or str(Path(args.output_dir) / "backtest_report.xlsx")
+        )
+        request = BacktestRunRequest(
+            symbol=resolved_symbol,
+            strategy=args.strategy,
+            output_dir=args.output_dir,
             period=args.period,
             force_refresh=args.force_refresh,
+            strategy_parameters=strategy_parameters,
+            backtest_parameters=build_backtest_parameters(args),
+            markdown_path=markdown_path,
+            excel_path=excel_path,
+            manifest_path=(
+                getattr(args, "manifest_path", None)
+                if isinstance(getattr(args, "manifest_path", None), (str, Path))
+                else None
+            ),
         )
-
-        print(f"Applying strategy {strategy_name}...")
-        df_exec = strategy_func(analysis.indicator_df, **params)
-
-        print(f"Running backtest with initial capital {args.initial_capital}...")
-        bt_params = build_backtest_parameters(args)
-        raw_result = run_backtest(df_exec, **bt_params)
-
-        start_date = df_exec.index[0].strftime('%Y-%m-%d') if not df_exec.empty else "N/A"
-        end_date = df_exec.index[-1].strftime('%Y-%m-%d') if not df_exec.empty else "N/A"
-
-        report_params = {
-            "strategy": params,
-            "backtest": bt_params,
-        }
-
-        result = _normalize_result(
-            raw_result=raw_result,
-            stock=args.stock,
-            strategy=args.strategy,
-            start_date=start_date,
-            end_date=end_date,
-            parameters=report_params,
+        result = run_backtest(
+            request,
+            stage_callback=_stage_callback(args, strategy_name),
         )
-
-        out_dir = Path(args.output_dir)
 
         if args.output_excel is not None:
-            excel_output = args.output_excel or str(out_dir / "backtest_report.xlsx")
-            excel_path = export_backtest_report_excel(result, excel_output)
-            print(f"Excel report: {excel_path}")
-
+            print(f"Excel report: {artifact_path(result, 'backtest_report_excel')}")
         if args.output_md is not None:
-            md_output = args.output_md or str(out_dir / "backtest_report.md")
-            md_path = export_backtest_report_markdown(result, md_output)
-            print(f"Markdown report: {md_path}")
-
+            print(f"Markdown report: {artifact_path(result, 'backtest_report_markdown')}")
         if args.output_excel is None and args.output_md is None:
+            summary = result.domain_result
             print("Backtest finished. Summary:")
-            print(f"  Total Return: {result.get('Total Return %', 0)}%")
-            print(f"  Win Rate: {result.get('Win Rate %', 0)}%")
-            print(f"  Trades: {result.get('Trade Count', 0)}")
-
+            print(f"  Total Return: {summary.get('Total Return %', 0)}%")
+            print(f"  Win Rate: {summary.get('Win Rate %', 0)}%")
+            print(f"  Trades: {summary.get('Trade Count', 0)}")
     except Exception as exc:
         print(f"Error: {exc}")
         return 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -1,7 +1,12 @@
 import argparse
 import math
-from pathlib import Path
 
+from tw_stock_tool.application.research_run import DailyRunRequest, run_daily
+from tw_stock_tool.cli._research_run_cli import (
+    artifact_path,
+    collect_symbol_requests,
+    find_exception_cause,
+)
 from tw_stock_tool.backtesting.parameter_sweep import SORTABLE_COLUMNS as PARAMETER_SWEEP_SORTABLE_COLUMNS
 from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS as WALK_FORWARD_SORTABLE_COLUMNS
 from tw_stock_tool.reports.daily_pipeline import (
@@ -12,6 +17,7 @@ from tw_stock_tool.reports.daily_pipeline import (
 from tw_stock_tool.reports.daily_report import DEFAULT_MIN_SCORE, DEFAULT_SIGNALS, DEFAULT_TOP, collect_stock_ids
 from tw_stock_tool.reports.daily_report_serialization_files import export_daily_report_json_file
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, TAX_RATE
+from pathlib import Path
 
 
 def _validated_float(
@@ -102,6 +108,7 @@ def _pipeline_config_from_args(args: argparse.Namespace) -> DailyPipelineConfig:
     validate_daily_pipeline_config(config)
     return config
 
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Daily Report CLI")
     parser.add_argument("--stocks", nargs="*", help="Stock id list")
@@ -150,6 +157,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Replace existing JSON output artifacts.",
     )
+    parser.add_argument("--manifest-path", default=None)
     args = parser.parse_args(argv)
     try:
         _pipeline_config_from_args(args)
@@ -161,9 +169,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main() -> int | None:
     try:
         args = _parse_args()
-        stock_ids = collect_stock_ids(
-            args.stocks,
-            args.file,
+        resolved_symbol_requests = collect_symbol_requests(
+            stocks=args.stocks,
+            file_path=args.file,
             auto_stock_list=args.auto_stock_list,
             stock_market=args.stock_market,
             stock_list_output=args.stock_list_output,
@@ -173,35 +181,40 @@ def main() -> int | None:
             random_state=args.random_state,
         )
         config = _pipeline_config_from_args(args)
-        result = run_daily_research_pipeline(
-            stock_ids,
-            config,
-            status_callback=print,
+        markdown_path = None if args.output_md in (None, "") else args.output_md
+        if args.output_json is None:
+            json_path = None
+        elif args.output_json == "":
+            json_path = Path(args.output_dir) / "daily_report.json"
+        else:
+            json_path = args.output_json
+        request = DailyRunRequest(
+            symbols=resolved_symbol_requests,
+            universe=args.stock_market,
+            config=config,
+            output_dir=args.output_dir,
+            markdown_path=markdown_path,
+            json_path=json_path,
+            manifest_path=(
+                getattr(args, "manifest_path", None)
+                if isinstance(getattr(args, "manifest_path", None), (str, Path))
+                else None
+            ),
+            json_overwrite=args.overwrite,
         )
-        output_md = Path(args.output_dir) / "daily_report.md" if args.output_md in (None, "") else Path(args.output_md)
-        output_md.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_md, "w", encoding="utf-8") as file:
-            file.write(result.markdown)
-        print(f"\nMarkdown report exported to {output_md}")
-        output_json_arg = getattr(args, "output_json", None)
-        if output_json_arg is not None:
-            output_json = (
-                Path(args.output_dir) / "daily_report.json"
-                if output_json_arg == ""
-                else Path(output_json_arg)
-            )
-            exported_json = export_daily_report_json_file(
-                result.report_data,
-                output_json,
-                overwrite=getattr(args, "overwrite", False),
-            )
-            print(f"JSON artifact exported to {exported_json}")
+        result = run_daily(request, status_callback=print)
+        markdown = artifact_path(result, "daily_report_markdown")
+        if markdown:
+            print(f"\nMarkdown report exported to {markdown}")
+        json_artifact = artifact_path(result, "daily_report_json")
+        if json_artifact:
+            print(f"JSON artifact exported to {json_artifact}")
         print("\nProcess completed successfully.")
-    except FileExistsError as exc:
-        print(f"Error: {exc}. Use --overwrite to replace existing files.")
-        return 1
     except Exception as exc:
-        print(f"Error: {exc}")
+        if find_exception_cause(exc, FileExistsError) is not None:
+            print(f"Error: {exc}. Use --overwrite to replace existing files.")
+        else:
+            print(f"Error: {exc}")
         return 1
 
 

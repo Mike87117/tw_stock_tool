@@ -837,5 +837,32 @@ class DailyReportArtifactUnifiedCliTests(unittest.TestCase):
         self.assertIn("run research-only multi-symbol simulated portfolio trading", text)
 
 
+    def test_research_cli_manifest_options_passthrough(self) -> None:
+        cases = [
+            ("scan", twstock_cli.scan_stocks, "scan_stocks.py"),
+            ("daily", twstock_cli.daily_report_cli, "daily_report_cli.py"),
+            ("backtest-report", twstock_cli.backtest_report, "backtest_report.py"),
+        ]
+        for command, module, program in cases:
+            with self.subTest(command=command):
+                captured: list[list[str]] = []
+
+                def fake_main() -> None:
+                    captured.append(sys.argv[:])
+
+                with patch.object(module, "main", side_effect=fake_main) as mocked:
+                    status = twstock_cli.main([command, "--manifest-path", "custom/manifest.json"])
+                self.assertEqual(status, 0)
+                mocked.assert_called_once_with()
+                self.assertEqual(captured, [[program, "--manifest-path", "custom/manifest.json"]])
+
+    def test_research_cli_passthrough_status_and_argv_contract(self) -> None:
+        original = sys.argv[:]
+        for command, module in (("scan", twstock_cli.scan_stocks), ("daily", twstock_cli.daily_report_cli), ("backtest-report", twstock_cli.backtest_report)):
+            with self.subTest(command=command):
+                with patch.object(module, "main", return_value=1) as mocked:
+                    self.assertEqual(twstock_cli.main([command]), 1)
+                mocked.assert_called_once_with()
+                self.assertEqual(sys.argv, original)
 if __name__ == "__main__":
     unittest.main()
