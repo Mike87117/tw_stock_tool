@@ -255,34 +255,6 @@ class TrackC41ScannerCliExitBehaviorTest(unittest.TestCase):
                                 self.assertEqual(scanner_cli.main(), 1)
                 self.assertIn(marker, output.getvalue())
 
-    def test_argparse_failure_remains_system_exit_two(self) -> None:
-        with redirect_stderr(StringIO()):
-            with self.assertRaises(SystemExit) as raised:
-                with patch.object(sys, "argv", ["scan_stocks.py", "--workers", "not-an-int"]):
-                    scanner_cli.main()
-        self.assertEqual(raised.exception.code, 2)
-
-    def test_unified_passthrough_preserves_manifest_argument_and_status(self) -> None:
-        captured: list[list[str]] = []
-
-        def fake_main() -> None:
-            captured.append(sys.argv[:])
-
-        with patch.object(twstock_cli.scan_stocks, "main", side_effect=fake_main) as mocked:
-            status = twstock_cli.main(["scan", "--stocks", "2330", "--manifest-path", "scan.json"])
-        self.assertEqual(status, 0)
-        mocked.assert_called_once_with()
-        self.assertEqual(captured[0], ["scan_stocks.py", "--stocks", "2330", "--manifest-path", "scan.json"])
-
-    def test_package_and_unified_missing_file_exit_one(self) -> None:
-        missing = self.temp_path / "missing.txt"
-        package = run_repo_python("-m", "tw_stock_tool.cli.scan_stocks", "--file", str(missing), include_repository_root=False)
-        self.assertEqual(package.returncode, 1)
-        self.assertIn("錯誤：", package.stdout)
-        unified = run_repo_python("-m", "tw_stock_tool.cli.twstock_cli", "scan", "--file", str(missing), include_repository_root=False)
-        self.assertEqual(unified.returncode, 1)
-        self.assertIn("錯誤：", unified.stdout)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,10 +2,14 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import requests
-import yfinance as yf
 
-from tw_stock_tool.utils.config import CACHE_DIR, DEFAULT_AUTO_ADJUST, VALID_INTERVALS, VALID_PERIODS, MAX_STALE_CACHE_DAYS
+from tw_stock_tool.utils.config import (
+    CACHE_DIR,
+    DEFAULT_AUTO_ADJUST,
+    MAX_STALE_CACHE_DAYS,
+    VALID_INTERVALS,
+    VALID_PERIODS,
+)
 from tw_stock_tool.data import cache_runtime as _cache_runtime
 from tw_stock_tool.data import fallback_orchestration as _fallback_orchestration
 from tw_stock_tool.data import ohlcv_normalization as _ohlcv_normalization
@@ -16,13 +20,14 @@ from tw_stock_tool.data.providers import (
     yfinance_provider,
 )
 
+# Compatibility aliases for callers that historically patched provider modules
+# through data_loader. New owner tests patch the provider modules directly.
+requests = twse_provider.requests
+yf = yfinance_provider.yf
+
 
 class DataLoaderError(Exception):
     pass
-
-
-def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    return _ohlcv_normalization.normalize_columns(df)
 
 
 def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
@@ -40,7 +45,13 @@ def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
 
 
 def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool) -> Path:
-    return _cache_runtime._cache_path(symbol, period, interval, auto_adjust, cache_dir=CACHE_DIR)
+    return _cache_runtime._cache_path(
+        symbol,
+        period,
+        interval,
+        auto_adjust,
+        cache_dir=CACHE_DIR,
+    )
 
 
 def _is_cache_fresh(path: Path) -> bool:
@@ -57,11 +68,13 @@ def _read_cache(path: Path) -> pd.DataFrame:
 
 def _write_cache(df: pd.DataFrame, path: Path) -> None:
     _cache_runtime._write_cache(df, path)
+
+
 def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return _ohlcv_normalization.prepare_ohlcv(
         df,
         symbol,
-        normalize_columns=_normalize_columns,
+        normalize_columns=_ohlcv_normalization.normalize_columns,
         error_type=DataLoaderError,
     )
 
@@ -163,7 +176,12 @@ def _download_tpex_latest_quote(
     )
 
 
-def _download_official_stock(stock_id: str, suffix: str, period: str, interval: str) -> pd.DataFrame:
+def _download_official_stock(
+    stock_id: str,
+    suffix: str,
+    period: str,
+    interval: str,
+) -> pd.DataFrame:
     if suffix == ".TW":
         return _download_twse_stock(stock_id, period, interval)
     if suffix == ".TWO":
@@ -245,4 +263,3 @@ def download_tw_stock(
         default_auto_adjust=DEFAULT_AUTO_ADJUST,
         max_stale_cache_days=MAX_STALE_CACHE_DAYS,
     )
-
