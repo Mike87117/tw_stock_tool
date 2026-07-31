@@ -23,7 +23,13 @@ class _Path:
 
 def _frame(value: int = 1) -> pd.DataFrame:
     return pd.DataFrame(
-        {"Open": [value], "High": [value], "Low": [value], "Close": [value], "Volume": [value]},
+        {
+            "Open": [value],
+            "High": [value],
+            "Low": [value],
+            "Close": [value],
+            "Volume": [value],
+        },
         index=pd.to_datetime(["2024-01-01"]),
     )
 
@@ -44,17 +50,23 @@ class FallbackOrchestrationTest(unittest.TestCase):
             "validate_inputs": Mock(),
             "symbol_candidates": Mock(return_value=self.candidates),
             "build_cache_path": Mock(
-                side_effect=lambda symbol, period, interval, auto_adjust: self.paths[symbol]
+                side_effect=lambda symbol, period, interval, auto_adjust: self.paths[
+                    symbol
+                ]
             ),
             "is_cache_fresh": Mock(return_value=False),
             "read_cache": Mock(),
             "prepare_ohlcv": Mock(side_effect=lambda frame, symbol: frame),
             "download_yfinance": Mock(return_value=pd.DataFrame()),
             "write_cache": Mock(),
-            "download_official": Mock(side_effect=RuntimeError("official unavailable")),
+            "download_official": Mock(
+                side_effect=RuntimeError("official unavailable")
+            ),
             "get_cache_age_days": Mock(return_value=1.0),
             "format_no_data_error": Mock(
-                side_effect=lambda original, tried, errors: RuntimeError("final no data")
+                side_effect=lambda original, tried, errors: RuntimeError(
+                    "final no data"
+                )
             ),
             "default_auto_adjust": True,
             "max_stale_cache_days": 7,
@@ -72,13 +84,19 @@ class FallbackOrchestrationTest(unittest.TestCase):
             **kwargs,
         )
 
+    @staticmethod
+    def _return_prepared(deps: dict[str, object], prepared: pd.DataFrame) -> None:
+        prepare = deps["prepare_ohlcv"]
+        prepare.side_effect = None
+        prepare.return_value = prepared
+
     def test_fresh_cache_precedes_live_sources_and_uses_default_adjustment(self) -> None:
         deps = self._deps()
         cached = _frame(10)
         prepared = _frame(11)
         deps["is_cache_fresh"].side_effect = [True]
         deps["read_cache"].return_value = cached
-        deps["prepare_ohlcv"].return_value = prepared
+        self._return_prepared(deps, prepared)
         stdout = StringIO()
 
         with redirect_stdout(stdout):
@@ -102,7 +120,7 @@ class FallbackOrchestrationTest(unittest.TestCase):
         prepared = _frame(21)
         self.paths["2330.TW"].present = True
         deps["download_yfinance"].return_value = downloaded
-        deps["prepare_ohlcv"].return_value = prepared
+        self._return_prepared(deps, prepared)
 
         actual, symbol = self._run(deps, force_refresh=True)
 
@@ -201,7 +219,7 @@ class FallbackOrchestrationTest(unittest.TestCase):
         stale = _frame(70)
         prepared = _frame(71)
         deps["read_cache"].return_value = stale
-        deps["prepare_ohlcv"].return_value = prepared
+        self._return_prepared(deps, prepared)
         deps["get_cache_age_days"].return_value = 2.5
         stderr = StringIO()
         stdout = StringIO()
