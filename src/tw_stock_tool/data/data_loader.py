@@ -20,6 +20,11 @@ from tw_stock_tool.data.providers import (
     yfinance_provider,
 )
 
+# Compatibility aliases for callers that historically patched provider modules
+# through data_loader. New owner tests patch the provider modules directly.
+requests = twse_provider.requests
+yf = yfinance_provider.yf
+
 
 class DataLoaderError(Exception):
     pass
