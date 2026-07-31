@@ -4,11 +4,11 @@
 
 ## 目前開發狀態
 
-- Current baseline：`main` at `09156976def5a31f32e3b719214bc70b4639752e`（2026-07-31）。
+- Phase 55.3A planning baseline：`main` at `09156976def5a31f32e3b719214bc70b4639752e`（2026-07-31）。
 - Current package version：`0.4.0`。
-- Phase 55.2 Research Run 與 Run Manifest：已完成 Scan、Daily Report、Backtest foundation。
-- Active planning phase：**Phase 55.3A — Artifact Hub 與 Research Workspace Contract Planning**。
-- Next production-code phase：Phase 55.3B Workspace Storage Foundation。
+- Latest completed product phase：Phase 55.2 Research Run 與 Run Manifest，已完成 Scan、Daily Report、Backtest foundation。
+- Current approved plan：**Phase 55.3A — Artifact Hub 與 Research Workspace Contract Planning**。
+- Next production-code phase after planning approval：Phase 55.3B Workspace Storage Foundation。
 
 目前規劃與 closeout：
 
@@ -16,7 +16,7 @@
 - [Phase 55.2 Closeout：Research Run 與 Run Manifest](archive/phase-55-2-closeout.md)
 - [產品架構與後續開發計畫](architecture/product-architecture-and-roadmap.md)
 
-若 roadmap 的歷史「下一步」敘述與上述 active planning phase 不一致，以現行 runtime、Phase 55.2 closeout 與 Phase 55.3 planning 文件為準。
+若 roadmap 的歷史「下一步」敘述與上述 approved plan 不一致，以現行 runtime、Phase 55.2 closeout 與 Phase 55.3 planning 文件為準。
 
 ## 使用者
 
@@ -44,7 +44,7 @@
 
 1. 現行 production runtime source 與 `pyproject.toml`。
 2. 現行 tests 與 CI／package smoke evidence。
-3. 最新 merged Phase closeout 與 active Phase planning 文件。
+3. 最新 merged Phase closeout 與 approved active Phase planning 文件。
 4. 架構 roadmap 與 user／developer guides。
 5. 歷史 Phase、characterization、audit 與 MVP 文件。
 
