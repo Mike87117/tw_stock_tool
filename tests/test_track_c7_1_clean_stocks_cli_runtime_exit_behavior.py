@@ -19,6 +19,10 @@ from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DE
 from tests.subprocess_test_support import run_repo_python
 
 
+# Read indirectly by the shared subprocess helper characterization suite.
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
 class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
     def _run_direct(self, *args: str) -> tuple[object, str, str]:
         stdout = StringIO()
