@@ -1605,32 +1605,6 @@ class DataLoaderTest(unittest.TestCase):
         )
         self.assertIs(actual, expected)
 
-    def test_normalize_columns_flattens_multiindex_and_preserves_identity(
-        self,
-    ) -> None:
-        columns = pd.MultiIndex.from_tuples(
-            [
-                ("Open", "2330.TW"),
-                ("High", "2330.TW"),
-                ("Low", "2330.TW"),
-                ("Close", "2330.TW"),
-                ("Volume", "2330.TW"),
-            ]
-        )
-
-        frame = pd.DataFrame(
-            [[10.0, 12.0, 9.0, 11.0, 1000]],
-            columns=columns,
-        )
-
-        actual = data_loader._normalize_columns(frame)
-
-        self.assertIs(actual, frame)
-        self.assertEqual(
-            list(actual.columns),
-            ["Open", "High", "Low", "Close", "Volume"],
-        )
-
     def test_prepare_ohlcv_selects_exact_columns_drops_unusable_rows_and_converts_index(
         self,
     ) -> None:
@@ -1731,43 +1705,6 @@ class DataLoaderTest(unittest.TestCase):
             str(caught.exception),
             "2330.TW index is not a valid DatetimeIndex.",
         )
-
-    def test_prepare_ohlcv_uses_patchable_normalize_columns_helper(
-        self,
-    ) -> None:
-        source = pd.DataFrame(
-            {"raw": [1]},
-            index=["2024-01-02"],
-        )
-
-        normalized = pd.DataFrame(
-            {
-                "Open": [10.0],
-                "High": [12.0],
-                "Low": [9.0],
-                "Close": [11.0],
-                "Volume": [1000],
-            },
-            index=["2024-01-02"],
-        )
-
-        with patch.object(
-            data_loader,
-            "_normalize_columns",
-            return_value=normalized,
-        ) as normalize:
-            actual = data_loader._prepare_ohlcv(
-                source,
-                "2330.TW",
-            )
-
-        normalize.assert_called_once_with(source)
-        self.assertEqual(
-            list(actual.columns),
-            ["Open", "High", "Low", "Close", "Volume"],
-        )
-        self.assertIsInstance(actual.index, pd.DatetimeIndex)
-        self.assertEqual(actual.index.name, "Date")
 
     def test_finalize_official_rows_empty_rows_raise_exact_error(
         self,
@@ -1961,46 +1898,6 @@ class DataLoaderTest(unittest.TestCase):
         self.assertEqual(passed_df.index.name, "Date")
         self.assertEqual(list(passed_df.index), [pd.Timestamp("2024-01-03")])
         self.assertEqual(len(passed_df), 1)
-        self.assertIs(actual, expected)
-
-    def test_normalize_columns_helper_delegates_to_normalization_module(
-        self,
-    ) -> None:
-        frame = pd.DataFrame({"raw": [1]})
-        expected = pd.DataFrame({"Open": [1]})
-
-        with patch.object(
-            data_loader._ohlcv_normalization,
-            "normalize_columns",
-            return_value=expected,
-        ) as normalize:
-            actual = data_loader._normalize_columns(frame)
-
-        normalize.assert_called_once_with(frame)
-        self.assertIs(actual, expected)
-
-    def test_prepare_ohlcv_helper_delegates_to_normalization_module(
-        self,
-    ) -> None:
-        frame = pd.DataFrame({"raw": [1]})
-        expected = _download_df()
-
-        with patch.object(
-            data_loader._ohlcv_normalization,
-            "prepare_ohlcv",
-            return_value=expected,
-        ) as prepare:
-            actual = data_loader._prepare_ohlcv(
-                frame,
-                "2330.TW",
-            )
-
-        prepare.assert_called_once_with(
-            frame,
-            "2330.TW",
-            normalize_columns=data_loader._normalize_columns,
-            error_type=data_loader.DataLoaderError,
-        )
         self.assertIs(actual, expected)
 
     def test_finalize_official_rows_helper_delegates_to_normalization_module(

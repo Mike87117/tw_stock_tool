@@ -21,6 +21,8 @@ from tests.subprocess_test_support import run_repo_python
 
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
 class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
     def _synthetic_result(self) -> benchmark_cli.BenchmarkResult:
         return benchmark_cli.BenchmarkResult(

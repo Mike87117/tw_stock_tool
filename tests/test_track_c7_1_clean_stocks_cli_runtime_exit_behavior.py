@@ -20,6 +20,8 @@ from tests.subprocess_test_support import run_repo_python
 
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
 class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
     def _run_direct(self, *args: str) -> tuple[object, str, str]:
         stdout = StringIO()

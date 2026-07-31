@@ -21,9 +21,6 @@ class DataLoaderError(Exception):
     pass
 
 
-def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    return _ohlcv_normalization.normalize_columns(df)
-
 
 def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
     if not stock_id or not stock_id.strip():
@@ -61,7 +58,7 @@ def _prepare_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return _ohlcv_normalization.prepare_ohlcv(
         df,
         symbol,
-        normalize_columns=_normalize_columns,
+        normalize_columns=_ohlcv_normalization.normalize_columns,
         error_type=DataLoaderError,
     )
 
