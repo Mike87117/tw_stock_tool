@@ -18,6 +18,7 @@ TWSE_STOCK_LIST_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_STOCK_LIST_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 VALID_MARKETS = {"twse", "tpex", "all"}
 MIN_COMMON_STOCKS = 100
+CATALOG_COLUMNS = ["Stock", "Name", "Market", "Type"]
 
 CODE_KEYS = (
     "\u516c\u53f8\u4ee3\u865f",  # TWSE: company code
@@ -131,12 +132,15 @@ def _is_common_stock_code(stock_id: str) -> bool:
 def filter_common_stocks(df: pd.DataFrame) -> pd.DataFrame:
     """Keep ordinary stock ids and exclude ETF/warrant-like products."""
     if df.empty:
-        return df.reindex(columns=["Stock", "Name", "Market", "Type"])
+        return df.reindex(columns=CATALOG_COLUMNS)
 
     filtered = df.copy()
+    for column in CATALOG_COLUMNS:
+        if column not in filtered.columns:
+            filtered[column] = ""
     filtered["Stock"] = filtered["Stock"].astype(str).str.strip()
-    filtered["Name"] = filtered.get("Name", "").astype(str).str.strip()
-    filtered["Type"] = filtered.get("Type", "").astype(str).str.strip()
+    filtered["Name"] = filtered["Name"].astype(str).str.strip()
+    filtered["Type"] = filtered["Type"].astype(str).str.strip()
     mask = filtered["Stock"].map(_is_common_stock_code)
     text = (filtered["Name"] + " " + filtered["Type"]).str.upper()
     for keyword in EXCLUDE_KEYWORDS:
@@ -148,10 +152,35 @@ def normalize_stock_list(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize, filter, sort, and de-duplicate stock rows."""
     normalized = filter_common_stocks(df)
     if normalized.empty:
-        return normalized.reindex(columns=["Stock", "Name", "Market", "Type"])
+        return normalized.reindex(columns=CATALOG_COLUMNS)
     normalized = normalized.drop_duplicates(subset=["Stock"], keep="first")
     normalized = normalized.sort_values(by="Stock", kind="mergesort").reset_index(drop=True)
-    return normalized.reindex(columns=["Stock", "Name", "Market", "Type"])
+    return normalized.reindex(columns=CATALOG_COLUMNS)
+
+
+def normalize_stock_catalog(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize common-stock catalog rows while preserving market duplicates."""
+    if not isinstance(df, pd.DataFrame):
+        raise StockListUpdaterError(
+            f"Stock catalog must be a pandas DataFrame, got {type(df).__name__}"
+        )
+    missing = [column for column in CATALOG_COLUMNS if column not in df.columns]
+    if missing:
+        raise StockListUpdaterError(
+            f"Stock catalog is missing required columns: {', '.join(missing)}"
+        )
+    normalized = filter_common_stocks(df.loc[:, CATALOG_COLUMNS])
+    if normalized.empty:
+        return normalized.reindex(columns=CATALOG_COLUMNS)
+    normalized["Market"] = normalized["Market"].astype(str).str.strip().str.upper()
+    market_order = normalized["Market"].map({"TWSE": 0, "TPEX": 1}).fillna(2)
+    normalized = (
+        normalized.assign(_market_order=market_order)
+        .sort_values(by=["Stock", "_market_order"], kind="mergesort")
+        .drop(columns=["_market_order"])
+        .reset_index(drop=True)
+    )
+    return normalized.reindex(columns=CATALOG_COLUMNS)
 
 
 def write_stock_list(df: pd.DataFrame, output: str | Path, add_suffix: bool = False) -> Path:
@@ -179,18 +208,17 @@ def _fetch_market(market: str) -> pd.DataFrame:
     raise ValueError(f"Unsupported market: {market}. Supported markets: all, tpex, twse")
 
 
-def update_stock_list(
-    market: str = "all",
-    output: str | Path = "stocks.txt",
-    allow_partial: bool = False,
-    min_common_stocks: int = MIN_COMMON_STOCKS,
-    add_suffix: bool = False,
-) -> tuple[pd.DataFrame, Path]:
-    """Fetch, normalize, and write a stock list for the selected market."""
-    selected = market.lower().strip()
+def _selected_market(market: str) -> str:
+    try:
+        selected = market.lower().strip()
+    except AttributeError as exc:
+        raise ValueError(f"Unsupported market: {market}. Supported markets: all, tpex, twse") from exc
     if selected not in VALID_MARKETS:
         raise ValueError(f"Unsupported market: {market}. Supported markets: all, tpex, twse")
+    return selected
 
+
+def _fetch_catalog_frames(selected: str, allow_partial: bool) -> pd.DataFrame:
     markets = ["twse", "tpex"] if selected == "all" else [selected]
     frames: list[pd.DataFrame] = []
     errors: list[str] = []
@@ -203,12 +231,54 @@ def update_stock_list(
     if errors and (not allow_partial or not frames):
         joined = "; ".join(errors)
         raise StockListUpdaterError(f"Failed to update stock list. {joined}")
-    elif errors and allow_partial:
+    if errors and allow_partial:
         joined = "; ".join(errors)
         print(f"Warning: Partial stock list update. Errors: {joined}", file=sys.stderr)
 
-    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    normalized = normalize_stock_list(combined)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def load_stock_market_catalog(
+    market: str = "all",
+    allow_partial: bool = False,
+    min_common_stocks: int = MIN_COMMON_STOCKS,
+) -> pd.DataFrame:
+    """Fetch a normalized, market-preserving stock catalog without writing files."""
+    selected = _selected_market(market)
+    combined = _fetch_catalog_frames(selected, allow_partial)
+    catalog = normalize_stock_catalog(combined)
+    if len(catalog) < min_common_stocks:
+        raise StockListUpdaterError(
+            "Abnormally few common stocks parsed: "
+            f"{len(catalog)} < {min_common_stocks}. "
+            "Official data format may have changed."
+        )
+    return catalog.copy(deep=True)
+
+
+def update_stock_list(
+    market: str = "all",
+    output: str | Path = "stocks.txt",
+    allow_partial: bool = False,
+    min_common_stocks: int = MIN_COMMON_STOCKS,
+    add_suffix: bool = False,
+    *,
+    _preloaded_catalog: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, Path]:
+    """Fetch, normalize, and write a stock list for the selected market."""
+    selected = _selected_market(market)
+    if _preloaded_catalog is None:
+        catalog = load_stock_market_catalog(
+            market=selected,
+            allow_partial=allow_partial,
+            min_common_stocks=min_common_stocks,
+        )
+    else:
+        catalog = normalize_stock_catalog(_preloaded_catalog)
+        if selected != "all":
+            catalog = catalog[catalog["Market"] == selected.upper()].reset_index(drop=True)
+
+    normalized = normalize_stock_list(catalog)
     if len(normalized) < min_common_stocks:
         raise StockListUpdaterError(
             "Abnormally few common stocks parsed: "

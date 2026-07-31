@@ -84,7 +84,7 @@ def build_legacy_market_data_loader(
 
         try:
             data, actual_canonical = fallback_orchestration.download_tw_stock(
-                requested_symbol,
+                expected_canonical,
                 period=period,
                 interval=interval,
                 auto_adjust=auto_adjust,

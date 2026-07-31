@@ -245,6 +245,132 @@ class StockListUpdaterTest(unittest.TestCase):
         args = stock_list_updater._parse_args(["--add-suffix"])
         self.assertTrue(args.add_suffix)
 
+    @staticmethod
+    def _catalog(*rows: tuple[str, str, str, str]) -> pd.DataFrame:
+        return pd.DataFrame(rows, columns=["Stock", "Name", "Market", "Type"])
+
+    def test_read_only_catalog_does_not_write_or_create_directories(self) -> None:
+        twse = self._catalog(("2330", "TSMC", "TWSE", "stock"))
+        with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse):
+            with patch.object(stock_list_updater, "write_stock_list") as write:
+                with patch.object(Path, "mkdir") as mkdir, patch.object(Path, "write_text") as write_text:
+                    result = stock_list_updater.load_stock_market_catalog("twse", min_common_stocks=1)
+        self.assertEqual(result["Stock"].tolist(), ["2330"])
+        write.assert_not_called()
+        mkdir.assert_not_called()
+        write_text.assert_not_called()
+
+    def test_catalog_market_selection_and_cross_market_duplicates(self) -> None:
+        twse = self._catalog(("2330", "TSMC", "TWSE", "stock"), ("1101", "TCC", "TWSE", "stock"))
+        tpex = self._catalog(("2330", "duplicate", "TPEX", "stock"), ("8069", "E Ink", "TPEX", "stock"))
+        with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse) as twse_fetch:
+            with patch.object(stock_list_updater, "fetch_tpex_stock_list", return_value=tpex) as tpex_fetch:
+                all_catalog = stock_list_updater.load_stock_market_catalog("all", min_common_stocks=1)
+                twse_catalog = stock_list_updater.load_stock_market_catalog("twse", min_common_stocks=1)
+                tpex_catalog = stock_list_updater.load_stock_market_catalog("tpex", min_common_stocks=1)
+        self.assertEqual(all_catalog.columns.tolist(), ["Stock", "Name", "Market", "Type"])
+        self.assertEqual(all_catalog["Stock"].tolist(), ["1101", "2330", "2330", "8069"])
+        self.assertEqual(all_catalog["Market"].tolist(), ["TWSE", "TWSE", "TPEX", "TPEX"])
+        self.assertEqual(twse_catalog["Market"].unique().tolist(), ["TWSE"])
+        self.assertEqual(tpex_catalog["Market"].unique().tolist(), ["TPEX"])
+        self.assertGreaterEqual(twse_fetch.call_count, 2)
+        self.assertGreaterEqual(tpex_fetch.call_count, 2)
+
+    def test_catalog_order_is_deterministic_and_input_is_not_mutated(self) -> None:
+        source = self._catalog(
+            ("2330", "tpex", "tpex", "stock"),
+            ("1101", "tcc", "TWSE", "stock"),
+            ("2330", "twse-first", "TWSE", "stock"),
+            ("2330", "twse-second", "TWSE", "stock"),
+        )
+        original = source.copy(deep=True)
+        result = stock_list_updater.normalize_stock_catalog(source)
+        self.assertEqual(result["Stock"].tolist(), ["1101", "2330", "2330", "2330"])
+        self.assertEqual(result["Market"].tolist(), ["TWSE", "TWSE", "TWSE", "TPEX"])
+        self.assertEqual(result["Name"].tolist(), ["tcc", "twse-first", "twse-second", "tpex"])
+        pd.testing.assert_frame_equal(source, original)
+
+    def test_catalog_partial_and_all_source_failures(self) -> None:
+        twse = self._catalog(("2330", "TSMC", "TWSE", "stock"))
+        with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse):
+            with patch.object(stock_list_updater, "fetch_tpex_stock_list", side_effect=RuntimeError("down")):
+                with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    result = stock_list_updater.load_stock_market_catalog("all", allow_partial=True, min_common_stocks=1)
+                self.assertIn("Warning: Partial stock list update. Errors: TPEX: down", stderr.getvalue())
+        self.assertEqual(result["Market"].tolist(), ["TWSE"])
+
+        with patch.object(stock_list_updater, "fetch_twse_stock_list", side_effect=RuntimeError("twse down")):
+            with patch.object(stock_list_updater, "fetch_tpex_stock_list", side_effect=RuntimeError("tpex down")):
+                with self.assertRaisesRegex(stock_list_updater.StockListUpdaterError, "Failed to update stock list"):
+                    stock_list_updater.load_stock_market_catalog("all", allow_partial=True, min_common_stocks=1)
+
+    def test_catalog_minimum_validation_counts_market_rows(self) -> None:
+        twse = self._catalog(("2330", "TSMC", "TWSE", "stock"))
+        tpex = self._catalog(("2330", "duplicate", "TPEX", "stock"))
+        with patch.object(stock_list_updater, "fetch_twse_stock_list", return_value=twse):
+            with patch.object(stock_list_updater, "fetch_tpex_stock_list", return_value=tpex):
+                result = stock_list_updater.load_stock_market_catalog("all", min_common_stocks=2)
+                self.assertEqual(len(result), 2)
+                with self.assertRaisesRegex(stock_list_updater.StockListUpdaterError, "Abnormally few"):
+                    stock_list_updater.load_stock_market_catalog("all", min_common_stocks=3)
+
+    def test_normalize_stock_catalog_rejects_malformed_structures(self) -> None:
+        with self.assertRaisesRegex(stock_list_updater.StockListUpdaterError, "pandas DataFrame"):
+            stock_list_updater.normalize_stock_catalog([])  # type: ignore[arg-type]
+        with self.assertRaisesRegex(stock_list_updater.StockListUpdaterError, "missing required"):
+            stock_list_updater.normalize_stock_catalog(pd.DataFrame({"Stock": ["2330"]}))
+
+    def test_preloaded_catalog_reuses_zero_sources_and_filters_markets(self) -> None:
+        catalog = self._catalog(
+            ("2330", "TSMC", "TWSE", "stock"),
+            ("2330", "duplicate", "TPEX", "stock"),
+            ("8069", "E Ink", "TPEX", "stock"),
+        )
+        original = catalog.copy(deep=True)
+        for market, expected, suffix, expected_lines in (
+            ("twse", ["2330"], False, ["2330"]),
+            ("tpex", ["2330", "8069"], True, ["2330.TWO", "8069.TWO"]),
+            ("all", ["2330", "8069"], True, ["2330.TW", "8069.TWO"]),
+        ):
+            with self.subTest(market=market):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    output = Path(tmp_dir) / "stocks.txt"
+                    with patch.object(stock_list_updater, "fetch_twse_stock_list") as twse_fetch:
+                        with patch.object(stock_list_updater, "fetch_tpex_stock_list") as tpex_fetch:
+                            result, path = stock_list_updater.update_stock_list(
+                                market,
+                                output,
+                                min_common_stocks=1,
+                                add_suffix=suffix,
+                                _preloaded_catalog=catalog,
+                            )
+                    twse_fetch.assert_not_called()
+                    tpex_fetch.assert_not_called()
+                    output_lines = path.read_text(encoding="utf-8").splitlines()
+                self.assertEqual(result["Stock"].tolist(), expected)
+                self.assertEqual(output_lines, expected_lines)
+        pd.testing.assert_frame_equal(catalog, original)
+
+    def test_preloaded_catalog_validates_final_output_and_writes_once(self) -> None:
+        catalog = self._catalog(("2330", "TSMC", "TWSE", "stock"))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "stocks.txt"
+            with patch.object(stock_list_updater, "write_stock_list", wraps=stock_list_updater.write_stock_list) as write:
+                stock_list_updater.update_stock_list(
+                    "twse",
+                    output,
+                    min_common_stocks=1,
+                    _preloaded_catalog=catalog,
+                )
+            write.assert_called_once()
+            with self.assertRaisesRegex(stock_list_updater.StockListUpdaterError, "Abnormally few"):
+                stock_list_updater.update_stock_list(
+                    "twse",
+                    Path(tmp_dir) / "too-small.txt",
+                    min_common_stocks=2,
+                    _preloaded_catalog=catalog,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
