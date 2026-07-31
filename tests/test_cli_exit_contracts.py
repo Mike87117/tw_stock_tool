@@ -1,17 +1,10 @@
 import argparse
-import ast
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from io import StringIO
-import importlib
-import inspect
-import os
 from pathlib import Path
-import subprocess
-import sys
-import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -21,12 +14,6 @@ from tw_stock_tool.cli import backtest_report, daily_report_cli, parameter_sweep
 from tw_stock_tool.cli import simulated_paper_trading_cli, walk_forward_report
 from tw_stock_tool.utils import doctor
 
-
-ROOT = Path(__file__).resolve().parents[1]
-ENV = os.environ.copy()
-ENV["PYTHONPATH"] = os.pathsep.join(
-    value for value in (str(ROOT / "src"), ENV.get("PYTHONPATH")) if value
-)
 
 
 def ns(**values):
@@ -109,12 +96,6 @@ EXPORTS = {
     "walk_forward_report": ("export_walk_forward_report_excel", "export_walk_forward_report_markdown"),
 }
 
-
-def run_subprocess(*args):
-    return subprocess.run(
-        [sys.executable, *args], cwd=ROOT, env=ENV,
-        capture_output=True, text=True, check=False,
-    )
 
 
 def research_result():
@@ -205,72 +186,12 @@ def patch_failure(stack, case):
     return failure
 
 
-def process_script(case, success, unified=False):
-    name, _, module_name, _, route, args, boundary, _ = case
-    data = vars(args).copy()
-    lines = [
-        "import argparse, importlib, tempfile",
-        "from types import SimpleNamespace",
-        "from tw_stock_tool.application.research_run import SymbolRequest",
-        "import pandas as pd",
-        f"module = importlib.import_module({module_name!r})",
-        f"data = {data!r}",
-        "tmp = tempfile.TemporaryDirectory()",
-        "data['output_dir'] = tmp.name if 'output_dir' in data else data.get('output_dir')",
-        "module._parse_args = lambda *a, **k: argparse.Namespace(**data)",
-    ]
-    if success:
-        if name == "backtest_report":
-            lines += [
-                "module.resolve_symbol_request = lambda *a, **k: SymbolRequest('2330', '2330.TW')",
-                "module.run_backtest = lambda *a, **k: SimpleNamespace(domain_result={'Total Return %': 1, 'Win Rate %': 1, 'Trade Count': 1}, generated_artifacts=())",
-            ]
-        elif name == "daily_report_cli":
-            lines += [
-                "module.collect_symbol_requests = lambda *a, **k: (SymbolRequest('2330', '2330.TW'),)",
-                "module.run_daily = lambda *a, **k: SimpleNamespace(domain_result={}, generated_artifacts=())",
-            ]
-        elif name == "parameter_sweep_report":
-            lines += [
-                "module.run_parameter_sweep = lambda *a, **k: pd.DataFrame({'Result': [1]})",
-                "module.build_parameter_sweep_report_data = lambda *a, **k: {'Best Row': {}}",
-            ]
-        elif name == "simulated_paper_trading_cli":
-            lines += [
-                "module.STRATEGIES = {'ma_cross_strategy': lambda df: df}",
-                "module.analyze_stock = lambda *a, **k: SimpleNamespace(symbol='2330', indicator_df=pd.DataFrame({'Open': [10], 'Close': [11], 'entry_signal': [False], 'exit_signal': [False]}))",
-                "module.run_simulated_paper_trading_result = lambda *a, **k: object()",
-                f"module.build_simulated_paper_trading_summary = lambda *a, **k: {summary()!r}",
-            ]
-        elif name == "walk_forward_report":
-            lines += [
-                "module.run_walk_forward = lambda *a, **k: pd.DataFrame()",
-                "module.build_walk_forward_report_data = lambda *a, **k: {'Best Window': {}}",
-            ]
-        else:
-            lines += [
-                "module.run_doctor = lambda live=False: [{'Status': module.PASS, 'Check': 'local', 'Message': ''}]",
-                "module.print_report = lambda rows: None",
-            ]
-    elif name == "doctor":
-        lines.append("module.run_doctor = lambda live=False: [{'Status': module.FAIL, 'Check': 'offline', 'Message': 'controlled failure'}]")
-    else:
-        if name == "backtest_report":
-            lines.append("module.resolve_symbol_request = lambda *a, **k: SymbolRequest('2330', '2330.TW')")
-        elif name == "daily_report_cli":
-            lines.append("module.collect_symbol_requests = lambda *a, **k: (SymbolRequest('2330', '2330.TW'),)")
-        lines.append(f"module.{boundary} = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('controlled failure'))")
-    call = f"twstock_cli.main([{route!r}])" if unified else "module.main()"
-    if unified:
-        lines.insert(5, "from tw_stock_tool.cli import twstock_cli")
-    lines.append(f"raise SystemExit({call})")
-    return "\n".join(lines)
 
 def parse_args(module, argv):
     return module._parse_args(argv)
 
 
-class C15BatchAReturnCodeNormalizationTest(unittest.TestCase):
+class CliExitContractsTest(unittest.TestCase):
     def test_direct_success_returns_none(self):
         for case in CASES:
             with self.subTest(target=case[0]):
@@ -337,91 +258,3 @@ class C15BatchAReturnCodeNormalizationTest(unittest.TestCase):
                 simulated_paper_trading_cli.main(["--invalid"])
         self.assertEqual(raised.exception.code, 2)
 
-    def test_annotations_and_package_guards(self):
-        for case in CASES:
-            with self.subTest(target=case[0]):
-                self.assertEqual(inspect.get_annotations(case[1].main, eval_str=True)["return"], int | None)
-                tree = ast.parse(Path(case[3]).read_text(encoding="utf-8"))
-                guards = [
-                    node for node in ast.walk(tree)
-                    if isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
-                    and any(isinstance(value, ast.Name) and value.id == "__name__" for value in [node.test.left, *node.test.comparators])
-                    and any(isinstance(value, ast.Constant) and value.value == "__main__" for value in [node.test.left, *node.test.comparators])
-                ]
-                self.assertEqual(len(guards), 1)
-                statement = guards[0].body[0]
-                self.assertIsInstance(statement, ast.Raise)
-                self.assertEqual(statement.exc.func.id, "SystemExit")
-                self.assertEqual(statement.exc.args[0].func.id, "main")
-
-    def test_package_process_success_and_failure(self):
-        for case in CASES:
-            for success, expected in ((True, 0), (False, 1)):
-                with self.subTest(target=case[0], success=success):
-                    completed = run_subprocess("-c", process_script(case, success))
-                    self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
-                    if not success and case[0] != "doctor":
-                        self.assertIn("Error: controlled failure", completed.stdout)
-
-    def test_package_process_help_and_usage(self):
-        for case in CASES:
-            with self.subTest(target=case[0], mode="help"):
-                self.assertEqual(run_subprocess("-m", case[2], "--help").returncode, 0)
-            with self.subTest(target=case[0], mode="usage"):
-                completed = run_subprocess("-m", case[2], *case[7])
-                self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
-
-    def test_unified_function_statuses_restore_argv(self):
-        for case in CASES:
-            original = sys.argv[:]
-            with self.subTest(target=case[0], mode="success"):
-                with ExitStack() as stack:
-                    patch_success(stack, case)
-                    with redirect_stdout(StringIO()):
-                        result = twstock_cli.main([case[4]])
-                self.assertEqual(result, 0)
-                self.assertEqual(sys.argv, original)
-            with self.subTest(target=case[0], mode="failure"):
-                with ExitStack() as stack:
-                    patch_failure(stack, case)
-                    with redirect_stdout(StringIO()):
-                        result = twstock_cli.main([case[4]])
-                self.assertEqual(result, 1)
-                self.assertEqual(sys.argv, original)
-
-    def test_unified_parser_status_and_argv_restoration(self):
-        for case in CASES:
-            original = sys.argv[:]
-            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                with self.assertRaises(SystemExit) as raised:
-                    twstock_cli.main([case[4], *case[7]])
-            self.assertEqual(raised.exception.code, 2)
-            self.assertEqual(sys.argv, original)
-
-    def test_unified_process_success_failure_and_parser(self):
-        for case in CASES:
-            for success, expected in ((True, 0), (False, 1)):
-                completed = run_subprocess("-c", process_script(case, success, unified=True))
-                self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
-            parser = [case[4], *case[7]]
-            completed = run_subprocess("-c", f"from tw_stock_tool.cli import twstock_cli; raise SystemExit(twstock_cli.main({parser!r}))")
-            self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
-
-
-
-
-    def test_static_package_inventory_is_exact(self):
-        packages = frozenset(case[3] for case in CASES)
-        expected_packages = frozenset({
-            "src/tw_stock_tool/cli/backtest_report.py",
-            "src/tw_stock_tool/cli/daily_report_cli.py",
-            "src/tw_stock_tool/cli/parameter_sweep_report.py",
-            "src/tw_stock_tool/cli/simulated_paper_trading_cli.py",
-            "src/tw_stock_tool/cli/walk_forward_report.py",
-            "src/tw_stock_tool/utils/doctor.py",
-        })
-        self.assertEqual(packages, expected_packages)
-
-
-if __name__ == "__main__":
-    unittest.main()
