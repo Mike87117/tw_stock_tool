@@ -35,6 +35,94 @@ class TestDailyReportCli(unittest.TestCase):
         self.assertIsNone(_parse_args([]).manifest_path)
         self.assertEqual(_parse_args(["--manifest-path", "custom/daily.json"]).manifest_path, "custom/daily.json")
 
+    def test_parser_defaults_custom_values_and_signal_tuple(self):
+        args = _parse_args([])
+        self.assertIsNone(args.stocks)
+        self.assertEqual(args.stock_market, "all")
+        self.assertEqual(args.output_dir, "output")
+        self.assertIsNone(args.output_md)
+        self.assertIsNone(args.output_json)
+        self.assertIsNone(args.manifest_path)
+        self.assertFalse(args.overwrite)
+        custom = _parse_args([
+            "--stocks", "2330", "2317", "--output-md", "test.md",
+            "--manifest-path", "manifest.json",
+        ])
+        self.assertEqual(custom.stocks, ["2330", "2317"])
+        self.assertEqual(custom.output_md, "test.md")
+        self.assertEqual(custom.manifest_path, "manifest.json")
+        config = daily_report_cli._pipeline_config_from_args(
+            _parse_args(["--signals", "BUY", "WATCH", "--output-excel", "daily.xlsx"])
+        )
+        self.assertEqual(config.signals, ("BUY", "WATCH"))
+        self.assertEqual(config.output_excel, "daily.xlsx")
+
+    def test_custom_output_directory_and_excel_none_empty_custom_values(self):
+        for extra, expected in (
+            (["--output-dir", "reports"], None),
+            (["--output-dir", "reports", "--output-excel"], ""),
+            (["--output-dir", "reports", "--output-excel", "daily.xlsx"], "daily.xlsx"),
+        ):
+            with self.subTest(extra=extra):
+                args = self._args(extra)
+                with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+                    with patch.object(daily_report_cli, "run_daily", return_value=_result()) as run:
+                        with patch.object(daily_report_cli, "_parse_args", return_value=args):
+                            with redirect_stdout(StringIO()):
+                                self.assertIsNone(main())
+                request = run.call_args.args[0]
+                self.assertEqual(request.output_dir, "reports")
+                self.assertEqual(request.config.output_excel, expected)
+
+    def test_application_owns_all_report_writes_and_legacy_boundaries_are_unused(self):
+        args = self._args(["--output-md", "--output-json"])
+        output = StringIO()
+        with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+            with patch.object(daily_report_cli, "run_daily", return_value=_result()) as run:
+                with patch.object(daily_report_cli, "collect_stock_ids") as legacy_collect:
+                    with patch.object(daily_report_cli, "run_daily_research_pipeline") as legacy_pipeline:
+                        with patch.object(daily_report_cli, "export_daily_report_json_file") as legacy_export:
+                            with patch("builtins.open") as open_mock:
+                                with patch.object(Path, "mkdir") as mkdir_mock:
+                                    with patch.object(daily_report_cli, "_parse_args", return_value=args):
+                                        with redirect_stdout(output):
+                                            self.assertIsNone(main())
+        run.assert_called_once()
+        legacy_collect.assert_not_called()
+        legacy_pipeline.assert_not_called()
+        legacy_export.assert_not_called()
+        open_mock.assert_not_called()
+        mkdir_mock.assert_not_called()
+
+    def test_markdown_application_failure_returns_one(self):
+        error = DailyReportResearchRunError("markdown_export: locked")
+        error.__cause__ = PermissionError("locked")
+        output = StringIO()
+        with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):
+            with patch.object(daily_report_cli, "run_daily", side_effect=error):
+                with patch.object(daily_report_cli, "_parse_args", return_value=self._args()):
+                    with redirect_stdout(output):
+                        self.assertEqual(main(), 1)
+        self.assertIn("Error: markdown_export: locked", output.getvalue())
+        self.assertNotIn("Process completed successfully", output.getvalue())
+
+    def test_invalid_numeric_matrix_and_macd_validation(self):
+        for argv in (
+            ["--validate-top", "-1"],
+            ["--validation-initial-capital", "0"],
+            ["--validation-fee-rate", "-0.1"],
+            ["--validation-tax-rate", "nan"],
+            ["--validation-position-size", "1.1"],
+            ["--walk-forward-train-days", "0"],
+            ["--walk-forward-test-days", "0"],
+            ["--walk-forward-step-days", "0"],
+        ):
+            with self.subTest(argv=argv):
+                with self.assertRaises(SystemExit) as raised:
+                    _parse_args(argv)
+                self.assertEqual(raised.exception.code, 2)
+        args = _parse_args(["--validate-top", "1", "--validation-strategy", "macd"])
+        self.assertEqual(args.validation_strategy, "macd")
     def test_main_builds_exact_request_and_calls_service_once(self):
         args = self._args(["--stock-market", "twse", "--output-md", "custom/report.md", "--output-json", "custom/report.json", "--output-excel", "daily.xlsx", "--overwrite", "--manifest-path", "custom/manifest.json"])
         with patch.object(daily_report_cli, "collect_symbol_requests", return_value=self.symbols):

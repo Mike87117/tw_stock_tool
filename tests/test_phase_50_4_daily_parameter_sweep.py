@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from tw_stock_tool.analysis.analysis import StockAnalysis
 from tw_stock_tool.backtesting import parameter_sweep
 from tw_stock_tool.cli import daily_report_cli
+from tw_stock_tool.application.research_run import SymbolRequest
 from tw_stock_tool.reports import daily_report
 
 
@@ -142,12 +143,9 @@ class DailyParameterSweepCliTest(unittest.TestCase):
                 daily_report_cli._parse_args(option)
             self.assertEqual(raised.exception.code, 2)
 
-    @patch("tw_stock_tool.cli.daily_report_cli.run_daily_research_pipeline")
-    @patch("tw_stock_tool.cli.daily_report_cli.collect_stock_ids", return_value=["2330"])
-    @patch("tw_stock_tool.cli.daily_report_cli.Path.mkdir")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    def test_execution_order_report_and_provider(self, mock_open, mock_mkdir, collect, run_pipeline) -> None:
-        run_pipeline.return_value = Mock(markdown="# Report")
+    def test_execution_order_report_and_provider(self) -> None:
+        result = Mock(generated_artifacts=(), domain_result=pd.DataFrame())
+        symbols = (SymbolRequest("2330", "2330.TW"),)
         with patch.object(
             sys,
             "argv",
@@ -159,13 +157,22 @@ class DailyParameterSweepCliTest(unittest.TestCase):
                 "--walk-forward-top", "1",
             ],
         ):
-            self.assertIsNone(daily_report_cli.main())
-        config = run_pipeline.call_args.args[1]
+            with patch.object(daily_report_cli, "collect_symbol_requests", return_value=symbols):
+                with patch.object(daily_report_cli, "run_daily", return_value=result) as run_daily:
+                    with patch.object(daily_report_cli, "run_daily_research_pipeline") as legacy_pipeline:
+                        with patch.object(daily_report_cli, "collect_stock_ids") as legacy_collect:
+                            with patch("builtins.open") as open_mock:
+                                with patch.object(Path, "mkdir") as mkdir_mock:
+                                    self.assertIsNone(daily_report_cli.main())
+        request = run_daily.call_args.args[0]
+        config = request.config
         self.assertEqual(config.parameter_sweep_top, 1)
         self.assertEqual(config.walk_forward_top, 1)
-        self.assertTrue(callable(run_pipeline.call_args.kwargs["status_callback"]))
-
-
+        self.assertTrue(callable(run_daily.call_args.kwargs["status_callback"]))
+        legacy_pipeline.assert_not_called()
+        legacy_collect.assert_not_called()
+        open_mock.assert_not_called()
+        mkdir_mock.assert_not_called()
 if __name__ == "__main__":
     unittest.main()
 

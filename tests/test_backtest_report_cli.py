@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tw_stock_tool.application.research_run import BacktestRunRequest, SymbolRequest
 from tw_stock_tool.cli import backtest_report
@@ -42,6 +42,107 @@ class TestBacktestReportCLI(unittest.TestCase):
         with self.assertRaises(SystemExit):
             _parse_args(["--stock", "2330", "--strategy", "ma_cross", "--stock-market", "twse"])
 
+    def test_parser_defaults_and_custom_output_values(self):
+        args = _parse_args(["--stock", "2330", "--strategy", "ma_cross"])
+        self.assertEqual(args.period, "1y")
+        self.assertEqual(args.initial_capital, 100000.0)
+        self.assertIsNone(args.output_md)
+        self.assertIsNone(args.output_excel)
+        self.assertEqual(args.output_dir, "output")
+        self.assertFalse(args.force_refresh)
+        custom = _parse_args([
+            "--stock", "2330", "--strategy", "ma_cross",
+            "--output-md", "report.md", "--output-excel", "report.xlsx",
+            "--output-dir", "reports", "--manifest-path", "manifest.json",
+        ])
+        self.assertEqual(custom.output_md, "report.md")
+        self.assertEqual(custom.output_excel, "report.xlsx")
+        self.assertEqual(custom.output_dir, "reports")
+        self.assertEqual(custom.manifest_path, "manifest.json")
+
+    def test_all_backtest_engine_parameters_and_nested_metadata_are_forwarded(self):
+        args = self._args([
+            "--initial-capital", "123456.5", "--fee-rate", "0.002",
+            "--tax-rate", "0.004", "--position-size", "0.75",
+            "--stop-loss-pct", "0.05", "--take-profit-pct", "0.1",
+            "--max-hold-days", "12", "--short-window", "7", "--long-window", "33",
+        ])
+        with patch.object(backtest_report, "resolve_symbol_request", return_value=self.symbol):
+            with patch.object(backtest_report, "run_backtest", return_value=_result(markdown=False, excel=False)) as run:
+                with patch.object(backtest_report, "_parse_args", return_value=args):
+                    with redirect_stdout(StringIO()):
+                        self.assertIsNone(main())
+        request = run.call_args.args[0]
+        self.assertEqual(dict(request.strategy_parameters), {"short_window": 7, "long_window": 33})
+        self.assertEqual(
+            dict(request.backtest_parameters),
+            {
+                "initial_capital": 123456.5,
+                "fee_rate": 0.002,
+                "tax_rate": 0.004,
+                "position_size": 0.75,
+                "stop_loss_pct": 0.05,
+                "take_profit_pct": 0.1,
+                "max_hold_days": 12,
+            },
+        )
+
+    def test_default_and_custom_report_paths(self):
+        for extra, expected_md, expected_excel in (
+            ([], None, None),
+            (["--output-md"], str(Path("output") / "backtest_report.md"), None),
+            (["--output-excel"], None, str(Path("output") / "backtest_report.xlsx")),
+            (["--output-md", "custom.md", "--output-excel", "custom.xlsx"], "custom.md", "custom.xlsx"),
+        ):
+            with self.subTest(extra=extra):
+                args = self._args(extra)
+                with patch.object(backtest_report, "resolve_symbol_request", return_value=self.symbol):
+                    with patch.object(backtest_report, "run_backtest", return_value=_result()) as run:
+                        with patch.object(backtest_report, "_parse_args", return_value=args):
+                            with redirect_stdout(StringIO()):
+                                self.assertIsNone(main())
+                request = run.call_args.args[0]
+                self.assertEqual(request.markdown_path, expected_md)
+                self.assertEqual(request.excel_path, expected_excel)
+
+    def test_direct_domain_boundaries_are_not_called(self):
+        strategy_mock = MagicMock()
+        with patch.object(backtest_report, "resolve_symbol_request", return_value=self.symbol):
+            with patch.object(backtest_report, "run_backtest", return_value=_result()) as run:
+                with patch.object(backtest_report, "analyze_stock") as analyze:
+                    with patch.object(backtest_report, "legacy_run_backtest") as legacy:
+                        with patch.dict(backtest_report.STRATEGIES, {"ma_cross_strategy": strategy_mock}):
+                            with patch.object(backtest_report, "export_backtest_report_markdown") as export_md:
+                                with patch.object(backtest_report, "export_backtest_report_excel") as export_excel:
+                                    with patch.object(backtest_report, "_parse_args", return_value=self._args(["--output-md"])):
+                                        with redirect_stdout(StringIO()):
+                                            self.assertIsNone(main())
+        run.assert_called_once()
+        analyze.assert_not_called()
+        legacy.assert_not_called()
+        strategy_mock.assert_not_called()
+        export_md.assert_not_called()
+        export_excel.assert_not_called()
+    def test_stdout_contains_only_research_summary_wording(self):
+        output = StringIO()
+        with patch.object(backtest_report, "resolve_symbol_request", return_value=self.symbol):
+            with patch.object(backtest_report, "run_backtest", return_value=_result(markdown=False, excel=False)):
+                with patch.object(backtest_report, "_parse_args", return_value=self._args()):
+                    with redirect_stdout(output):
+                        self.assertIsNone(main())
+        text = output.getvalue().lower()
+        self.assertIn("total return", text)
+        for phrase in ("best strategy", "recommendation", "guaranteed profit", "investment opportunity"):
+            self.assertNotIn(phrase, text)
+
+    def test_direct_and_unified_argparse_failures_remain_system_exit_two(self):
+        with self.assertRaises(SystemExit) as raised:
+            _parse_args(["--stock", "2330", "--strategy", "ma_cross", "--unknown"])
+        self.assertEqual(raised.exception.code, 2)
+        with self.assertRaises(SystemExit) as raised:
+            from tw_stock_tool.cli import twstock_cli
+            twstock_cli.main(["backtest-report", "--stock", "2330"])
+        self.assertEqual(raised.exception.code, 2)
     def test_normalize_result_legacy_helper_remains_compatible(self):
         result = _normalize_result({"Total Return %": 10.0}, "2330", "ma_cross", "2024-01-01", "2024-12-31", {"param": 1})
         self.assertEqual(result["Stock"], "2330")

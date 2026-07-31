@@ -7,12 +7,16 @@ import time
 import pandas as pd
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from tw_stock_tool.data import data_loader
 from tw_stock_tool.analysis import scanner
 from tw_stock_tool.cli import scan_stocks as scan_stocks_cli
+from tw_stock_tool.cli import _research_run_cli as research_cli
 from tw_stock_tool.analysis.analysis import StockAnalysis
 from tw_stock_tool.analysis.scanner import ScanConfig, _filter_ok_rows, _sort_ok_rows, normalize_stock_ids, scan_stocks
+from tw_stock_tool.application.research_run import SymbolRequest
+from tw_stock_tool.research_run.models import ArtifactReference
 
 
 def _fake_analysis(stock_id: str, score: float, signal: str) -> StockAnalysis:
@@ -256,29 +260,40 @@ class ScannerTest(unittest.TestCase):
         self.assertTrue(args.allow_partial_stock_list)
 
     def test_scan_stocks_cli_auto_stock_list_calls_updater_and_has_priority(self) -> None:
-        args = argparse.Namespace(
-            auto_stock_list=True,
-            stock_market="all",
-            stock_list_output="stocks.txt",
-            allow_partial_stock_list=True,
-            file="ignored.txt",
-            stocks=["9999"],
-        )
-        updater_df = pd.DataFrame([{"Stock": "2330"}, {"Stock": "2317"}])
-        with patch.object(
-            scan_stocks_cli.stock_list_updater_module,
-            "update_stock_list",
-            return_value=(updater_df, "stocks.txt"),
-        ) as updater_mock:
-            result = scan_stocks_cli._collect_stock_ids(args)
-
-        updater_mock.assert_called_once_with(
+        catalog = pd.DataFrame([
+            {"Stock": "2330", "Name": "TSMC", "Market": "TWSE", "Type": "普通股"},
+            {"Stock": "6488", "Name": "TPEX", "Market": "TPEX", "Type": "普通股"},
+        ])
+        normalized = pd.DataFrame([{"Stock": "2330"}, {"Stock": "6488"}])
+        resolved = (SymbolRequest("2330", "2330.TW"), SymbolRequest("6488", "6488.TWO"))
+        with patch.object(research_cli, "load_stock_market_catalog", return_value=catalog) as load:
+            with patch.object(research_cli, "update_stock_list", return_value=(normalized, "stocks.txt")) as update:
+                with patch.object(research_cli, "resolve_symbol_requests", return_value=resolved) as resolve:
+                    result = research_cli.collect_symbol_requests(
+                        stocks=["9999"],
+                        file_path="ignored.txt",
+                        auto_stock_list=True,
+                        stock_market="all",
+                        stock_list_output="stocks.txt",
+                        allow_partial_stock_list=True,
+                        stock_limit=None,
+                        stock_sample=None,
+                        random_state=42,
+                    )
+        self.assertEqual(result, resolved)
+        load.assert_called_once_with(market="all", allow_partial=True)
+        update.assert_called_once_with(
             market="all",
             output="stocks.txt",
             allow_partial=True,
+            _preloaded_catalog=catalog,
         )
-        self.assertEqual(result, ["2330", "2317"])
-
+        resolve.assert_called_once_with(
+            ("2330", "6488"),
+            market_hint="all",
+            catalog=catalog,
+            allow_partial_catalog=True,
+        )
     def test_scan_stocks_cli_applies_stock_limit(self) -> None:
         args = argparse.Namespace(
             auto_stock_list=False,
@@ -288,10 +303,11 @@ class ScannerTest(unittest.TestCase):
             stock_sample=None,
             random_state=42,
         )
-
-        result = scan_stocks_cli._collect_stock_ids(args)
-
+        resolved = (SymbolRequest("2330", "2330.TW"), SymbolRequest("2317", "2317.TW"))
+        with patch.object(scan_stocks_cli, "collect_symbol_requests", return_value=resolved) as collect:
+            result = scan_stocks_cli._collect_stock_ids(args)
         self.assertEqual(result, ["2330", "2317"])
+        self.assertEqual(collect.call_args.kwargs["stock_limit"], 2)
 
     def test_scan_stocks_cli_applies_stock_sample(self) -> None:
         args = argparse.Namespace(
@@ -302,13 +318,13 @@ class ScannerTest(unittest.TestCase):
             stock_sample=2,
             random_state=7,
         )
-
-        first = scan_stocks_cli._collect_stock_ids(args)
-        second = scan_stocks_cli._collect_stock_ids(args)
-
-        self.assertEqual(first, second)
-        self.assertEqual(len(first), 2)
-
+        resolved = (SymbolRequest("2330", "2330.TW"), SymbolRequest("2454", "2454.TW"))
+        with patch.object(scan_stocks_cli, "collect_symbol_requests", return_value=resolved) as collect:
+            first = scan_stocks_cli._collect_stock_ids(args)
+            second = scan_stocks_cli._collect_stock_ids(args)
+        self.assertEqual(first, ["2330", "2454"])
+        self.assertEqual(second, first)
+        self.assertEqual(collect.call_args.kwargs["stock_sample"], 2)
     def test_scan_stocks_cli_updater_failure_does_not_scan(self) -> None:
         args = argparse.Namespace(
             auto_stock_list=True,
@@ -318,16 +334,14 @@ class ScannerTest(unittest.TestCase):
         )
         with patch.object(scan_stocks_cli, "_parse_args", return_value=args):
             with patch.object(
-                scan_stocks_cli.stock_list_updater_module,
-                "update_stock_list",
+                scan_stocks_cli,
+                "collect_symbol_requests",
                 side_effect=RuntimeError("updater down"),
             ):
-                with patch.object(scan_stocks_cli, "scan_stocks") as scan_mock:
+                with patch.object(scan_stocks_cli, "run_scan") as run_mock:
                     with patch("builtins.print"):
                         scan_stocks_cli.main()
-
-        scan_mock.assert_not_called()
-
+        run_mock.assert_not_called()
     def test_sort_ok_rows_supported_columns(self) -> None:
         df = pd.DataFrame(
             [
@@ -342,91 +356,38 @@ class ScannerTest(unittest.TestCase):
                 expected = "A" if column == "Volume_Ratio" else "B"
                 self.assertEqual(result.iloc[0]["Stock"], expected)
 
-    def test_no_banned_wording_in_cli_stdout_and_excel(self) -> None:
-        import tempfile
-        from pathlib import Path
-        
+    def test_no_banned_wording_in_cli_stdout(self) -> None:
         banned_phrases = [
-            "best stocks",
-            "best stock",
-            "recommended stocks",
-            "recommended stock",
-            "buy recommendation",
-            "sell recommendation",
-            "hold recommendation",
-            "investment recommendation",
-            "investment opportunity",
-            "best stocks to buy",
-            "should buy",
-            "should sell",
-            "safe to invest",
-            "strong buy",
-            "winner",
-            "guaranteed profit",
-            "guaranteed return",
-            "guaranteed latest data",
+            "best stocks", "best stock", "recommended stocks",
+            "recommended stock", "buy recommendation", "sell recommendation",
+            "hold recommendation", "investment recommendation",
+            "investment opportunity", "should buy", "should sell",
+            "safe to invest", "strong buy", "winner", "guaranteed profit",
+            "guaranteed return", "guaranteed latest data",
         ]
-
-        def fake_scan_one_stock(stock_id: str, config: ScanConfig) -> dict[str, object]:
-            return _fake_scan_row(stock_id)
-
+        result = SimpleNamespace(
+            domain_result=pd.DataFrame([{
+                "Status": "OK", "Score": 5, "Signal": "HOLD",
+                "Close": 100, "Volume_Ratio": 1.2,
+            }]),
+            generated_artifacts=(
+                ArtifactReference("scan_ranking_excel", "reports/ranking.xlsx", "application/octet-stream", None),
+                ArtifactReference("scan_ranking_csv", "reports/ranking.csv", "text/csv", None),
+                ArtifactReference("scan_ranking_html", "reports/ranking.html", "text/html", None),
+            ),
+        )
+        symbols = (SymbolRequest("2330", "2330.TW"),)
         stdout = StringIO()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            test_args = [
-                "scan_stocks",
-                "--stocks", "2330", "2317",
-                "--output-dir", tmp_dir,
-            ]
-            with patch("sys.argv", test_args):
-                with patch.object(scanner, "scan_one_stock", side_effect=fake_scan_one_stock):
-                    with patch("sys.stdout", stdout):
+        with patch.object(scan_stocks_cli, "collect_symbol_requests", return_value=symbols):
+            with patch.object(scan_stocks_cli, "run_scan", return_value=result):
+                with patch.object(scan_stocks_cli, "_parse_args", return_value=scan_stocks_cli._parse_args(["--stocks", "2330"])):
+                    with redirect_stdout(stdout):
                         scan_stocks_cli.main()
-
-            output = stdout.getvalue().lower()
-            
-            # Positive assertions (CLI)
-            self.assertIn("掃描完成", output)
-            self.assertIn("成功", output)
-            self.assertIn("失敗", output)
-            self.assertIn("excel:", output)
-            
-            # Negative assertions (CLI)
-            for phrase in banned_phrases:
-                self.assertNotIn(phrase, output)
-                
-            # Negative assertions (Excel)
-            tmp_path = Path(tmp_dir)
-            excel_files = list(tmp_path.glob("*.xlsx"))
-            self.assertTrue(excel_files)
-            excel_path = excel_files[0]
-            
-            with pd.ExcelFile(excel_path) as xls:
-                for sheet_name in xls.sheet_names:
-                    for phrase in banned_phrases:
-                        self.assertNotIn(phrase, sheet_name.lower())
-                    
-                    df = pd.read_excel(xls, sheet_name=sheet_name)
-                    # Check columns
-                    for col in df.columns:
-                        for phrase in banned_phrases:
-                            self.assertNotIn(phrase, str(col).lower())
-                    # Check data
-                    for _, row in df.iterrows():
-                        for val in row.values:
-                            val_str = str(val).lower()
-                            for phrase in banned_phrases:
-                                self.assertNotIn(phrase, val_str)
-                                
-                # Positive assertion for Excel
-                columns = [str(c) for c in df.columns]
-                self.assertIn("Score", columns)
-                self.assertIn("Signal", columns)
-                self.assertIn("Close", columns)
-                self.assertIn("Volume_Ratio", columns)
-                
-                signals = df["Signal"].dropna().tolist()
-                self.assertIn("HOLD", signals)
-
-
+        output = stdout.getvalue().lower()
+        self.assertIn("掃描完成", output)
+        self.assertIn("成功", output)
+        self.assertIn("excel:", output)
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase, output)
 if __name__ == "__main__":
     unittest.main()

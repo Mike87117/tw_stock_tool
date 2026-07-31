@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from tw_stock_tool.application.research_run import SymbolRequest
+from tw_stock_tool.application.symbol_resolution import SymbolResolutionError
 from tw_stock_tool.cli import _research_run_cli as helper
 from tw_stock_tool.research_run.models import ArtifactReference
 
@@ -194,5 +195,124 @@ class ResearchRunCliHelperTests(unittest.TestCase):
             helper.artifact_path(duplicate, "daily_report_markdown")
 
 
+
+    def test_mixed_all_market_batch_loads_once_and_preserves_order(self) -> None:
+        with patch("tw_stock_tool.application.symbol_resolution.load_stock_market_catalog", return_value=_catalog()) as load:
+            result = helper.collect_symbol_requests(
+                stocks=["2330.TW", "6488"],
+                file_path=None,
+                auto_stock_list=False,
+                stock_market="all",
+                stock_list_output="stocks.txt",
+                allow_partial_stock_list=False,
+                stock_limit=None,
+                stock_sample=None,
+                random_state=42,
+            )
+        load.assert_called_once_with(market="all", allow_partial=False)
+        self.assertEqual(
+            [(item.requested_symbol, item.canonical_symbol) for item in result],
+            [("2330.TW", "2330.TW"), ("6488", "6488.TWO")],
+        )
+
+    def test_manual_limit_is_applied_before_resolution(self) -> None:
+        with patch.object(helper, "resolve_symbol_requests", return_value=()) as resolve:
+            helper.collect_symbol_requests(
+                stocks=["2330", "2317", "2454"],
+                file_path=None,
+                auto_stock_list=False,
+                stock_market="twse",
+                stock_list_output="stocks.txt",
+                allow_partial_stock_list=False,
+                stock_limit=2,
+                stock_sample=None,
+                random_state=42,
+            )
+        self.assertEqual(resolve.call_args.args[0], ("2330", "2317"))
+
+    def test_twse_and_tpex_hints_skip_catalog_fetch(self) -> None:
+        with patch("tw_stock_tool.application.symbol_resolution.load_stock_market_catalog") as load:
+            for market, code, suffix in (("twse", "2330", ".TW"), ("tpex", "6488", ".TWO")):
+                with self.subTest(market=market):
+                    result = helper.collect_symbol_requests(
+                        stocks=[code],
+                        file_path=None,
+                        auto_stock_list=False,
+                        stock_market=market,
+                        stock_list_output="stocks.txt",
+                        allow_partial_stock_list=False,
+                        stock_limit=None,
+                        stock_sample=None,
+                        random_state=42,
+                    )
+                    self.assertEqual(result[0].canonical_symbol, code + suffix)
+        load.assert_not_called()
+
+    def test_auto_list_selected_ambiguity_fails_and_unselected_does_not(self) -> None:
+        catalog = _catalog()
+        selected_duplicate = catalog[catalog["Stock"] == "9999"].drop_duplicates(
+            "Stock", keep="first"
+        )
+        with patch.object(helper, "load_stock_market_catalog", return_value=catalog):
+            with patch.object(
+                helper,
+                "update_stock_list",
+                return_value=(selected_duplicate, Path("stocks.txt")),
+            ):
+                with self.assertRaises(SymbolResolutionError):
+                    helper.collect_symbol_requests(
+                        stocks=None,
+                        file_path=None,
+                        auto_stock_list=True,
+                        stock_market="all",
+                        stock_list_output="stocks.txt",
+                        allow_partial_stock_list=False,
+                        stock_limit=None,
+                        stock_sample=None,
+                        random_state=42,
+                    )
+
+        normalized = pd.DataFrame([{"Stock": "2330"}, {"Stock": "9999"}])
+        with patch.object(helper, "load_stock_market_catalog", return_value=catalog):
+            with patch.object(
+                helper,
+                "update_stock_list",
+                return_value=(normalized, Path("stocks.txt")),
+            ):
+                result = helper.collect_symbol_requests(
+                    stocks=None,
+                    file_path=None,
+                    auto_stock_list=True,
+                    stock_market="all",
+                    stock_list_output="stocks.txt",
+                    allow_partial_stock_list=False,
+                    stock_limit=1,
+                    stock_sample=None,
+                    random_state=42,
+                )
+        self.assertEqual(result[0].canonical_symbol, "2330.TW")
+
+    def test_auto_list_does_not_mutate_raw_catalog(self) -> None:
+        catalog = _catalog().loc[lambda frame: frame["Stock"] != "9999"].reset_index(drop=True)
+        snapshot = catalog.copy(deep=True)
+        normalized = catalog.drop_duplicates("Stock", keep="first").loc[:, ["Stock"]]
+        with patch.object(helper, "load_stock_market_catalog", return_value=catalog):
+            with patch.object(
+                helper,
+                "update_stock_list",
+                return_value=(normalized, Path("stocks.txt")),
+            ):
+                helper.collect_symbol_requests(
+                    stocks=None,
+                    file_path=None,
+                    auto_stock_list=True,
+                    stock_market="all",
+                    stock_list_output="stocks.txt",
+                    allow_partial_stock_list=False,
+                    stock_limit=None,
+                    stock_sample=None,
+                    random_state=42,
+                )
+        pd.testing.assert_frame_equal(catalog, snapshot)
 if __name__ == "__main__":
     unittest.main()
