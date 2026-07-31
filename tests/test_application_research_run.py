@@ -7,8 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pandas as pd
+
 import tw_stock_tool.application as application_module
 from tw_stock_tool.application import research_run as application_research_run
+from tw_stock_tool.application import symbol_resolution
 from tw_stock_tool.analysis.scanner import ScanConfig
 from tw_stock_tool.application import (
     BacktestRunRequest,
@@ -60,6 +63,118 @@ class ApplicationExportTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(completed.stdout, "")
         self.assertEqual(completed.stderr, "")
+
+
+class SymbolResolutionTests(unittest.TestCase):
+    @staticmethod
+    def _catalog(*rows: tuple[str, str, str, str]) -> pd.DataFrame:
+        return pd.DataFrame(rows, columns=["Stock", "Name", "Market", "Type"])
+
+    def test_explicit_suffixes_and_market_hints_bypass_catalog(self):
+        with patch.object(symbol_resolution, "load_stock_market_catalog") as load:
+            cases = (
+                ("2330.TW", "2330.TW"),
+                ("6488.TWO", "6488.TWO"),
+                ("2330.tw", "2330.TW"),
+                ("6488.two", "6488.TWO"),
+            )
+            for requested, canonical in cases:
+                with self.subTest(requested=requested):
+                    result = symbol_resolution.resolve_symbol_request(requested)
+                    self.assertEqual((result.requested_symbol, result.canonical_symbol), (requested, canonical))
+            self.assertEqual(symbol_resolution.resolve_symbol_request("2330", market_hint="twse").canonical_symbol, "2330.TW")
+            self.assertEqual(symbol_resolution.resolve_symbol_request("6488", market_hint="tpex").canonical_symbol, "6488.TWO")
+        load.assert_not_called()
+
+    def test_all_market_resolution_preserves_order_and_loads_once(self):
+        catalog = self._catalog(
+            ("6488", "TPEX", "TPEX", "stock"),
+            ("2330", "TSMC", "TWSE", "stock"),
+            ("8069", "E Ink", "TPEX", "stock"),
+        )
+        with patch.object(symbol_resolution, "load_stock_market_catalog", return_value=catalog) as load:
+            result = symbol_resolution.resolve_symbol_requests(("8069", "2330", "6488"))
+        self.assertEqual(result, (
+            SymbolRequest("8069", "8069.TWO"),
+            SymbolRequest("2330", "2330.TW"),
+            SymbolRequest("6488", "6488.TWO"),
+        ))
+        load.assert_called_once_with(market="all", allow_partial=False)
+
+    def test_mixed_batch_and_many_bare_symbols_load_catalog_once(self):
+        catalog = self._catalog(("2330", "TSMC", "TWSE", "stock"), ("6488", "", "TPEX", "stock"), ("0050", "", "TWSE", "stock"))
+        with patch.object(symbol_resolution, "load_stock_market_catalog", return_value=catalog) as load:
+            result = symbol_resolution.resolve_symbol_requests(("0050.TW", "2330", "6488"))
+        self.assertEqual(tuple(item.canonical_symbol for item in result), ("0050.TW", "2330.TW", "6488.TWO"))
+        self.assertEqual(load.call_count, 1)
+
+    def test_supplied_catalog_is_reused_without_mutation_or_writes(self):
+        catalog = self._catalog(("2330", "TSMC", "TWSE", "stock"))
+        original = catalog.copy(deep=True)
+        with patch.object(symbol_resolution, "load_stock_market_catalog") as load:
+            with patch("tw_stock_tool.data.stock_list_updater.update_stock_list") as update:
+                result = symbol_resolution.resolve_symbol_request("2330", catalog=catalog)
+        self.assertEqual(result, SymbolRequest("2330", "2330.TW"))
+        pd.testing.assert_frame_equal(catalog, original)
+        load.assert_not_called()
+        update.assert_not_called()
+
+    def test_market_membership_and_ambiguity_fail_closed(self):
+        cases = (
+            (self._catalog(("2330", "", "TWSE", "stock"), ("2330", "", "TPEX", "stock")), "Ambiguous"),
+            (self._catalog(("2330", "", "OTC", "stock")), "Unknown market"),
+            (self._catalog(("2330", "", "TWSE", "stock")), None),
+        )
+        for catalog, expected in cases:
+            with self.subTest(expected=expected):
+                if expected is None:
+                    self.assertEqual(symbol_resolution.resolve_symbol_request("2330", catalog=catalog).canonical_symbol, "2330.TW")
+                else:
+                    with self.assertRaisesRegex(symbol_resolution.SymbolResolutionError, expected):
+                        symbol_resolution.resolve_symbol_request("2330", catalog=catalog)
+
+    def test_unrequested_ambiguity_does_not_block_selected_symbol(self):
+        catalog = self._catalog(
+            ("2330", "", "TWSE", "stock"),
+            ("6488", "", "TWSE", "stock"),
+            ("6488", "", "TPEX", "stock"),
+        )
+        result = symbol_resolution.resolve_symbol_request("2330", catalog=catalog)
+        self.assertEqual(result.canonical_symbol, "2330.TW")
+
+    def test_zero_match_malformed_suffixes_and_duplicates_fail(self):
+        catalog = self._catalog(("2330", "", "TWSE", "stock"))
+        with self.assertRaisesRegex(symbol_resolution.SymbolResolutionError, "Unknown symbol"):
+            symbol_resolution.resolve_symbol_request("9999", catalog=catalog)
+        for value in ("2330.US", "2330.TWO.TW", ".TW", "2330."):
+            with self.subTest(value=value):
+                with self.assertRaises(symbol_resolution.SymbolResolutionError):
+                    symbol_resolution.resolve_symbol_request(value)
+        with self.assertRaisesRegex(symbol_resolution.SymbolResolutionError, "Duplicate requested"):
+            symbol_resolution.resolve_symbol_requests(("2330", "2330"), market_hint="twse")
+        with self.assertRaisesRegex(symbol_resolution.SymbolResolutionError, "Duplicate canonical"):
+            symbol_resolution.resolve_symbol_requests(("2330", "2330.TW"), catalog=catalog)
+
+    def test_duplicate_rows_in_one_market_resolve_and_input_is_preserved(self):
+        catalog = self._catalog(
+            ("2330", "first", "TWSE", "stock"),
+            ("2330", "second", "TWSE", "stock"),
+        )
+        result = symbol_resolution.resolve_symbol_request("2330", catalog=catalog)
+        self.assertEqual(result, SymbolRequest("2330", "2330.TW"))
+        self.assertEqual(symbol_resolution.resolve_symbol_request("2330.tw").requested_symbol, "2330.tw")
+
+    def test_resolver_validates_inputs_and_catalog_shape(self):
+        for requested in ([], ["2330"], ("",), (" 2330",), ("2330", 2330)):
+            with self.subTest(requested=requested):
+                with self.assertRaises(symbol_resolution.SymbolResolutionError):
+                    symbol_resolution.resolve_symbol_requests(requested)  # type: ignore[arg-type]
+        with self.assertRaises(symbol_resolution.SymbolResolutionError):
+            symbol_resolution.resolve_symbol_request("2330", market_hint="TWSE")  # type: ignore[arg-type]
+        with self.assertRaises(symbol_resolution.SymbolResolutionError):
+            symbol_resolution.resolve_symbol_request("2330", allow_partial_catalog=1)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(symbol_resolution.SymbolResolutionError, "missing required"):
+            symbol_resolution.resolve_symbol_request("2330", catalog=pd.DataFrame({"Stock": ["2330"]}))
 
 
 class ApplicationRequestTests(unittest.TestCase):
