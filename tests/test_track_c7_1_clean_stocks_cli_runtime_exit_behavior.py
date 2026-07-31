@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
-import importlib
 from io import StringIO
-import os
 from pathlib import Path
-import runpy
 import subprocess
 import sys
 import tempfile
@@ -21,8 +18,6 @@ from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD
 from tests.subprocess_test_support import run_repo_python
 
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
@@ -113,12 +108,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         self._assert_error_output(stdout, stderr, f"Error: Stock file not found: {missing_path}")
         download_mock.assert_not_called()
 
-    def test_direct_validation_failure_should_return_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            missing_path = Path(temp_dir) / "missing.txt"
-            result, _, _ = self._run_direct("--file", str(missing_path))
-        self.assertEqual(result, 1)
-
     def test_direct_runtime_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -138,15 +127,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         self.assertNotIn("Traceback", stdout + stderr)
         run_mock.assert_called_once()
 
-    def test_direct_runtime_failure_should_return_one(self) -> None:
-        with patch.object(
-            clean_cli,
-            "run_clean_stocks",
-            side_effect=RuntimeError("controlled clean stocks failure"),
-        ):
-            result, _, _ = self._run_direct("--file", "synthetic.txt")
-        self.assertEqual(result, 1)
-
     def test_package_module_validation_failure_is_visible_and_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -163,17 +143,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             completed.stderr,
             f"Error: Stock file not found: {missing_path}",
         )
-
-    def test_package_module_validation_failure_should_exit_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            missing_path = Path(temp_dir) / "missing.txt"
-            completed = self._run_process(
-                "-m", "tw_stock_tool.cli.clean_stocks", "--file", str(missing_path)
-            )
-        self.assertEqual(completed.returncode, 1)
-
-
-
 
     def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -196,12 +165,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             f"Error: Stock file not found: {missing_path}",
         )
 
-    def test_unified_function_validation_failure_should_return_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            missing_path = Path(temp_dir) / "missing.txt"
-            status = twstock_cli.main(["stock-list", "clean", "--file", str(missing_path)])
-        self.assertEqual(status, 1)
-
     def test_unified_module_validation_failure_is_visible_and_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -223,19 +186,6 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             completed.stderr,
             f"Error: Stock file not found: {missing_path}",
         )
-
-    def test_unified_module_validation_failure_should_exit_one(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            missing_path = Path(temp_dir) / "missing.txt"
-            completed = self._run_process(
-                "-m",
-                "tw_stock_tool.cli.twstock_cli",
-                "stock-list",
-                "clean",
-                "--file",
-                str(missing_path),
-            )
-        self.assertEqual(completed.returncode, 1)
 
     def test_package_invalid_argument_is_argparse_exit_two(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

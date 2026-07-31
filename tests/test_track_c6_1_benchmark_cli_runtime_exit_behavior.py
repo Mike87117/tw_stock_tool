@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-import importlib
-import os
 from pathlib import Path
-import runpy
 import subprocess
 import sys
 import tempfile
@@ -22,8 +19,6 @@ from tw_stock_tool.data import cache_manager
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD
 from tests.subprocess_test_support import run_repo_python
 
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
@@ -125,10 +120,6 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         scan_mock.assert_not_called()
         paths_mock.assert_not_called()
 
-    def test_direct_validation_failure_should_return_one(self) -> None:
-        result, _, _ = self._run_direct()
-        self.assertEqual(result, 1)
-
     def test_direct_runtime_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -151,26 +142,11 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         run_mock.assert_called_once()
         paths_mock.assert_not_called()
 
-    def test_direct_runtime_failure_should_return_one(self) -> None:
-        with patch.object(
-            benchmark_cli,
-            "run_benchmark",
-            side_effect=RuntimeError("controlled benchmark failure"),
-        ):
-            result, _, _ = self._run_direct("--stocks", "2330")
-        self.assertEqual(result, 1)
-
     def test_package_module_validation_failure_is_visible_and_exits_one(self) -> None:
         completed = self._package_validation_failure()
 
         self.assertEqual(completed.returncode, 1)
         self._assert_validation_failure_output(completed.stdout, completed.stderr)
-
-    def test_package_module_validation_failure_should_exit_one(self) -> None:
-        self.assertEqual(self._package_validation_failure().returncode, 1)
-
-
-
 
     def test_unified_function_validation_failure_is_visible_and_returns_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -182,18 +158,11 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self._assert_validation_failure_output(stdout, stderr)
 
-    def test_unified_function_validation_failure_should_return_one(self) -> None:
-        status, _, _ = self._run_unified_validation_failure()
-        self.assertEqual(status, 1)
-
     def test_unified_module_validation_failure_is_visible_and_exits_one(self) -> None:
         completed = self._unified_module_validation_failure()
 
         self.assertEqual(completed.returncode, 1)
         self._assert_validation_failure_output(completed.stdout, completed.stderr)
-
-    def test_unified_module_validation_failure_should_exit_one(self) -> None:
-        self.assertEqual(self._unified_module_validation_failure().returncode, 1)
 
     def test_package_invalid_argument_is_argparse_exit_two(self) -> None:
         self._assert_argparse_failure(
