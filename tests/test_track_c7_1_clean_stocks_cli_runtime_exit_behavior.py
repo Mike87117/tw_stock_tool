@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
+from tw_stock_tool.application.research_run import SymbolRequest
 from tw_stock_tool.cli import clean_stocks as clean_cli
 from tw_stock_tool.cli import scan_stocks as scanner_cli
 from tw_stock_tool.cli import twstock_cli
@@ -269,15 +270,22 @@ class CleanStocksCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             )
             with (
                 patch.object(scanner_cli, "_parse_args", return_value=scanner_args),
-                patch.object(scanner_cli, "_collect_stock_ids", return_value=["2330"]),
                 patch.object(
                     scanner_cli,
-                    "scan_stocks",
+                    "collect_symbol_requests",
+                    return_value=(SymbolRequest("2330", "2330.TW"),),
+                ) as collect_mock,
+                patch.object(
+                    scanner_cli,
+                    "run_scan",
                     side_effect=RuntimeError("controlled scanner failure"),
-                ),
+                ) as run_mock,
                 redirect_stdout(StringIO()),
             ):
                 scanner_status = scanner_cli.main()
+
+            collect_mock.assert_called_once()
+            run_mock.assert_called_once()
 
             self.assertEqual(list(temp_path.iterdir()), before)
 

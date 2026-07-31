@@ -179,6 +179,10 @@ MAX_CONFIG = _expected_action(
     ["--max-hold-days"], "max_hold_days", "_StoreAction", None, None, None,
     "NoneType", "builtins.int", "Maximum holding days",
 )
+MANIFEST_ACTION = _expected_action(
+    ["--manifest-path"], "manifest_path", "_StoreAction", None, None, None,
+    "NoneType", None, None,
+)
 INT_RANGE = "tw_stock_tool.cli.parsers.parse_int_tuple"
 BACKTEST_RSI_BUY = _expected_action(
     ["--rsi-buy-below"], "rsi_buy_below", "_StoreAction", None, None, 30.0,
@@ -258,7 +262,7 @@ EXPECTED_METADATA = {
             OUTPUT_DIR_ACTION, FORCE_REFRESH_ACTION, BACKTEST_SHORT, BACKTEST_LONG,
             BACKTEST_RSI_BUY, BACKTEST_RSI_SELL, BACKTEST_SCORE_BUY, BACKTEST_SCORE_SELL,
             FEE_BACKTEST, TAX_BACKTEST, POSITION_BACKTEST, STOP_BACKTEST, TAKE_BACKTEST,
-            MAX_BACKTEST,
+            MAX_BACKTEST, MANIFEST_ACTION,
         ],
     },
     "sweep": {
@@ -299,7 +303,7 @@ DEFAULT_NAMESPACES = {
         "long_window": 20, "rsi_buy_below": 30.0, "rsi_sell_above": 70.0,
         "score_buy": None, "score_sell": None, "fee_rate": 0.001425,
         "tax_rate": 0.003, "position_size": 1.0, "stop_loss_pct": None,
-        "take_profit_pct": None, "max_hold_days": None,
+        "take_profit_pct": None, "max_hold_days": None, "manifest_path": None,
     },
     "sweep": {
         "stock": "2330", "strategy": "ma_cross", "period": "1y",
@@ -331,7 +335,7 @@ EXPLICIT_ARGS = {
         "--tax-rate", "0.004", "--position-size", "0.75", "--stop-loss-pct", "0.05",
         "--take-profit-pct", "0.1", "--max-hold-days", "12", "--short-window", "7",
         "--long-window", "33", "--rsi-buy-below", "25.5", "--rsi-sell-above", "70.5",
-        "--score-buy", "4.5", "--score-sell=-2.5",
+        "--score-buy", "4.5", "--score-sell=-2.5", "--manifest-path", "custom/manifest.json",
     ],
     "sweep": MINIMAL_ARGS + [
         "--period", "2y", "--output-md", "custom/report.md",
@@ -366,7 +370,7 @@ EXPLICIT_NAMESPACES = {
         "rsi_buy_below": 25.5, "rsi_sell_above": 70.5, "score_buy": 4.5,
         "score_sell": -2.5, "fee_rate": 0.002, "tax_rate": 0.004,
         "position_size": 0.75, "stop_loss_pct": 0.05, "take_profit_pct": 0.1,
-        "max_hold_days": 12,
+        "max_hold_days": 12, "manifest_path": "custom/manifest.json",
     },
     "sweep": {
         "stock": "2330", "strategy": "ma_cross", "period": "2y",
@@ -402,6 +406,7 @@ HELP_SNAPSHOTS = {
                           [--score-sell SCORE_SELL] [--fee-rate FEE_RATE] [--tax-rate TAX_RATE]
                           [--position-size POSITION_SIZE] [--stop-loss-pct STOP_LOSS_PCT]
                           [--take-profit-pct TAKE_PROFIT_PCT] [--max-hold-days MAX_HOLD_DAYS]
+                          [--manifest-path MANIFEST_PATH]
 
 Backtest Report Generator
 
@@ -441,6 +446,7 @@ options:
                         Take-profit threshold percentage
   --max-hold-days MAX_HOLD_DAYS
                         Max holding days
+  --manifest-path MANIFEST_PATH
 
 Backtest fills use next-bar Open as a research assumption.
 """,

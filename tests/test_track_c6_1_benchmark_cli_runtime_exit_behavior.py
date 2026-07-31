@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from tw_stock_tool.cli import benchmark as benchmark_cli
+from tw_stock_tool.application.research_run import SymbolRequest
 from tw_stock_tool.cli import scan_stocks as scanner_cli
 from tw_stock_tool.cli import twstock_cli
 from tw_stock_tool.data import cache_manager
@@ -221,16 +222,19 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
         )
         with (
             patch.object(scanner_cli, "_parse_args", return_value=scanner_args),
-            patch.object(scanner_cli, "_collect_stock_ids", return_value=["2330"]),
             patch.object(
                 scanner_cli,
-                "scan_stocks",
+                "collect_symbol_requests",
+                return_value=(SymbolRequest("2330", "2330.TW"),),
+            ),
+            patch.object(
+                scanner_cli,
+                "run_scan",
                 side_effect=RuntimeError("controlled scanner failure"),
             ),
             redirect_stdout(StringIO()),
         ):
             scanner_status = scanner_cli.main()
-
         with (
             patch.object(sys, "argv", ["cache_manager.py", "--summary"]),
             patch.object(
@@ -241,16 +245,12 @@ class BenchmarkCliRuntimeExitBehaviorCharacterizationTest(unittest.TestCase):
             redirect_stdout(StringIO()),
         ):
             cache_status = cache_manager.main()
-
         original_argv = sys.argv[:]
         with patch.object(benchmark_cli, "main", return_value=1):
             unified_status = twstock_cli.main(["benchmark"])
-
         self.assertEqual(scanner_status, 1)
         self.assertEqual(cache_status, 1)
         self.assertEqual(unified_status, 1)
         self.assertEqual(sys.argv, original_argv)
-
-
 if __name__ == "__main__":
     unittest.main()

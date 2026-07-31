@@ -1,6 +1,11 @@
 import argparse
-from pathlib import Path
 
+from tw_stock_tool.application.research_run import ScanRunRequest, run_scan
+from tw_stock_tool.cli._research_run_cli import (
+    artifact_path,
+    collect_symbol_requests,
+    find_exception_cause,
+)
 from tw_stock_tool.utils.config import (
     DEFAULT_AUTO_ADJUST,
     DEFAULT_INTERVAL,
@@ -10,8 +15,6 @@ from tw_stock_tool.utils.config import (
     VALID_PERIODS,
 )
 from tw_stock_tool.reports.report import ReportError, export_stock_ranking
-from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
-from tw_stock_tool.analysis.stock_selection import apply_stock_selection
 from tw_stock_tool.analysis.scanner import (
     SUPPORTED_SORT_COLUMNS,
     ScanConfig,
@@ -19,6 +22,7 @@ from tw_stock_tool.analysis.scanner import (
     normalize_stock_ids,
     scan_stocks,
 )
+from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
 
 
 def _ask_stock_ids() -> list[str]:
@@ -64,57 +68,45 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="使用除權息調整後價格",
     )
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="輸出資料夾")
+    parser.add_argument("--manifest-path", default=None)
     return parser.parse_args(argv)
 
 
 def _collect_stock_ids(args: argparse.Namespace) -> list[str]:
-    if args.auto_stock_list:
-        stocks_df, _ = stock_list_updater_module.update_stock_list(
-            market=args.stock_market,
-            output=args.stock_list_output,
-            allow_partial=args.allow_partial_stock_list,
-        )
-        stocks = normalize_stock_ids(stocks_df["Stock"].astype(str).tolist())
-    else:
-        stocks = []
-        if args.file:
-            stocks.extend(load_stock_ids_from_file(args.file))
-        if args.stocks:
-            stocks.extend(args.stocks)
-        if not stocks:
-            stocks = _ask_stock_ids()
-        stocks = normalize_stock_ids(stocks)
-    return apply_stock_selection(
-        stocks,
+    requests = collect_symbol_requests(
+        stocks=getattr(args, "stocks", None),
+        file_path=getattr(args, "file", None),
+        auto_stock_list=getattr(args, "auto_stock_list", False),
+        stock_market=getattr(args, "stock_market", "all"),
+        stock_list_output=getattr(args, "stock_list_output", "stocks.txt"),
+        allow_partial_stock_list=getattr(args, "allow_partial_stock_list", False),
         stock_limit=getattr(args, "stock_limit", None),
         stock_sample=getattr(args, "stock_sample", None),
         random_state=getattr(args, "random_state", 42),
+        interactive_supplier=_ask_stock_ids,
     )
+    return [request.requested_symbol for request in requests]
 
 
 def _print_progress(current: int, total: int, stock_id: str, status: str) -> None:
     print(f"[{current}/{total}] {stock_id} {status}", flush=True)
 
 
-def _write_error_log(ranking_df, output_dir: Path) -> Path | None:
-    errors = ranking_df[ranking_df["Status"] != "OK"]
-    if errors.empty:
-        return None
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    log_path = output_dir / "scan_errors.log"
-    lines = [
-        f"{row['Stock']}: {row['Error']}"
-        for _, row in errors.iterrows()
-    ]
-    log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return log_path
-
-
 def main() -> int | None:
     try:
         args = _parse_args()
-        stock_ids = _collect_stock_ids(args)
+        resolved_symbol_requests = collect_symbol_requests(
+            stocks=args.stocks,
+            file_path=args.file,
+            auto_stock_list=args.auto_stock_list,
+            stock_market=args.stock_market,
+            stock_list_output=args.stock_list_output,
+            allow_partial_stock_list=args.allow_partial_stock_list,
+            stock_limit=args.stock_limit,
+            stock_sample=args.stock_sample,
+            random_state=args.random_state,
+            interactive_supplier=_ask_stock_ids,
+        )
         config = ScanConfig(
             period=args.period,
             interval=args.interval,
@@ -130,33 +122,35 @@ def main() -> int | None:
             top=args.top,
             errors_only=args.errors_only,
         )
-
-        ranking_df = scan_stocks(stock_ids, config=config, progress_callback=_print_progress)
-        output_dir = Path(args.output_dir)
-        paths = export_stock_ranking(
-            ranking_df,
-            output_dir=output_dir,
+        request = ScanRunRequest(
+            symbols=resolved_symbol_requests,
+            universe=args.stock_market,
+            config=config,
+            output_dir=args.output_dir,
+            manifest_path=getattr(args, "manifest_path", None),
             sheet_by_signal=args.sheet_by_signal,
+            log_errors=args.log_errors,
         )
-        error_log = _write_error_log(ranking_df, output_dir) if args.log_errors else None
-
+        result = run_scan(request, progress_callback=_print_progress)
+        ranking_df = result.domain_result
         ok_count = int((ranking_df["Status"] == "OK").sum())
         error_count = int((ranking_df["Status"] != "OK").sum())
         print("\n掃描完成")
         print(f"成功: {ok_count}，失敗: {error_count}")
-        print(f"Excel: {paths['excel']}")
-        print(f"CSV: {paths['csv']}")
-        print(f"HTML: {paths['html']}")
+        print(f"Excel: {artifact_path(result, 'scan_ranking_excel')}")
+        print(f"CSV: {artifact_path(result, 'scan_ranking_csv')}")
+        print(f"HTML: {artifact_path(result, 'scan_ranking_html')}")
+        error_log = artifact_path(result, "scan_error_log")
         if error_log:
             print(f"錯誤紀錄: {error_log}")
-    except (ValueError, ReportError) as exc:
-        print(f"錯誤：{exc}")
-        return 1
     except KeyboardInterrupt:
         print("\n已取消掃描。")
         return 1
     except Exception as exc:
-        print(f"未預期錯誤：{exc}")
+        if find_exception_cause(exc, (ValueError, ReportError)) is not None:
+            print(f"錯誤：{exc}")
+        else:
+            print(f"未預期錯誤：{exc}")
         return 1
 
 

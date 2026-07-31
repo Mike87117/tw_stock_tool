@@ -16,6 +16,7 @@ from unittest.mock import mock_open, patch
 import pandas as pd
 
 from tw_stock_tool.cli import twstock_cli
+from tw_stock_tool.application.research_run import SymbolRequest
 from tw_stock_tool.cli import backtest_report, daily_report_cli, parameter_sweep_report
 from tw_stock_tool.cli import simulated_paper_trading_cli, walk_forward_report
 from tw_stock_tool.utils import doctor
@@ -55,16 +56,16 @@ CASES = (
         output_md=None, output_excel=None, output_dir="output", force_refresh=False,
         short_window=5, long_window=20, rsi_buy_below=30.0, rsi_sell_above=70.0,
         score_buy=None, score_sell=None, fee_rate=0.001425, tax_rate=0.003,
-        position_size=1.0, stop_loss_pct=None, take_profit_pct=None, max_hold_days=None),
-     "analyze_stock", []),
+        position_size=1.0, stop_loss_pct=None, take_profit_pct=None, max_hold_days=None, manifest_path=None),
+     "run_backtest", []),
     ("daily_report_cli", daily_report_cli, "tw_stock_tool.cli.daily_report_cli",
      "src/tw_stock_tool/cli/daily_report_cli.py", "daily",
      ns(stocks=["2330"], file=None, auto_stock_list=False, stock_market="all",
         stock_list_output="stocks.txt", allow_partial_stock_list=False, stock_limit=None,
         stock_sample=None, random_state=42, period="1y", interval="1d",
         signals=["BUY"], min_score=4.0, top=20, force_refresh=False,
-        auto_adjust=False, output_md=None, output_excel=None, output_dir="output"),
-     "collect_stock_ids", ["--stock-market", "bad"]),
+        auto_adjust=False, output_md=None, output_excel=None, output_json=None, output_dir="output", overwrite=False, manifest_path=None),
+     "run_daily", ["--stock-market", "bad"]),
     ("parameter_sweep_report", parameter_sweep_report,
      "tw_stock_tool.cli.parameter_sweep_report",
      "src/tw_stock_tool/cli/parameter_sweep_report.py", "parameter-sweep",
@@ -116,18 +117,43 @@ def run_subprocess(*args):
     )
 
 
+def research_result():
+    return SimpleNamespace(
+        domain_result={"Total Return %": 1, "Win Rate %": 1, "Trade Count": 1},
+        generated_artifacts=(),
+    )
+
+
 def patch_success(stack, case):
     name, module, _, _, _, args, _, _ = case
     stack.enter_context(patch.object(module, "_parse_args", return_value=args))
     if name == "backtest_report":
-        stack.enter_context(patch.object(module, "STRATEGIES", {"ma_cross_strategy": lambda df, **k: df}))
-        stack.enter_context(patch.object(module, "analyze_stock", return_value=SimpleNamespace(indicator_df=frame())))
-        stack.enter_context(patch.object(module, "run_backtest", return_value={"Total Return %": 1, "Win Rate %": 1, "Trade Count": 1}))
+        stack.enter_context(
+            patch.object(
+                module,
+                "resolve_symbol_request",
+                return_value=SymbolRequest("2330", "2330.TW"),
+            )
+        )
+        stack.enter_context(patch.object(module, "run_backtest", return_value=research_result()))
+        stack.enter_context(patch.object(module, "analyze_stock"))
+        stack.enter_context(patch.object(module, "legacy_run_backtest"))
+        for exporter in EXPORTS["backtest_report"]:
+            stack.enter_context(patch.object(module, exporter))
     elif name == "daily_report_cli":
-        stack.enter_context(patch.object(module, "collect_stock_ids", return_value=["2330"]))
-        stack.enter_context(patch.object(module, "run_daily_research_pipeline", return_value=SimpleNamespace(markdown="# report")))
+        stack.enter_context(
+            patch.object(
+                module,
+                "collect_symbol_requests",
+                return_value=(SymbolRequest("2330", "2330.TW"),),
+            )
+        )
+        stack.enter_context(patch.object(module, "run_daily", return_value=research_result()))
+        stack.enter_context(patch.object(module, "collect_stock_ids"))
+        stack.enter_context(patch.object(module, "run_daily_research_pipeline"))
+        stack.enter_context(patch.object(module, "export_daily_report_json_file"))
+        stack.enter_context(patch("builtins.open"))
         stack.enter_context(patch.object(Path, "mkdir"))
-        stack.enter_context(patch("builtins.open", mock_open()))
     elif name == "parameter_sweep_report":
         stack.enter_context(patch.object(module, "run_parameter_sweep", return_value=pd.DataFrame({"Result": [1]})))
         stack.enter_context(patch.object(module, "build_parameter_sweep_report_data", return_value={"Best Row": {}}))
@@ -148,10 +174,29 @@ def patch_failure(stack, case):
     name, module, _, _, _, args, boundary, _ = case
     stack.enter_context(patch.object(module, "_parse_args", return_value=args))
     if name == "doctor":
-        return stack.enter_context(patch.object(
-            module, "run_doctor",
-            return_value=[{"Status": module.FAIL, "Check": "offline", "Message": "controlled failure"}],
-        ))
+        return stack.enter_context(
+            patch.object(
+                module,
+                "run_doctor",
+                return_value=[{"Status": module.FAIL, "Check": "offline", "Message": "controlled failure"}],
+            )
+        )
+    if name == "backtest_report":
+        stack.enter_context(
+            patch.object(
+                module,
+                "resolve_symbol_request",
+                return_value=SymbolRequest("2330", "2330.TW"),
+            )
+        )
+    if name == "daily_report_cli":
+        stack.enter_context(
+            patch.object(
+                module,
+                "collect_symbol_requests",
+                return_value=(SymbolRequest("2330", "2330.TW"),),
+            )
+        )
     failure = stack.enter_context(
         patch.object(module, boundary, side_effect=RuntimeError("controlled failure"))
     )
@@ -166,6 +211,7 @@ def process_script(case, success, unified=False):
     lines = [
         "import argparse, importlib, tempfile",
         "from types import SimpleNamespace",
+        "from tw_stock_tool.application.research_run import SymbolRequest",
         "import pandas as pd",
         f"module = importlib.import_module({module_name!r})",
         f"data = {data!r}",
@@ -176,14 +222,13 @@ def process_script(case, success, unified=False):
     if success:
         if name == "backtest_report":
             lines += [
-                "module.STRATEGIES = {'ma_cross_strategy': lambda df, **k: df}",
-                "module.analyze_stock = lambda *a, **k: SimpleNamespace(indicator_df=pd.DataFrame({'Open': [10], 'Close': [11]}, index=pd.to_datetime(['2026-01-01'])))",
-                "module.run_backtest = lambda *a, **k: {'Total Return %': 1, 'Win Rate %': 1, 'Trade Count': 1}",
+                "module.resolve_symbol_request = lambda *a, **k: SymbolRequest('2330', '2330.TW')",
+                "module.run_backtest = lambda *a, **k: SimpleNamespace(domain_result={'Total Return %': 1, 'Win Rate %': 1, 'Trade Count': 1}, generated_artifacts=())",
             ]
         elif name == "daily_report_cli":
             lines += [
-                "module.collect_stock_ids = lambda *a, **k: ['2330']",
-                "module.run_daily_research_pipeline = lambda *a, **k: SimpleNamespace(markdown='# report')",
+                "module.collect_symbol_requests = lambda *a, **k: (SymbolRequest('2330', '2330.TW'),)",
+                "module.run_daily = lambda *a, **k: SimpleNamespace(domain_result={}, generated_artifacts=())",
             ]
         elif name == "parameter_sweep_report":
             lines += [
@@ -210,12 +255,17 @@ def process_script(case, success, unified=False):
     elif name == "doctor":
         lines.append("module.run_doctor = lambda live=False: [{'Status': module.FAIL, 'Check': 'offline', 'Message': 'controlled failure'}]")
     else:
+        if name == "backtest_report":
+            lines.append("module.resolve_symbol_request = lambda *a, **k: SymbolRequest('2330', '2330.TW')")
+        elif name == "daily_report_cli":
+            lines.append("module.collect_symbol_requests = lambda *a, **k: (SymbolRequest('2330', '2330.TW'),)")
         lines.append(f"module.{boundary} = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('controlled failure'))")
     call = f"twstock_cli.main([{route!r}])" if unified else "module.main()"
     if unified:
-        lines.insert(4, "from tw_stock_tool.cli import twstock_cli")
+        lines.insert(5, "from tw_stock_tool.cli import twstock_cli")
     lines.append(f"raise SystemExit({call})")
     return "\n".join(lines)
+
 def parse_args(module, argv):
     return module._parse_args(argv)
 
@@ -256,12 +306,18 @@ class C15BatchAReturnCodeNormalizationTest(unittest.TestCase):
         case = next(item for item in CASES if item[0] == "daily_report_cli")
         output = StringIO()
         with patch.object(case[1], "_parse_args", return_value=case[5]):
-            with patch.object(case[1], "collect_stock_ids", return_value=[]):
-                with redirect_stdout(output):
-                    result = case[1].main()
+            with patch.object(
+                case[1],
+                "collect_symbol_requests",
+                side_effect=ValueError("No stocks provided."),
+            ):
+                with patch.object(case[1], "run_daily") as run_daily:
+                    with redirect_stdout(output):
+                        result = case[1].main()
         self.assertEqual(result, 1)
         self.assertEqual(output.getvalue(), "Error: No stocks provided.\n")
 
+        run_daily.assert_not_called()
     def test_parser_help_and_usage_are_preserved(self):
         for case in CASES:
             with self.subTest(target=case[0], mode="help"):

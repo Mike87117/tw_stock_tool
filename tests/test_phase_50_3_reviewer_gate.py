@@ -10,6 +10,7 @@ import pandas as pd
 from tw_stock_tool.analysis.analysis_session import AnalysisSession
 from tw_stock_tool.analysis.scanner import ScanConfig, scan_one_stock
 from tw_stock_tool.cli import daily_report_cli
+from tw_stock_tool.application.research_run import SymbolRequest
 from tw_stock_tool.reports import daily_report
 
 from tests.test_phase_50_3_analysis_reuse import _analysis
@@ -168,19 +169,22 @@ class Phase503ProviderReviewerGateTest(unittest.TestCase):
 
 
 class DailyCliProviderReviewerGateTest(unittest.TestCase):
-    def test_cli_delegates_provider_ownership_to_the_pipeline_runner(self) -> None:
-        result = Mock(markdown="# report")
-        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--validate-top", "1"]), patch.object(
-            daily_report_cli, "run_daily_research_pipeline", return_value=result
-        ) as pipeline, patch.object(
-            daily_report_cli, "collect_stock_ids", return_value=["2330"]
-        ), patch.object(Path, "mkdir"), patch("builtins.open", mock_open()):
-            daily_report_cli.main()
-
-        pipeline.assert_called_once()
-        self.assertEqual(pipeline.call_args.args[0], ["2330"])
-        self.assertEqual(pipeline.call_args.args[1].validate_top, 1)
-        self.assertTrue(callable(pipeline.call_args.kwargs["status_callback"]))
-
+    def test_cli_delegates_provider_ownership_to_the_application_runner(self) -> None:
+        symbols = (SymbolRequest("2330", "2330.TW"),)
+        result = Mock(generated_artifacts=(), domain_result=pd.DataFrame())
+        with patch.object(sys, "argv", ["daily_report_cli.py", "--stocks", "2330", "--validate-top", "1"]):
+            with patch.object(daily_report_cli, "collect_symbol_requests", return_value=symbols):
+                with patch.object(daily_report_cli, "run_daily", return_value=result) as run_daily:
+                    with patch.object(daily_report_cli, "run_daily_research_pipeline") as legacy_pipeline:
+                        with patch.object(daily_report_cli, "collect_stock_ids") as legacy_collect:
+                            daily_report_cli.main()
+        run_daily.assert_called_once()
+        request = run_daily.call_args.args[0]
+        self.assertEqual(request.symbols, symbols)
+        self.assertEqual(request.config.validate_top, 1)
+        self.assertNotIn("analysis_provider", vars(request.config))
+        self.assertTrue(callable(run_daily.call_args.kwargs["status_callback"]))
+        legacy_pipeline.assert_not_called()
+        legacy_collect.assert_not_called()
 if __name__ == "__main__":
     unittest.main()
