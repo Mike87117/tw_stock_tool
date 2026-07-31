@@ -28,7 +28,7 @@ Phase 55.2 已讓 Scan、Daily Report 與 Backtest 產生包含 Run ID、resolve
 3. 有 Run ID，但沒有可瀏覽的 Run History。
 4. 無法從一個統一入口列出、尋找或檢查歷史 runs。
 5. Artifact path 尚未定義可搬移的 Workspace-relative contract。
-6. 缺失或損壞的 manifest／artifact 尚無統一 health state。
+6. 缺失或損壞的 manifest／artifact 尚無統一 health reporting。
 7. GUI 與後續 experiment comparison 沒有穩定的 storage foundation。
 
 產品問題可簡化為：
@@ -43,7 +43,7 @@ Phase 55.3 的目標是建立一個本機、離線、檔案系統為基礎的 Re
 - 將 manifest 與 Workspace-managed artifacts 放在同一個可搬移邊界。
 - 可被 deterministic catalog 列出。
 - 可依 Run ID inspect。
-- 可報告 manifest／artifact health。
+- 可報告 manifest／artifact health findings。
 - 不改寫既有 domain artifact schema。
 - 不使用 network 或重新執行研究即可進行 list／inspect／validate。
 
@@ -53,7 +53,7 @@ Phase 55.3 的目標是建立一個本機、離線、檔案系統為基礎的 Re
 
 Phase 55.3 第一版不建立 SQLite、server、daemon 或 background index。
 
-Workspace catalog 由 filesystem scan 與 manifest strict read-back 建立。任何衍生 cache 都不得成為 authoritative source。
+Workspace catalog 由 canonical filesystem layout 與 manifest strict read-back 建立。任何衍生 cache 都不得成為 authoritative source。
 
 ### 5.2 Append-only run history
 
@@ -78,7 +78,7 @@ Artifact Hub 不得在 Phase 55.3 中把所有 artifact 重寫成新統一 schem
 - Inspect run
 - Validate manifest
 - Check artifact existence
-- Identify result type／media type／schema version
+- Identify artifact type／media type／schema version
 
 這些操作不得：
 
@@ -117,21 +117,24 @@ workspace/
 Proposed format：
 
 ```text
-<UTC basic timestamp>_<workflow>_<run-id-prefix>
+<UTC basic timestamp>_<workflow-slug>_<run-id-prefix>
 ```
 
 Rules：
 
 - Timestamp uses UTC `YYYYMMDDTHHMMSSZ`.
-- Workflow is a clean lowercase identifier already accepted by `RunConfig.workflow`.
 - Run ID prefix uses the first eight hexadecimal characters of the canonical UUID.
 - The full UUID remains authoritative in `manifest.json`.
 - Symbols and strategy parameters are not embedded in the directory name.
-- Directory names must remain safe for Windows, macOS and Linux filesystems.
+- Directory names must remain safe for Windows、macOS and Linux filesystems.
+- The filesystem component is a separately validated `workflow-slug`; it must not directly embed an arbitrary `RunConfig.workflow` value.
+- Phase 55.3B must provide an exact slug validator or registered mapping. Initial integration values are expected to include `scan`、`daily` and `backtest`.
+
+`RunConfig.workflow` currently guarantees a clean nonblank string, but does not itself guarantee lowercase or filesystem-safe characters. Workspace safety therefore belongs to the Workspace boundary, not the Run Manifest schema.
 
 ### 6.3 Canonical run files
 
-Each managed run directory must contain：
+Each completed managed run directory must contain：
 
 ```text
 manifest.json
@@ -145,18 +148,19 @@ logs/
 tables/
 ```
 
-Only `manifest.json` is mandatory. The existence of optional directories depends on generated output.
+`manifest.json` is the only mandatory completed-run file. A canonical-looking directory without it is an incomplete or damaged run and must be reported through catalog health findings rather than silently treated as valid.
 
 ### 6.4 Directory creation
 
 Run-directory creation must：
 
 1. Validate Workspace root.
-2. Derive the target path from the run metadata.
-3. Create parent year／month directories if needed.
-4. Create the run directory using collision-rejecting semantics.
-5. Never reuse a non-empty existing run directory.
-6. Return a typed run-directory handle.
+2. Validate the workflow slug and Run ID.
+3. Derive the target path from run metadata.
+4. Create parent year／month directories if needed.
+5. Create the run directory using collision-rejecting semantics.
+6. Never reuse an existing run directory, including an empty one.
+7. Return a typed run-directory handle.
 
 If a collision occurs, the operation must fail with a controlled Workspace error. It must not add random retries that obscure the original Run ID.
 
@@ -164,7 +168,7 @@ If a collision occurs, the operation must fail with a controlled Workspace error
 
 ### 7.1 Workspace-managed artifacts
 
-Manifest artifact paths for Workspace-managed output should be stored relative to the run directory and use POSIX `/` separators.
+Manifest artifact paths for Workspace-managed output must be stored relative to the run directory and use POSIX `/` separators.
 
 Example：
 
@@ -183,16 +187,20 @@ Benefits：
 - Paths are independent of the original machine root.
 - Windows absolute-path details are not persisted into portable metadata.
 
+The existing `ArtifactReference` model remains broader for legacy mode and currently only enforces a clean POSIX-style string. Phase 55.3B must add a stricter Workspace path profile without changing Run Manifest schema version `1.0`.
+
 ### 7.2 External artifacts
 
-Phase 55.3B must make an explicit implementation decision between these two contracts：
+First-version decision：
 
-1. Reject external artifact destinations in Workspace mode; or
-2. Represent external paths using an explicit external-reference model.
+> Workspace mode owns all managed output and rejects artifact destinations outside the allocated run directory.
 
-The first implementation should prefer **Workspace-owned output only** unless compatibility evidence proves that external output is necessary.
+Therefore：
 
-Do not overload a plain relative `ArtifactReference.path` with ambiguous absolute-path meaning.
+- Conflicting explicit output paths are rejected in Workspace mode.
+- Legacy mode continues to support its existing explicit path behavior.
+- A future external-reference model requires a separate schema and compatibility decision.
+- A plain `ArtifactReference.path` must not ambiguously represent both portable relative paths and external absolute paths within Workspace mode.
 
 ### 7.3 Path safety
 
@@ -201,10 +209,11 @@ Workspace path resolution must reject：
 - Absolute paths where a relative artifact path is required.
 - `..` traversal outside the run directory.
 - NUL characters.
-- Empty path segments that change interpretation.
-- Symlink traversal that escapes the Workspace boundary, if symlink handling is supported.
+- Empty or ambiguous path segments.
+- Paths resolving outside the run directory.
+- Symlink or reparse-point components in managed run and artifact paths in the first version.
 
-The exact symlink policy must be locked in Phase 55.3B before production code.
+The first implementation should reject symlink-based managed paths rather than attempt partial support. Any later relaxation requires separate cross-platform characterization.
 
 ## 8. Manifest ownership and write ordering
 
@@ -218,19 +227,20 @@ The Workspace catalog must not infer successful completion only from directory n
 
 For successful runs：
 
-1. Create unique run directory.
-2. Execute workflow and write artifacts inside temporary or final managed paths.
-3. Validate generated artifact references.
-4. Write final `manifest.json` atomically.
-5. Read back and validate the manifest.
-6. Return the Research Run result.
+1. Complete request validation and assign Run ID.
+2. Create the unique run directory.
+3. Execute workflow and write artifacts inside managed paths.
+4. Validate generated artifact references through the Workspace path profile.
+5. Write final `manifest.json` atomically.
+6. Read back and strictly validate the manifest.
+7. Return the Research Run result.
 
 For failed runs：
 
-1. Create unique run directory when the run has passed request validation and has an assigned Run ID.
+1. Create the run directory after request validation and Run ID assignment.
 2. Record controlled failure details.
 3. Write a failure manifest atomically when possible.
-4. Preserve available logs without claiming successful artifacts.
+4. Preserve available managed logs without claiming successful artifacts.
 
 Request validation failures that occur before Run ID creation do not require a Workspace directory.
 
@@ -240,30 +250,39 @@ Phase 55.3B should provide a shared filesystem writer using：
 
 - UTF-8.
 - `\n` newlines for text artifacts where the existing contract allows it.
-- Temporary sibling file.
+- A temporary sibling file.
 - Flush／close before replace.
 - Atomic replace where supported.
+- Cleanup of temporary files after controlled failure where safely possible.
 
 Atomic replacement applies to a file inside a newly created run directory. It must not enable replacing an existing run directory.
 
-## 9. Artifact Catalog contract
+## 9. Workspace catalog contract
 
 ### 9.1 Catalog source
 
-The catalog scans：
+The catalog scans canonical run directories at：
 
 ```text
-workspace/runs/<year>/<month>/<run-directory>/manifest.json
+workspace/runs/<year>/<month>/<run-directory>/
 ```
 
-The first version should not recursively scan arbitrary files outside this shape.
+For each canonical-looking run directory, it checks：
+
+```text
+manifest.json
+```
+
+This distinction is required so the catalog can report `missing_manifest`. The first version must not recursively scan arbitrary files or directories outside the canonical year／month／run shape.
+
+Canonical-looking run directories are identified by an exact parser for the approved directory-name format. Directories that do not match the format are ignored rather than interpreted as runs.
 
 ### 9.2 Catalog entry
 
 Proposed typed summary：
 
 ```text
-ArtifactCatalogEntry
+WorkspaceRunEntry
 - run_id
 - created_at
 - workflow
@@ -275,23 +294,39 @@ ArtifactCatalogEntry
 - run_directory
 - manifest_path
 - health
-- health_messages
+- findings
 ```
 
-### 9.3 Health states
+This is a run-level entry. It must not be named `ArtifactCatalogEntry`, because one entry represents one Research Run and may contain multiple artifacts.
 
-Proposed values：
+### 9.3 Health summary and findings
+
+A run may have more than one problem. The first version should separate：
 
 ```text
-valid
+RunHealth
+- valid
+- warning
+- invalid
+```
+
+from deterministic finding codes：
+
+```text
 invalid_manifest
 missing_manifest
 missing_artifact
 unsafe_path
 unsupported_schema
+unregistered_artifact_type
 ```
 
-A later implementation may represent multiple findings separately, but the user-facing summary must remain deterministic.
+Rules：
+
+- `valid` has no findings.
+- `warning` may include non-fatal findings such as an unregistered artifact type.
+- `invalid` includes findings that prevent trusted inspection, such as invalid or missing manifest and unsafe path.
+- Findings are deduplicated and sorted by an exact priority defined in Phase 55.3B.
 
 ### 9.4 Invalid entries
 
@@ -300,23 +335,35 @@ One malformed run must not prevent listing other runs.
 Catalog scanning must：
 
 - Return valid entries normally.
-- Return controlled invalid entries where enough metadata can be recovered safely.
+- Return controlled invalid entries where enough path metadata can be recovered safely.
 - Never execute code or import arbitrary artifact content.
+- Never trust directory timestamp or workflow text without parsing.
 - Sort deterministically.
 
 ### 9.5 Ordering
 
 Default ordering：
 
-1. `created_at` descending when valid.
+1. Valid and warning entries with a readable manifest, ordered by `created_at` descending.
 2. `run_id` ascending as tie-breaker.
-3. Invalid entries after valid entries, ordered by normalized path.
+3. Invalid entries after readable entries, ordered by normalized run-directory path.
 
-No filesystem modification time should be used as the primary run timestamp.
+Filesystem modification time must not be used as the primary run timestamp.
 
-## 10. CLI compatibility direction
+## 10. Run lookup contract
 
-The exact parser design belongs to Phase 55.3C, but the product direction is：
+First-version `run inspect` lookup requires the full canonical UUID.
+
+Rules：
+
+- Prefix lookup is deferred.
+- Duplicate Run IDs across different directories are treated as an invalid Workspace condition.
+- A duplicate must not be resolved by newest timestamp or path order.
+- Lookup remains offline and read-only.
+
+## 11. CLI compatibility direction
+
+The exact parser design belongs to Phase 55.3C and Phase 55.3D, but the product direction is：
 
 ```bash
 twstock scan ... --workspace workspace
@@ -324,21 +371,22 @@ twstock daily ... --workspace workspace
 twstock backtest-report ... --workspace workspace
 
 twstock run list --workspace workspace
-twstock run inspect <run-id> --workspace workspace
+twstock run inspect <full-run-id> --workspace workspace
 ```
 
-### 10.1 Workspace execution mode
+### 11.1 Workspace execution mode
 
 When `--workspace` is provided：
 
-- Application Service owns the run directory.
+- The Application Service or a dedicated run-lifecycle service owns the run directory.
 - Workflow outputs are written below that directory.
 - Manifest path is canonical `manifest.json`.
-- Existing explicit output-path options must either be rejected as conflicting or normalized into Workspace-managed artifact names according to a separately characterized rule.
+- Conflicting explicit artifact paths are rejected.
+- Workspace-relative artifact references are returned.
 
 The CLI must not silently split one run across unrelated directories.
 
-### 10.2 Legacy execution mode
+### 11.2 Legacy execution mode
 
 When `--workspace` is omitted：
 
@@ -347,29 +395,23 @@ When `--workspace` is omitted：
 - Current exit behavior remains unchanged.
 - Current `--manifest-path` behavior remains unchanged.
 
-### 10.3 Read-only commands
+### 11.3 Read-only commands
 
 `run list` and `run inspect` must operate without network and without domain execution.
 
 Phase 55.3 does not add `run reproduce`.
 
-## 11. Proposed package boundary
+## 12. Proposed package boundary
 
-Suggested first-version structure：
+Suggested Phase 55.3B structure：
 
 ```text
 src/tw_stock_tool/
-├── application/
-│   └── research_run.py
-├── artifacts/
-│   ├── __init__.py
-│   ├── errors.py
-│   ├── workspace.py
-│   ├── catalog.py
-│   └── registry.py
-└── research_run/
-    ├── models.py
-    └── serialization.py
+└── artifacts/
+    ├── __init__.py
+    ├── errors.py
+    ├── workspace.py
+    └── catalog.py
 ```
 
 Responsibilities：
@@ -377,6 +419,7 @@ Responsibilities：
 ### `artifacts.workspace`
 
 - Validate Workspace root.
+- Validate workflow slugs and run-directory names.
 - Create unique run directories.
 - Resolve safe managed paths.
 - Write／read canonical manifest files.
@@ -384,17 +427,12 @@ Responsibilities：
 
 ### `artifacts.catalog`
 
-- Scan canonical run locations.
+- Scan canonical run directories.
 - Strictly load manifests.
-- Build catalog entries.
-- Detect missing artifacts and unsafe paths.
+- Build `WorkspaceRunEntry` values.
+- Detect missing manifests、missing artifacts and unsafe paths.
 - Sort deterministically.
-
-### `artifacts.registry`
-
-- Map known `artifact_type` values to expected media type and optional schema ownership.
-- Avoid opening or executing artifact content unless an explicit validator exists.
-- Unknown artifact types remain inspectable but are reported as unregistered, not deleted or rewritten.
+- Perform exact full-UUID lookup.
 
 ### `artifacts.errors`
 
@@ -402,7 +440,11 @@ Responsibilities：
 - Preserve useful path and operation context.
 - Avoid leaking implementation tracebacks through normal CLI output.
 
-## 12. Phase breakdown
+An artifact-type registry is not required for Phase 55.3B storage foundation. It may be added in a later subphase when artifact-type validation and user-facing inspection behavior are separately characterized.
+
+Existing `research_run.models` and `research_run.serialization` remain the owners of Run Manifest schema and strict JSON read-back.
+
+## 13. Phase breakdown
 
 ## Phase 55.3A：Contract Planning
 
@@ -424,7 +466,9 @@ None.
 
 - Planning document merged.
 - Phase 55.2 closeout merged.
-- Open questions either resolved or explicitly assigned to Phase 55.3B characterization.
+- Independent document review passes.
+- CI and package smoke pass.
+- Phase 55.3B scope is locked without CLI or workflow migration.
 
 ## Phase 55.3B：Workspace Storage Foundation
 
@@ -432,10 +476,11 @@ None.
 
 - Add Workspace models and controlled errors.
 - Create unique run directories.
-- Add safe path resolution.
+- Add safe relative-path resolution.
 - Add canonical manifest persistence and strict read-back.
 - Add filesystem catalog scanning.
-- Add artifact existence health checks.
+- Add run health and artifact existence findings.
+- Add exact full-UUID lookup.
 
 ### Out of scope
 
@@ -443,15 +488,21 @@ None.
 - CLI parser changes.
 - GUI changes.
 - Database index.
+- Artifact-type registry unless separately authorized.
 
 ### Required tests
 
 - Cross-platform path normalization.
+- Workflow-slug validation.
 - Collision rejection.
 - Traversal rejection.
+- Absolute-path rejection.
+- Symlink／reparse-point rejection where testable.
 - Invalid manifest isolation.
+- Missing manifest detection.
 - Missing artifact detection.
-- Deterministic ordering.
+- Duplicate Run ID detection.
+- Deterministic findings and ordering.
 - Workspace relocation.
 - Atomic manifest write failure behavior.
 
@@ -462,6 +513,7 @@ None.
 - Add opt-in Workspace execution to typed requests or an application-level Workspace policy.
 - Integrate Scan、Daily and Backtest only.
 - Generate Workspace-relative artifact references.
+- Reject conflicting external artifact paths in Workspace mode.
 - Preserve legacy mode.
 
 ### Required tests
@@ -479,7 +531,7 @@ None.
 
 - `run list`
 - `run inspect`
-- Human-readable status and health output
+- Human-readable status and findings output
 - Optional machine-readable JSON only if separately locked by contract
 
 ### Required tests
@@ -487,7 +539,8 @@ None.
 - No network calls.
 - No strategy or backtest execution.
 - Invalid run isolation.
-- Run ID exact and unique lookup.
+- Full Run ID exact lookup.
+- Duplicate Run ID controlled failure.
 - Deterministic output ordering.
 - Controlled not-found errors.
 
@@ -501,25 +554,27 @@ None.
 - Runtime／documentation consistency audit.
 - Final Phase closeout.
 
-## 13. Acceptance criteria
+## 14. Acceptance criteria
 
 Phase 55.3 is complete only when：
 
 1. Two same-configuration Workspace runs never overwrite each other.
-2. Every managed run has one canonical `manifest.json`.
-3. Every managed artifact reference resolves safely below the run directory.
-4. A Workspace can be moved and still be listed／inspected.
-5. Catalog ordering is deterministic.
-6. One damaged run does not break catalog listing.
-7. Missing artifacts produce controlled health findings.
-8. Unsupported manifest schema produces a controlled finding.
-9. List／inspect operate without network or domain execution.
-10. Existing artifact schemas remain unchanged unless a separate schema Phase authorizes change.
-11. Legacy CLI mode remains behavior-compatible.
-12. Python 3.11／3.12 full suite and package smoke pass.
-13. Documentation matches exact runtime behavior.
+2. Every completed managed run has one canonical `manifest.json`.
+3. Canonical-looking incomplete directories produce controlled findings.
+4. Every managed artifact reference resolves safely below the run directory.
+5. A Workspace can be moved and still be listed／inspected.
+6. Catalog ordering and finding ordering are deterministic.
+7. One damaged run does not break catalog listing.
+8. Missing artifacts produce controlled findings.
+9. Unsupported manifest schema produces a controlled finding.
+10. Duplicate Run IDs produce a controlled invalid condition.
+11. List／inspect operate without network or domain execution.
+12. Existing artifact schemas remain unchanged unless a separate schema Phase authorizes change.
+13. Legacy CLI mode remains behavior-compatible.
+14. Python 3.11／3.12 full suite and package smoke pass.
+15. Documentation matches exact runtime behavior.
 
-## 14. Explicit non-goals
+## 15. Explicit non-goals
 
 Phase 55.3 must not include：
 
@@ -539,27 +594,22 @@ Phase 55.3 must not include：
 - Full package reorganization.
 - Removal of remaining private Data Loader compatibility seams.
 
-## 15. Open questions for Phase 55.3B characterization
+## 16. Locked first-version decisions
 
-The following questions must be resolved before production implementation merges：
+The following decisions are locked for the first implementation：
 
-1. Are symlinks entirely rejected, or allowed only when the resolved target remains inside the run directory?
-2. Are conflicting explicit artifact paths rejected in Workspace mode, or converted to safe basenames?
-3. Should invalid directories without `manifest.json` appear as `missing_manifest`, or be ignored unless they match the canonical run-name pattern?
-4. Should `artifact_type` registry mismatches be health warnings or hard validation failures?
-5. Should failed runs create the run directory before market-data access, or only after request validation and Run ID assignment?
-6. Does `run inspect` accept only full UUID, or also an unambiguous prefix?
+- Filesystem scan is the source of truth.
+- Catalog scans canonical run directories, not only manifest files.
+- Canonical-looking directories without manifest are reported.
+- Workspace mode rejects external artifact destinations.
+- Managed paths reject symlink／reparse-point components.
+- Workspace path validation is stricter than the legacy `ArtifactReference` model.
+- Unknown artifact types do not block storage foundation; registry behavior is deferred.
+- Run directories are created after request validation and Run ID assignment.
+- `run inspect` requires the full canonical UUID.
+- Duplicate Run IDs fail closed.
 
-Default recommendation：
-
-- Reject symlink escape.
-- Reject conflicting external paths.
-- Report canonical-looking missing-manifest directories.
-- Treat unknown artifact types as warnings.
-- Create run directory after request validation and Run ID assignment.
-- Require full Run ID in the first version.
-
-## 16. Dependency graph
+## 17. Dependency graph
 
 ```text
 Phase 55.2 Closeout
@@ -579,9 +629,9 @@ Phase 55.4 Daily Report Decomposition or Phase 55.5 GUI Workspace
 
 Phase 55.4 and Phase 55.5 must not assume Workspace APIs before Phase 55.3B–D contracts are merged and stable.
 
-## 17. Product decision
+## 18. Product decision
 
-The next production-code task after this planning Phase should be：
+The next production-code task after this planning Phase is：
 
 > **Phase 55.3B — Implement the filesystem-based Workspace storage and catalog foundation without migrating existing research workflows.**
 
