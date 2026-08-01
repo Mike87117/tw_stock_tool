@@ -53,8 +53,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     inspect_parser.add_argument("--workspace", required=True)
     return parser.parse_args(argv)
 
-
-
 def _display_data(value: object) -> object:
     if is_dataclass(value):
         return {field.name: _display_data(getattr(value, field.name)) for field in fields(value)}
@@ -63,6 +61,7 @@ def _display_data(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return [_display_data(item) for item in value]
     return value
+
 def _print_details(entry) -> None:
     _print_entry(entry)
     manifest = entry.manifest

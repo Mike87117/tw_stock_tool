@@ -94,4 +94,4 @@ Workspace mode 的 manifest artifact paths 是相對於 run directory 的 POSIX 
 
 ## Offline Workspace run inspection
 
-	wstock run list --workspace PATH and 	wstock run inspect FULL-UUID --workspace PATH are offline, read-only commands. They never create a missing Workspace, read artifact content, or fetch market data. Inspect requires an exact lowercase UUID v4 (prefixes are rejected); duplicate Run IDs fail closed. Output is deterministic human-readable text only: no JSON, reproduce, delete, or cleanup command. Exit codes are 0 for successful list/inspect, 1 for controlled Workspace or lookup errors, and 2 for argument errors.
+`twstock run list --workspace PATH` and `twstock run inspect FULL-UUID --workspace PATH` are offline, read-only commands. They never create a missing Workspace, read artifact content, or fetch market data. Inspect requires an exact lowercase UUID v4 (prefixes are rejected); duplicate Run IDs fail closed. Output is deterministic human-readable text only: no JSON, reproduce, delete, or cleanup command. Exit codes are 0 for successful list/inspect, 1 for controlled Workspace or lookup errors, and 2 for argument errors.

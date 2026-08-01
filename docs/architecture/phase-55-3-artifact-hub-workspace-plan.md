@@ -660,4 +660,4 @@ Known limitations:
 
 ## 20. Phase 55.3D implementation record
 
-Phase 55.3D provides offline, read-only 	wstock run list and 	wstock run inspect. It reuses the Workspace/catalog boundary, opens only existing roots without mkdir, requires exact lowercase UUID v4 IDs, and leaves damaged runs visible through catalog findings. No reproduce, deletion, cleanup, artifact preview, JSON output, database, or migration scope is included.
+Phase 55.3D provides offline, read-only `twstock run list` and `twstock run inspect`. It reuses the Workspace/catalog boundary, opens only existing roots without mkdir, requires exact lowercase UUID v4 IDs, and leaves damaged runs visible through catalog findings. No reproduce, deletion, cleanup, artifact preview, JSON output, database, or migration scope is included.

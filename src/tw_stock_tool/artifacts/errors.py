@@ -43,7 +43,6 @@ class WorkspaceCatalogError(WorkspaceError):
 class WorkspaceRunNotFoundError(WorkspaceCatalogError):
     """Raised when an exact Run ID does not appear in a catalog."""
 
-
 class WorkspaceDuplicateRunIdError(WorkspaceCatalogError):
     """Raised when an exact Run ID appears in multiple catalog entries."""
 
@@ -54,8 +53,6 @@ __all__ = [
     "WorkspacePathError",
     "WorkspaceManifestError",
     "WorkspaceCatalogError",
-    "WorkspaceRunNotFoundError",
-    "WorkspaceDuplicateRunIdError",
     "WorkspaceRunNotFoundError",
     "WorkspaceDuplicateRunIdError",
 ]

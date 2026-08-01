@@ -35,7 +35,7 @@ class Route:
 
 ROUTES = (
     Route(("doctor",), "Check local environment", "tw_stock_tool.utils.doctor", "doctor.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-Route(("run",), "Inspect existing Workspace runs offline", "tw_stock_tool.cli.workspace_run_cli", "twstock run", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("run",), "Inspect existing Workspace runs offline", "tw_stock_tool.cli.workspace_run_cli", "twstock run", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("scan",), "Run multi-stock technical scanner", "tw_stock_tool.cli.scan_stocks", "scan_stocks.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("daily",), "Run daily candidate report", "tw_stock_tool.cli.daily_report_cli", "daily_report_cli.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(
@@ -151,48 +151,6 @@ TOP_LEVEL_ORDER = (
 )
 NESTED_ORDER = ("update", "smoke-check", "clean")
 
-
-TOP_HELP = """usage: twstock [-h]
-               {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,ai-report,ml-dataset,gui,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export,simulated-portfolio-artifact,simulated-portfolio-trading}
-               ...
-
-Unified tw_stock_tool CLI
-
-positional arguments:
-  {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,ai-report,ml-dataset,gui,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export,simulated-portfolio-artifact,simulated-portfolio-trading}
-    doctor              Check local environment
-    scan                Run multi-stock technical scanner
-    daily               Run daily candidate report
-    daily-report-artifact
-                        Validate, inspect, or export a Daily Report JSON artifact
-    stock-list          Stock-list utilities
-    price-smoke-check   Smoke check price data sources
-    ai-scan             Run multi-stock AI baseline scanner
-    ai-report           Run baseline ML prediction report
-    ml-dataset          Build research ML dataset
-    gui                 Launch local GUI prototype
-    cache               Manage price data cache
-    benchmark           Run multi-stock scanner benchmark
-    analyze             Run single-stock analysis
-    strategy-compare    Run strategy comparison
-    parameter-sweep     Run parameter sweep
-    backtest-report     Run backtest report
-    walk-forward        Run walk forward report
-    simulated-paper-trading
-                        Run historical simulated paper trading
-    simulated-paper-trading-export
-                        Export reports from a simulated paper trading JSON artifact
-    backtest-artifact   Validate or inspect BacktestResult JSON artifacts
-    backtest-result-export
-                        Export historical BacktestResult JSON artifact
-    simulated-portfolio-artifact
-                        Validate, inspect, or export a simulated portfolio trading JSON artifact
-    simulated-portfolio-trading
-                        Run multi-symbol historical simulated portfolio trading
-
-options:
-  -h, --help            show this help message and exit
-"""
 
 
 
@@ -317,6 +275,34 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertNotIn("stock-list", ROUTE_BY_NAME)
         self.assertEqual(tuple(action._name_parser_map), TOP_LEVEL_ORDER)
 
+    def test_run_help_and_argument_rejection_are_exposed_by_unified_cli(self) -> None:
+        status, stdout, stderr = _help_snapshot(["--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("run", stdout)
+        self.assertIn("Inspect existing Workspace runs offline", stdout)
+
+        status, stdout, stderr = _help_snapshot(["run", "--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("usage: twstock run", stdout)
+        self.assertIn("list", stdout)
+        self.assertIn("inspect", stdout)
+
+        status, stdout, stderr = _help_snapshot(["run", "list", "--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("usage: twstock run list", stdout)
+        self.assertIn("--workspace", stdout)
+
+        status, stdout, stderr = _help_snapshot(["run", "inspect", "--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("usage: twstock run inspect", stdout)
+        self.assertIn("run_id", stdout)
+        self.assertIn("Exact canonical lowercase UUID v4", stdout)
+        self.assertIn("--workspace", stdout)
+
+        for argv in (["run", "unknown"], ["run", "list", "--workspace", "workspace", "--unknown"], ["run", "inspect", "550e8400-e29b-41d4-a716-446655440000", "--workspace", "workspace", "--unknown"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit) as raised:
+                twstock_cli.main(argv)
+            self.assertEqual(raised.exception.code, 2)
     def test_direct_handlers_preserve_callable_targets_and_child_program_names(self) -> None:
         passthrough = ["--flag", "value", "--output-md", "report.md", "--option=-2", "artifact.json"]
         for route in ROUTES:

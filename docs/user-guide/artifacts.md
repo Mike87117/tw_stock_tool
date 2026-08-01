@@ -89,4 +89,4 @@ workspace/
 ~~~
 
 manifest.json is the run-level record and remains Run Manifest schema 1.0. Its managed artifact references are relative POSIX paths such as artifacts/stock_ranking.csv; they do not contain the original machine absolute Workspace path. The existing scan_catalog／scan_workspace API can scan the runs offline and reports missing or unsafe artifacts without fetching data or rerunning research. Re-running the same command creates another run directory and does not overwrite the earlier run.
-Workspace run listing and inspection are offline and read-only. Damaged runs remain visible in 	wstock run list; inspect shows manifest metadata and catalog findings only, never artifact contents.
+Workspace run listing and inspection are offline and read-only. Damaged runs remain visible in `twstock run list`; `twstock run inspect` shows manifest metadata and catalog findings only, never artifact contents.
