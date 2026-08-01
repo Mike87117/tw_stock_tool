@@ -168,9 +168,14 @@ def parse_run_directory_name(value: str) -> ParsedRunDirectory | None:
         datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ")
     except ValueError:
         return None
+    workflow_slug = match.group("workflow")
+    try:
+        validate_workflow_slug(workflow_slug)
+    except WorkspaceValidationError:
+        return None
     return ParsedRunDirectory(
         directory_timestamp=timestamp,
-        workflow_slug=match.group("workflow"),
+        workflow_slug=workflow_slug,
         run_id_prefix=match.group("prefix"),
     )
 
@@ -285,9 +290,38 @@ class RunDirectory:
         if not isinstance(self.workspace, Workspace):
             raise WorkspaceValidationError("validate run directory", None, "workspace must be a Workspace")
         normalized = _absolute_path(self.path, "validate run directory")
-        _validate_utc_timestamp(self.created_at, "validate run directory")
+        timestamp = _validate_utc_timestamp(self.created_at, "validate run directory")
         validate_workflow_slug(self.workflow_slug)
         _validate_run_id(self.run_id, "validate run directory")
+        runs_directory = self.workspace.runs_directory
+        try:
+            normalized.relative_to(runs_directory)
+        except ValueError as exc:
+            raise WorkspacePathError(
+                "validate run directory",
+                normalized,
+                "path must be inside the workspace runs directory",
+            ) from exc
+
+        expected = runs_directory / timestamp.strftime("%Y") / timestamp.strftime("%m") / canonical_run_directory_name(
+            self.created_at,
+            self.workflow_slug,
+            self.run_id,
+        )
+        if normalized != expected:
+            raise WorkspaceValidationError(
+                "validate run directory",
+                normalized,
+                "path must equal the canonical run directory for its metadata",
+            )
+
+        _ensure_no_reparse_components(normalized, "validate run directory")
+        try:
+            result = normalized.lstat()
+        except OSError as exc:
+            raise WorkspaceValidationError("validate run directory", normalized, "path cannot be inspected") from exc
+        if not stat.S_ISDIR(result.st_mode):
+            raise WorkspaceValidationError("validate run directory", normalized, "path is not a directory")
         object.__setattr__(self, "path", normalized)
 
     @property
@@ -373,6 +407,7 @@ def write_manifest(run_directory: RunDirectory, manifest: RunManifest) -> RunMan
         ResearchRunSerializationError,
         export_run_manifest_json,
     )
+    from tw_stock_tool.research_run.models import RunManifest
 
     if not isinstance(run_directory, RunDirectory):
         raise WorkspaceManifestError("write manifest", None, "run_directory must be a RunDirectory")
@@ -386,6 +421,23 @@ def write_manifest(run_directory: RunDirectory, manifest: RunManifest) -> RunMan
 
     final_path = run_directory.manifest_path
     _ensure_no_reparse_components(final_path, "write manifest")
+    if not isinstance(manifest, RunManifest):
+        raise WorkspaceManifestError("write manifest", final_path, "manifest must be a RunManifest")
+    if manifest.run_id != run_directory.run_id:
+        raise WorkspaceManifestError("write manifest", final_path, "manifest run_id does not match run directory")
+    if manifest.created_at != run_directory.created_at:
+        raise WorkspaceManifestError("write manifest", final_path, "manifest created_at does not match run directory")
+    if manifest.config.workflow != run_directory.workflow_slug:
+        raise WorkspaceManifestError("write manifest", final_path, "manifest workflow does not match run directory")
+    for artifact in manifest.artifacts:
+        try:
+            validate_artifact_path(artifact.path)
+        except WorkspacePathError as exc:
+            raise WorkspaceManifestError(
+                "write manifest",
+                final_path,
+                f"manifest artifact path is unsafe: {artifact.path!r}",
+            ) from exc
     if final_path.exists() or os.path.lexists(final_path):
         raise WorkspaceCollisionError("write manifest", final_path, "canonical manifest already exists")
     try:

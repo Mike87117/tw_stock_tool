@@ -2,17 +2,23 @@ from pathlib import Path
 import ast
 from datetime import datetime
 from shutil import move
+import stat
 import tempfile
 import unittest
 from unittest import mock
 
 from tw_stock_tool.artifacts import (
+    RunDirectory,
+    RunFinding,
     RunFindingCode,
     RunHealth,
     Workspace,
+    WorkspaceCatalog,
+    WorkspaceCatalogError,
     WorkspaceCollisionError,
     WorkspaceManifestError,
     WorkspacePathError,
+    WorkspaceRunEntry,
     WorkspaceValidationError,
     canonical_run_directory_name,
     parse_run_directory_name,
@@ -71,6 +77,32 @@ def _manifest(
         artifacts=artifacts,
         errors=(),
         limitations=("\u50c5\u4f9b\u7814\u7a76\u4f7f\u7528",),
+    )
+
+
+def _catalog_entry(
+    workspace: Workspace,
+    *,
+    health: RunHealth = RunHealth.VALID,
+    findings: tuple[RunFinding, ...] = (),
+    canonical_symbols: tuple[str, ...] = ("2330.TW",),
+    artifact_count: int = 0,
+    manifest: RunManifest | None = None,
+) -> WorkspaceRunEntry:
+    return WorkspaceRunEntry(
+        run_id=_RUN_IDS[0],
+        created_at="2026-07-31T12:00:00Z",
+        workflow="scan",
+        status="success",
+        canonical_symbols=canonical_symbols,
+        universe="custom",
+        tool_version="0.4.0",
+        artifact_count=artifact_count,
+        run_directory=workspace.root / "runs" / "2026" / "07" / "run",
+        manifest_path=workspace.root / "runs" / "2026" / "07" / "run" / "manifest.json",
+        health=health,
+        findings=findings,
+        manifest=manifest,
     )
 
 
@@ -142,6 +174,37 @@ class WorkspaceFoundationTests(unittest.TestCase):
         with self.assertRaises(WorkspaceValidationError):
             canonical_run_directory_name("2026-02-03T04:05:06+00:00", "scan", _RUN_IDS[0])
 
+    def test_public_run_directory_is_bound_to_existing_canonical_workspace_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            workspace = Workspace(base / "workspace")
+            created_at = "2026-07-31T12:00:00Z"
+            name = canonical_run_directory_name(created_at, "scan", _RUN_IDS[0])
+            outside = base / "outside"
+            outside.mkdir()
+            wrong_year = workspace.runs_directory / "2025" / "08" / name
+            wrong_year.parent.mkdir(parents=True)
+            wrong_month = workspace.runs_directory / "2026" / "08" / name
+            wrong_month.parent.mkdir(parents=True)
+            wrong_name = workspace.runs_directory / "2026" / "07" / "not-canonical"
+            wrong_name.parent.mkdir(parents=True)
+            nonexistent = workspace.runs_directory / "2026" / "07" / name
+            nonexistent.parent.mkdir(parents=True, exist_ok=True)
+
+            for path in (outside, workspace.root, wrong_year, wrong_month, wrong_name, nonexistent):
+                with self.subTest(path=path):
+                    with self.assertRaises((WorkspacePathError, WorkspaceValidationError)):
+                        RunDirectory(workspace, path, created_at, "scan", _RUN_IDS[0])
+
+            file_path = workspace.runs_directory / "2026" / "07" / name
+            file_path.write_text("not a directory", encoding="utf-8")
+            with self.assertRaises(WorkspaceValidationError):
+                RunDirectory(workspace, file_path, created_at, "scan", _RUN_IDS[0])
+
+            allocated = workspace.allocate_run_directory(created_at, "scan", _RUN_IDS[1])
+            bound = RunDirectory(workspace, allocated.path, created_at, "scan", _RUN_IDS[1])
+            self.assertEqual(bound.path, allocated.path)
+
     def test_managed_path_profile_and_symlink_rejection(self) -> None:
         for value in ("manifest.json", "artifacts/report.md", "tables/result.csv", "logs/errors.log"):
             self.assertEqual(validate_artifact_path(value).as_posix(), value)
@@ -211,13 +274,187 @@ class WorkspaceFoundationTests(unittest.TestCase):
             warning_run = workspace.allocate_run_directory("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
             warning_run.write_manifest(_manifest(artifacts=(ArtifactReference("report", "artifacts/report.md", "text/markdown", None),)))
             unsafe_run = workspace.allocate_run_directory("2026-07-31T12:01:00Z", "daily", _RUN_IDS[1])
-            unsafe_run.write_manifest(_manifest(run_id=_RUN_IDS[1], created_at="2026-07-31T12:01:00Z", workflow="daily", artifacts=(ArtifactReference("report", "../outside.md", "text/markdown", None),)))
+            unsafe_manifest = _manifest(run_id=_RUN_IDS[1], created_at="2026-07-31T12:01:00Z", workflow="daily", artifacts=(ArtifactReference("report", "../outside.md", "text/markdown", None),))
+            unsafe_run.manifest_path.write_text(export_run_manifest_json(unsafe_manifest), encoding="utf-8")
             catalog = scan_workspace(workspace)
             entries = {entry.run_id: entry for entry in catalog.entries}
             self.assertEqual(entries[_RUN_IDS[0]].health, RunHealth.WARNING)
             self.assertEqual(entries[_RUN_IDS[0]].findings[0].code, RunFindingCode.MISSING_ARTIFACT)
             self.assertEqual(entries[_RUN_IDS[1]].health, RunHealth.INVALID)
             self.assertEqual(entries[_RUN_IDS[1]].findings[0].code, RunFindingCode.UNSAFE_PATH)
+
+    def test_manifest_writer_rejects_identity_and_unsafe_paths_before_filesystem_changes(self) -> None:
+        cases = (
+            ("run_id", {"run_id": _RUN_IDS[1]}, None),
+            ("created_at", {"created_at": "2026-07-31T23:59:00Z"}, None),
+            ("workflow", {"workflow": "daily"}, None),
+            ("parent traversal", {}, "../outside.md"),
+            ("absolute path", {}, "/absolute.md"),
+        )
+        for index, (label, overrides, artifact_path) in enumerate(cases):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                workspace = Workspace(Path(temp) / "workspace")
+                created_at = f"2026-07-31T12:0{index}:00Z"
+                run = workspace.allocate_run_directory(created_at, "scan", _RUN_IDS[0])
+                artifacts = () if artifact_path is None else (ArtifactReference("report", artifact_path, "text/markdown", None),)
+                manifest = _manifest(
+                    run_id=overrides.get("run_id", _RUN_IDS[0]),
+                    created_at=overrides.get("created_at", created_at),
+                    workflow=overrides.get("workflow", "scan"),
+                    artifacts=artifacts,
+                )
+                with self.assertRaises(WorkspaceManifestError) as raised:
+                    run.write_manifest(manifest)
+                if artifact_path is not None:
+                    self.assertIsInstance(raised.exception.__cause__, WorkspacePathError)
+                self.assertFalse(run.manifest_path.exists())
+                self.assertEqual(list(run.path.glob(".manifest.*.tmp")), [])
+
+    def test_catalog_directory_artifact_is_a_warning_with_explicit_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            run = workspace.allocate_run_directory("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
+            run.resolve_artifact_path("artifacts/report.md").mkdir(parents=True)
+            run.write_manifest(_manifest(artifacts=(ArtifactReference("report", "artifacts/report.md", "text/markdown", None),)))
+            entry = scan_workspace(workspace).entries[0]
+            self.assertEqual(entry.health, RunHealth.WARNING)
+            self.assertEqual(entry.findings[0].code, RunFindingCode.MISSING_ARTIFACT)
+            self.assertIn("not a regular file", entry.findings[0].message)
+
+    def test_catalog_collects_multiple_findings_in_priority_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            run = workspace.allocate_run_directory("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
+            manifest = _manifest(
+                artifacts=(
+                    ArtifactReference("unsafe", "../outside.md", "text/markdown", None),
+                    ArtifactReference("missing", "artifacts/missing.md", "text/markdown", None),
+                )
+            )
+            run.manifest_path.write_text(export_run_manifest_json(manifest), encoding="utf-8")
+            entry = scan_workspace(workspace).entries[0]
+            self.assertEqual(entry.health, RunHealth.INVALID)
+            self.assertEqual(
+                [finding.code for finding in entry.findings],
+                [RunFindingCode.UNSAFE_PATH, RunFindingCode.MISSING_ARTIFACT],
+            )
+
+    def test_parser_and_catalog_share_workflow_slug_length_contract(self) -> None:
+        slug_64 = "a" + "b" * 63
+        slug_65 = "a" + "b" * 64
+        name_64 = f"20260731T120000Z_{slug_64}_550e8400"
+        name_65 = f"20260731T120000Z_{slug_65}_550e8400"
+        self.assertIsNotNone(parse_run_directory_name(name_64))
+        self.assertIsNone(parse_run_directory_name(name_65))
+        with self.assertRaises(WorkspaceValidationError):
+            validate_workflow_slug(slug_65)
+
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            with self.assertRaises(WorkspaceValidationError):
+                workspace.allocate_run_directory("2026-07-31T12:00:00Z", slug_65, _RUN_IDS[0])
+            long_path = workspace.runs_directory / "2026" / "07" / name_65
+            long_path.mkdir(parents=True)
+            self.assertEqual(scan_workspace(workspace).entries, ())
+
+    def test_catalog_canonical_run_symlink_is_invalid_without_following(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            month = workspace.runs_directory / "2026" / "07"
+            month.mkdir(parents=True)
+            target = month / "target"
+            target.mkdir()
+            link = month / canonical_run_directory_name("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
+            try:
+                link.symlink_to(target, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            entries = scan_workspace(workspace).entries
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0].health, RunHealth.INVALID)
+            self.assertEqual(entries[0].findings[0].code, RunFindingCode.UNSAFE_PATH)
+            self.assertIsNone(entries[0].manifest)
+
+    def test_catalog_canonical_year_and_month_symlinks_raise_controlled_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            real_year = Path(temp) / "real-year"
+            real_year.mkdir()
+            year_link = workspace.runs_directory / "2026"
+            try:
+                year_link.symlink_to(real_year, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            with self.assertRaises(WorkspaceCatalogError):
+                scan_workspace(workspace)
+
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            year = workspace.runs_directory / "2026"
+            year.mkdir(parents=True)
+            real_month = Path(temp) / "real-month"
+            real_month.mkdir()
+            month_link = year / "07"
+            try:
+                month_link.symlink_to(real_month, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            with self.assertRaises(WorkspaceCatalogError):
+                scan_workspace(workspace)
+
+    def test_catalog_reparse_attribute_is_rejected_without_symlink_privilege(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            run = workspace.runs_directory / "2026" / "07" / canonical_run_directory_name("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
+            run.mkdir(parents=True)
+            real_lstat = Path.lstat
+            reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+
+            def mocked_lstat(path: Path) -> object:
+                result = real_lstat(path)
+                if path == run:
+                    return mock.Mock(st_mode=stat.S_IFDIR, st_file_attributes=reparse_flag)
+                return result
+
+            with mock.patch("tw_stock_tool.artifacts.catalog._lstat_candidate", side_effect=mocked_lstat):
+                entries = scan_workspace(workspace).entries
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0].findings[0].code, RunFindingCode.UNSAFE_PATH)
+
+    def test_public_catalog_models_snapshot_nested_collections_and_reject_bad_types(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            finding = RunFinding("missing_artifact", "artifact does not exist", workspace.root / "missing")
+            finding_list = [finding]
+            symbol_list = ["2330.TW"]
+            entry = _catalog_entry(workspace, findings=finding_list, canonical_symbols=symbol_list)  # type: ignore[arg-type]
+            catalog_entries = [entry]
+            catalog = WorkspaceCatalog(workspace, catalog_entries)
+            finding_list.append(RunFinding(RunFindingCode.UNSAFE_PATH, "unsafe", workspace.root))
+            catalog_entries.clear()
+            symbol_list.append("2317.TW")
+            self.assertEqual(catalog.entries, (entry,))
+            self.assertEqual(entry.findings, (finding,))
+            self.assertEqual(entry.canonical_symbols, ("2330.TW",))
+
+            with self.assertRaises(WorkspaceValidationError):
+                RunFinding(1, "bad", workspace.root)  # type: ignore[arg-type]
+            with self.assertRaises(WorkspaceValidationError):
+                RunFinding("not-a-code", "bad", workspace.root)
+            with self.assertRaises(WorkspaceValidationError):
+                RunFinding(RunFindingCode.UNSAFE_PATH, " ", workspace.root)
+            with self.assertRaises(WorkspaceValidationError):
+                RunFinding(RunFindingCode.UNSAFE_PATH, "bad", object())  # type: ignore[arg-type]
+            with self.assertRaises(WorkspaceValidationError):
+                _catalog_entry(workspace, health="not-a-health")  # type: ignore[arg-type]
+            with self.assertRaises(WorkspaceValidationError):
+                _catalog_entry(workspace, findings=(object(),))  # type: ignore[arg-type]
+            with self.assertRaises(WorkspaceValidationError):
+                _catalog_entry(workspace, artifact_count=-1)
+            with self.assertRaises(WorkspaceValidationError):
+                WorkspaceCatalog(workspace, [object()])  # type: ignore[list-item]
+            with self.assertRaises(WorkspaceValidationError):
+                _catalog_entry(workspace, manifest=object())  # type: ignore[arg-type]
 
     def test_catalog_classifies_unsupported_unknown_duplicate_and_model_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
