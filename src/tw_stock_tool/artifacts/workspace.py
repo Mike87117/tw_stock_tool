@@ -431,7 +431,7 @@ def write_manifest(run_directory: RunDirectory, manifest: RunManifest) -> RunMan
         raise WorkspaceManifestError("write manifest", final_path, "manifest workflow does not match run directory")
     for artifact in manifest.artifacts:
         try:
-            validate_artifact_path(artifact.path)
+            resolve_artifact_path(run_directory, artifact.path)
         except WorkspacePathError as exc:
             raise WorkspaceManifestError(
                 "write manifest",

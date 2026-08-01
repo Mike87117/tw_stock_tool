@@ -310,6 +310,51 @@ class WorkspaceFoundationTests(unittest.TestCase):
                 self.assertFalse(run.manifest_path.exists())
                 self.assertEqual(list(run.path.glob(".manifest.*.tmp")), [])
 
+    def test_manifest_writer_rejects_symlink_artifact_component_before_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            workspace = Workspace(base / "workspace")
+            run = workspace.allocate_run_directory("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
+            outside_target = base / "outside-target"
+            outside_target.mkdir()
+            artifacts_link = run.path / "artifacts"
+            try:
+                artifacts_link.symlink_to(outside_target, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            manifest = _manifest(artifacts=(ArtifactReference("report", "artifacts/report.md", "text/markdown", None),))
+            with self.assertRaises(WorkspaceManifestError) as raised:
+                run.write_manifest(manifest)
+            self.assertIsInstance(raised.exception.__cause__, WorkspacePathError)
+            self.assertFalse(run.manifest_path.exists())
+            self.assertEqual(list(run.path.glob(".manifest.*.tmp")), [])
+            self.assertFalse((outside_target / "report.md").exists())
+
+    def test_manifest_writer_rejects_mocked_reparse_artifact_component_before_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Workspace(Path(temp) / "workspace")
+            run = workspace.allocate_run_directory("2026-07-31T12:00:00Z", "scan", _RUN_IDS[0])
+            artifacts_dir = run.path / "artifacts"
+            artifacts_dir.mkdir()
+            real_lstat = Path.lstat
+            reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+
+            def mocked_lstat(path: Path):
+                result = real_lstat(path)
+                if path == artifacts_dir:
+                    return mock.Mock(st_mode=stat.S_IFDIR, st_file_attributes=reparse_flag)
+                return result
+
+            manifest = _manifest(artifacts=(ArtifactReference("report", "artifacts/report.md", "text/markdown", None),))
+            with mock.patch.object(Path, "lstat", autospec=True, side_effect=mocked_lstat):
+                with self.assertRaises(WorkspaceManifestError) as raised:
+                    run.write_manifest(manifest)
+            self.assertIsInstance(raised.exception.__cause__, WorkspacePathError)
+            self.assertFalse(run.manifest_path.exists())
+            self.assertEqual(list(run.path.glob(".manifest.*.tmp")), [])
+            self.assertFalse((artifacts_dir / "report.md").exists())
+
     def test_catalog_directory_artifact_is_a_warning_with_explicit_message(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             workspace = Workspace(Path(temp) / "workspace")
