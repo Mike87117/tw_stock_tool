@@ -467,6 +467,7 @@ def scan_workspace(workspace: Workspace) -> WorkspaceCatalog:
 
     return WorkspaceCatalog(workspace=workspace, entries=_ordered_entries(_mark_duplicate_run_ids(entries)))
 
+
 def lookup_workspace_run(catalog: WorkspaceCatalog, run_id: str) -> WorkspaceRunEntry:
     """Return the sole catalog entry for one exact canonical UUID v4."""
     from tw_stock_tool.artifacts.workspace import validate_run_id
@@ -480,6 +481,7 @@ def lookup_workspace_run(catalog: WorkspaceCatalog, run_id: str) -> WorkspaceRun
     if len(matches) != 1:
         raise WorkspaceDuplicateRunIdError("lookup workspace run", catalog.workspace.root, f"duplicate run_id: {canonical}")
     return matches[0]
+
 
 scan_catalog = scan_workspace
 

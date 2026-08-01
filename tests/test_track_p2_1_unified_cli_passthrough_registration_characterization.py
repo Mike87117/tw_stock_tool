@@ -152,9 +152,6 @@ TOP_LEVEL_ORDER = (
 NESTED_ORDER = ("update", "smoke-check", "clean")
 
 
-
-
-
 STOCK_LIST_HELP = """usage: twstock stock-list [-h] {update,smoke-check,clean} ...
 
 positional arguments:
@@ -243,6 +240,7 @@ def _help_snapshot(argv: list[str]) -> tuple[int, str, str]:
 
 
 class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
+
     def test_parser_tree_order_help_descriptions_and_nested_structure(self) -> None:
         parser = _capture_parser()
         action = _subparser_action(parser)
@@ -303,6 +301,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             with self.subTest(argv=argv), self.assertRaises(SystemExit) as raised:
                 twstock_cli.main(argv)
             self.assertEqual(raised.exception.code, 2)
+
     def test_direct_handlers_preserve_callable_targets_and_child_program_names(self) -> None:
         passthrough = ["--flag", "value", "--output-md", "report.md", "--option=-2", "artifact.json"]
         for route in ROUTES:
@@ -316,6 +315,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             self.assertEqual(result, 17)
             dispatch.assert_called_once_with(expected_main, route.program_name, passthrough)
             self.assertEqual(sys.argv, original_argv)
+
     def test_custom_nested_runners_remain_distinct_dispatch_boundaries(self) -> None:
         cases = (
             ("update", "_run_stock_list_update", ["--flag", "value", "stocks.txt", "--option=-2"]),
@@ -326,6 +326,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 result = twstock_cli.main(["stock-list", command, *passthrough])
             self.assertEqual(result, 19)
             mocked.assert_called_once_with(passthrough)
+
     def test_unknown_and_incomplete_routes_fail_at_parser_boundary(self) -> None:
         for argv in ([], ["unknown"], ["stock-list"], ["stock-list", "unknown"]):
             stdout = StringIO()
@@ -342,6 +343,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertEqual(parsed.command, "stock-list")
         self.assertEqual(parsed.stock_list_command, "smoke-check")
         self.assertEqual(parsed.args, ["--future-option", "value"])
+
     def test_help_snapshots_freeze_order_wording_wrapping_and_descriptions(self) -> None:
         snapshots = (
             (["stock-list", "--help"], STOCK_LIST_HELP),
@@ -388,6 +390,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                         twstock_cli.main([*route_tokens, *passthrough])
                 self.assertEqual(raised.exception.code, exit_code)
                 self.assertEqual(sys.argv, original_argv)
+
     def test_lazy_import_timing_is_characterized_without_network_access(self) -> None:
         script = (
             "import contextlib\n"
@@ -432,6 +435,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(json.loads(completed.stdout), expected)
+
     def test_gui_dispatch_is_lazy_and_rejects_unknown_arguments(self) -> None:
         with self.assertRaises(SystemExit) as raised:
             twstock_cli.main(["gui", "--unknown"])

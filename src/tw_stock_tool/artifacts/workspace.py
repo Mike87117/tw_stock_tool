@@ -92,6 +92,7 @@ def _ensure_directory(path: Path, operation: str) -> None:
     if not stat.S_ISDIR(result.st_mode):
         raise WorkspaceValidationError(operation, path, "path is not a directory")
 
+
 def _require_existing_directory(path: Path, operation: str) -> None:
     _ensure_no_reparse_components(path, operation)
     try:
@@ -102,6 +103,7 @@ def _require_existing_directory(path: Path, operation: str) -> None:
         raise WorkspaceValidationError(operation, path, "directory cannot be inspected") from exc
     if not stat.S_ISDIR(result.st_mode):
         raise WorkspaceValidationError(operation, path, "path is not a directory")
+
 
 def _validate_utc_timestamp(value: str, operation: str = "validate timestamp") -> datetime:
     if type(value) is not str:
@@ -125,9 +127,11 @@ def _validate_run_id(value: str, operation: str = "validate run id") -> str:
         raise WorkspaceValidationError(operation, None, "run_id must be a canonical lowercase UUID v4")
     return value
 
+
 def validate_run_id(value: str) -> str:
     """Validate and return an exact canonical lowercase UUID v4."""
     return _validate_run_id(value)
+
 
 def validate_workflow_slug(value: str) -> str:
     """Validate and return a filesystem-safe lowercase workflow slug."""

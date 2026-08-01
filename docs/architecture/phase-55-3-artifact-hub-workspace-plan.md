@@ -652,7 +652,7 @@ Implemented contract details:
 - Controlled workflow failures publish failure or partial manifests when the provisional manifest is available; a publication failure preserves the original workflow error as its cause.
 - twstock scan --help, twstock daily --help and twstock backtest-report --help forward to their workflow parsers and display --workspace.
 
-Known limitations:
+Known limitations at the Phase 55.3C closeout:
 
 - Phase 55.3D read-only twstock run list／twstock run inspect commands are not included.
 - The existing standalone Parameter Sweep、Walk Forward、Strategy Compare、AI／ML and simulated-trading workflows remain outside this integration.
