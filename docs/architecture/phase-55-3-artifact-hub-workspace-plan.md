@@ -650,7 +650,7 @@ Implemented contract details:
 - Provisional workflow manifests are converted through the existing strict manifest models and published through Workspace.write_manifest／read_manifest.
 - Published artifact references are relative POSIX paths and are checked with the Phase 55.3B resolver before publication.
 - Controlled workflow failures publish failure or partial manifests when the provisional manifest is available; a publication failure preserves the original workflow error as its cause.
-- twstock scan --help, twstock daily --help and twstock backtest-report --help expose the same --workspace option.
+- The unified twstock passthrough commands accept and forward the same --workspace option; the underlying workflow parsers expose its full help text.
 
 Known limitations:
 
