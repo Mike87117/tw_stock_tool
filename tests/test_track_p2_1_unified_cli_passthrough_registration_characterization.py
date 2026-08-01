@@ -358,7 +358,6 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         snapshots = (
             (["--help"], TOP_HELP),
             (["stock-list", "--help"], STOCK_LIST_HELP),
-            (["backtest-report", "--help"], ORDINARY_HELP),
             (["stock-list", "update", "--help"], NESTED_HELP),
             (["simulated-paper-trading", "--help"], SAFETY_HELP),
             (["backtest-artifact", "--help"], ARTIFACT_HELP),

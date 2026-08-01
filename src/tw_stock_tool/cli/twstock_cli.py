@@ -74,8 +74,8 @@ def _run_stock_list_smoke_check(args: list[str]) -> int:
     return _dispatch_existing_main(stock_list_smoke_check.main, "stock_list_smoke_check.py", args)
 
 
-def _add_passthrough_parser(subparsers, name, module_main, program_name, help_text, description=None) -> None:
-    parser_kwargs = {"help": help_text}
+def _add_passthrough_parser(subparsers, name, module_main, program_name, help_text, description=None, forward_help=False) -> None:
+    parser_kwargs = {"help": help_text, "add_help": not forward_help}
     if description is not None:
         parser_kwargs["description"] = description
     parser = subparsers.add_parser(name, **parser_kwargs)
@@ -88,9 +88,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     _add_passthrough_parser(subparsers, "doctor", doctor.main, "doctor.py", "Check local environment")
 
-    _add_passthrough_parser(subparsers, "scan", scan_stocks.main, "scan_stocks.py", "Run multi-stock technical scanner")
+    _add_passthrough_parser(subparsers, "scan", scan_stocks.main, "scan_stocks.py", "Run multi-stock technical scanner", forward_help=True)
 
-    _add_passthrough_parser(subparsers, "daily", daily_report_cli.main, "daily_report_cli.py", "Run daily candidate report")
+    _add_passthrough_parser(subparsers, "daily", daily_report_cli.main, "daily_report_cli.py", "Run daily candidate report", forward_help=True)
 
     _add_passthrough_parser(
         subparsers,
@@ -144,7 +144,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     _add_passthrough_parser(subparsers, "parameter-sweep", parameter_sweep_report.main, "parameter_sweep_report.py", "Run parameter sweep")
 
-    _add_passthrough_parser(subparsers, "backtest-report", backtest_report.main, "backtest_report.py", "Run backtest report")
+    _add_passthrough_parser(subparsers, "backtest-report", backtest_report.main, "backtest_report.py", "Run backtest report", forward_help=True)
 
     _add_passthrough_parser(
         subparsers,

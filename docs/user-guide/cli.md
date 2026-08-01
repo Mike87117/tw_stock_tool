@@ -89,3 +89,4 @@ twstock backtest-report --stock 2330 --strategy ma_cross --output-md --workspace
 ~~~
 
 Workspace mode 的 manifest artifact paths 是相對於 run directory 的 POSIX paths，可在整個 Workspace 搬移後繼續由 catalog 解析。--output-dir、--manifest-path 以及明確指定外部 report path 與 --workspace 衝突時會 fail closed。
+The formal 	wstock scan --help, 	wstock daily --help, and 	wstock backtest-report --help commands display --workspace and the complete workflow options.

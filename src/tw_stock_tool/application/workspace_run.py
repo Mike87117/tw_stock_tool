@@ -59,7 +59,7 @@ def _portable_requested_path(name: str, value: str | Path | None, filename: str)
     return filename
 
 
-def _preflight_scan(request: ScanRunRequest) -> RunConfig:
+def _preflight_scan(request: ScanRunRequest, progress_callback: Callable[..., None] | None, market_data_loader: Callable[..., Any] | None) -> RunConfig:
     return scan_workflow._validate_and_build_config(  # type: ignore[attr-defined]
         tuple((symbol.requested_symbol, symbol.canonical_symbol) for symbol in request.symbols),
         request.universe,
@@ -68,12 +68,12 @@ def _preflight_scan(request: ScanRunRequest) -> RunConfig:
         None,
         request.sheet_by_signal,
         request.log_errors,
-        None,
-        None,
+        progress_callback,
+        market_data_loader,
     )[-1]
 
 
-def _preflight_daily(request: DailyRunRequest) -> RunConfig:
+def _preflight_daily(request: DailyRunRequest, status_callback: Callable[[str], None] | None, market_data_loader: Callable[..., Any] | None) -> RunConfig:
     return daily_workflow._validate_and_build_config(  # type: ignore[attr-defined]
         tuple((symbol.requested_symbol, symbol.canonical_symbol) for symbol in request.symbols),
         request.universe,
@@ -83,12 +83,12 @@ def _preflight_daily(request: DailyRunRequest) -> RunConfig:
         request.json_path,
         None,
         request.json_overwrite,
-        None,
-        None,
+        status_callback,
+        market_data_loader,
     )[-1]
 
 
-def _preflight_backtest(request: BacktestRunRequest) -> RunConfig:
+def _preflight_backtest(request: BacktestRunRequest, stage_callback: Callable[[str], None] | None, market_data_loader: Callable[..., Any] | None) -> RunConfig:
     return backtest_workflow._validate_and_build_config(  # type: ignore[attr-defined]
         (request.symbol.requested_symbol, request.symbol.canonical_symbol),
         request.strategy,
@@ -102,8 +102,8 @@ def _preflight_backtest(request: BacktestRunRequest) -> RunConfig:
         request.markdown_path,
         request.excel_path,
         None,
-        None,
-        None,
+        market_data_loader,
+        stage_callback,
     )[-1]
 
 
@@ -134,6 +134,13 @@ def _convert_manifest(source: RunManifest, lifecycle: WorkspaceRunLifecycle) -> 
     )
 
 
+def _tool_version() -> str:
+    try:
+        return scan_workflow._tool_version()  # type: ignore[attr-defined]
+    except Exception:
+        return "unknown"
+
+
 def _failure_manifest(config: RunConfig, lifecycle: WorkspaceRunLifecycle, error: Exception) -> RunManifest:
     options = dict(config.workflow_options)
     for name, value in tuple(options.items()):
@@ -150,7 +157,7 @@ def _failure_manifest(config: RunConfig, lifecycle: WorkspaceRunLifecycle, error
         schema_version=RUN_MANIFEST_SCHEMA_VERSION,
         run_id=lifecycle.run_id,
         created_at=lifecycle.created_at,
-        tool_version="unknown",
+        tool_version=_tool_version(),
         status="failure",
         config=portable_config,
         data_sources=(),
@@ -176,6 +183,35 @@ def _cleanup_provisional(path: Path) -> None:
         pass
 
 
+def _publish_failure(
+    lifecycle: WorkspaceRunLifecycle,
+    config: RunConfig,
+    error: Exception,
+    provisional: Path,
+    *,
+    preserve_provisional: bool,
+) -> None:
+    if preserve_provisional:
+        try:
+            source = _read_provisional(provisional)
+            manifest = (
+                _convert_manifest(source, lifecycle)
+                if source is not None and source.status in {"failure", "partial"}
+                else _failure_manifest(config, lifecycle, error)
+            )
+        except Exception:
+            manifest = _failure_manifest(config, lifecycle, error)
+    else:
+        manifest = _failure_manifest(config, lifecycle, error)
+    try:
+        lifecycle.publish(manifest)
+    except Exception as publication_error:
+        raise RuntimeError(
+            f"{str(error).strip() or type(error).__name__}; manifest: "
+            f"{str(publication_error).strip() or type(publication_error).__name__}"
+        ) from error
+
+
 def _run_managed(
     *,
     workflow: str,
@@ -189,13 +225,7 @@ def _run_managed(
         result = runner(lifecycle, provisional)
     except Exception as original:
         try:
-            source = _read_provisional(provisional)
-            manifest = _convert_manifest(source, lifecycle) if source is not None else _failure_manifest(config, lifecycle, original)
-            lifecycle.publish(manifest)
-        except Exception as manifest_error:
-            raise RuntimeError(
-                f"{str(original).strip() or type(original).__name__}; manifest: {str(manifest_error).strip() or type(manifest_error).__name__}"
-            ) from original
+            _publish_failure(lifecycle, config, original, provisional, preserve_provisional=True)
         finally:
             _cleanup_provisional(provisional)
         raise
@@ -206,10 +236,17 @@ def _run_managed(
             raise WorkspaceError("publish Workspace manifest", provisional, "workflow did not produce a provisional manifest")
         manifest = _convert_manifest(source, lifecycle)
         published = lifecycle.publish(manifest)
+    except Exception as original:
+        try:
+            if lifecycle.manifest_path.exists():
+                raise
+            _publish_failure(lifecycle, config, original, provisional, preserve_provisional=False)
+        finally:
+            _cleanup_provisional(provisional)
+        raise
     finally:
         _cleanup_provisional(provisional)
     return ResearchRunResult(published, result.domain_result, published.artifacts)
-
 
 def run_scan_workspace(
     request: ScanRunRequest,
@@ -219,7 +256,7 @@ def run_scan_workspace(
     market_data_loader: Callable[..., Any] | None = None,
 ) -> ResearchRunResult:
     _validate_workspace_common(request.output_dir, request.manifest_path)
-    config = _preflight_scan(request)
+    config = _preflight_scan(request, progress_callback, market_data_loader)
 
     def runner(lifecycle: WorkspaceRunLifecycle, provisional: Path) -> ResearchRunResult:
         return scan_workflow.run_scan_research(
@@ -250,7 +287,7 @@ def run_daily_workspace(
     excel = request.config.output_excel
     if excel not in (None, "", "daily_report.xlsx", "artifacts/daily_report.xlsx"):
         raise ValueError("--output-excel conflicts with --workspace")
-    config = _preflight_daily(request)
+    config = _preflight_daily(request, status_callback, market_data_loader)
 
     def runner(lifecycle: WorkspaceRunLifecycle, provisional: Path) -> ResearchRunResult:
         managed_config = replace(
@@ -283,7 +320,7 @@ def run_backtest_workspace(
     _validate_workspace_common(request.output_dir, request.manifest_path)
     markdown = _portable_requested_path("output-md", request.markdown_path, "backtest_report.md")
     excel = _portable_requested_path("output-excel", request.excel_path, "backtest_report.xlsx")
-    config = _preflight_backtest(request)
+    config = _preflight_backtest(request, stage_callback, market_data_loader)
 
     def runner(lifecycle: WorkspaceRunLifecycle, provisional: Path) -> ResearchRunResult:
         artifacts = lifecycle.artifacts_directory

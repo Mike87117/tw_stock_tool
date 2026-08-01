@@ -31,3 +31,9 @@ Parameter Sweep, Walk Forward, Strategy Compare, AI／ML, simulated trading, GUI
 - Python 3.11 local execution depends on the available interpreter; CI matrix evidence must be recorded separately when unavailable locally.
 - Windows accounts without symlink privilege rely on the existing mocked reparse-point coverage and CI real-symlink coverage.
 
+
+## Independent review follow-up
+
+- Unified 	wstock scan --help, 	wstock daily --help, and 	wstock backtest-report --help now forward to the underlying parser and display --workspace.
+- Post-run provisional-read and manifest-conversion failures publish a valid fallback failure manifest when canonical publication remains possible.
+- Callback and market-data-loader validation occurs before Workspace allocation; fallback manifests use the existing package-version resolver.
