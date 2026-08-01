@@ -633,6 +633,27 @@ Phase 55.4 and Phase 55.5 must not assume Workspace APIs before Phase 55.3B–D 
 
 The next production-code task after this planning Phase is：
 
-> **Phase 55.3B — Implement the filesystem-based Workspace storage and catalog foundation without migrating existing research workflows.**
+> **Phase 55.3D — Add offline read-only twstock run list and twstock run inspect on the stable Workspace catalog.**
 
 This ordering separates storage correctness from CLI and workflow integration risk.
+
+## 19. Phase 55.3C implementation record
+
+Phase 55.3B storage and catalog APIs are now used by the application-owned Workspace lifecycle for Scan、Daily Report and Backtest.
+
+Implemented contract details:
+
+- --workspace PATH is opt-in; legacy mode keeps its existing output and exit behavior.
+- Request preflight and output-option conflict checks happen before Workspace allocation.
+- Every managed run allocates a fresh canonical run directory through Workspace.allocate_run_directory.
+- Workflow artifacts are written below <run-directory>/artifacts/; the canonical manifest is <run-directory>/manifest.json.
+- Provisional workflow manifests are converted through the existing strict manifest models and published through Workspace.write_manifest／read_manifest.
+- Published artifact references are relative POSIX paths and are checked with the Phase 55.3B resolver before publication.
+- Controlled workflow failures publish failure or partial manifests when the provisional manifest is available; a publication failure preserves the original workflow error as its cause.
+- twstock scan --help, twstock daily --help and twstock backtest-report --help forward to their workflow parsers and display --workspace.
+
+Known limitations:
+
+- Phase 55.3D read-only twstock run list／twstock run inspect commands are not included.
+- The existing standalone Parameter Sweep、Walk Forward、Strategy Compare、AI／ML and simulated-trading workflows remain outside this integration.
+- Local Windows symlink privilege limitations remain covered by the Phase 55.3B path-safety tests and CI evidence.

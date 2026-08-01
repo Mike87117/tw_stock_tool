@@ -1,6 +1,8 @@
 import argparse
 
 from tw_stock_tool.application.research_run import ScanRunRequest, run_scan
+from tw_stock_tool.application.workspace_run import run_scan_workspace
+from tw_stock_tool.application.workspace_summary import workspace_run_paths
 from tw_stock_tool.cli._research_run_cli import (
     artifact_path,
     collect_symbol_requests,
@@ -67,6 +69,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_AUTO_ADJUST,
         help="使用除權息調整後價格",
     )
+    parser.add_argument("--workspace", help="建立 append-only managed Research Run 的 Workspace 路徑")
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="輸出資料夾")
     parser.add_argument("--manifest-path", default=None)
     return parser.parse_args(argv)
@@ -131,10 +134,19 @@ def main() -> int | None:
             sheet_by_signal=args.sheet_by_signal,
             log_errors=args.log_errors,
         )
-        result = run_scan(request, progress_callback=_print_progress)
+        if getattr(args, "workspace", None):
+            result = run_scan_workspace(request, getattr(args, "workspace", None), progress_callback=_print_progress)
+        else:
+            result = run_scan(request, progress_callback=_print_progress)
         ranking_df = result.domain_result
         ok_count = int((ranking_df["Status"] == "OK").sum())
         error_count = int((ranking_df["Status"] != "OK").sum())
+        if getattr(args, "workspace", None):
+            run_directory, manifest_path = workspace_run_paths(getattr(args, "workspace", None), result.manifest)
+            print(f"Run ID: {result.manifest.run_id}")
+            print(f"Run status: {result.manifest.status}")
+            print(f"Run directory: {run_directory}")
+            print(f"Manifest path: {manifest_path}")
         print("\n掃描完成")
         print(f"成功: {ok_count}，失敗: {error_count}")
         print(f"Excel: {artifact_path(result, 'scan_ranking_excel')}")

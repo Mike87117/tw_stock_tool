@@ -2,6 +2,8 @@ import argparse
 import math
 
 from tw_stock_tool.application.research_run import DailyRunRequest, run_daily
+from tw_stock_tool.application.workspace_run import run_daily_workspace
+from tw_stock_tool.application.workspace_summary import workspace_run_paths
 from tw_stock_tool.cli._research_run_cli import (
     artifact_path,
     collect_symbol_requests,
@@ -151,6 +153,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Export the Daily Research report as a JSON artifact.",
     )
+    parser.add_argument("--workspace", help="建立 append-only managed Research Run 的 Workspace 路徑")
     parser.add_argument("--output-dir", default="output")
     parser.add_argument(
         "--overwrite",
@@ -185,7 +188,7 @@ def main() -> int | None:
         if args.output_json is None:
             json_path = None
         elif args.output_json == "":
-            json_path = Path(args.output_dir) / "daily_report.json"
+            json_path = "daily_report.json" if getattr(args, "workspace", None) else Path(args.output_dir) / "daily_report.json"
         else:
             json_path = args.output_json
         request = DailyRunRequest(
@@ -202,7 +205,16 @@ def main() -> int | None:
             ),
             json_overwrite=args.overwrite,
         )
-        result = run_daily(request, status_callback=print)
+        if getattr(args, "workspace", None):
+            result = run_daily_workspace(request, getattr(args, "workspace", None), status_callback=print)
+        else:
+            result = run_daily(request, status_callback=print)
+        if getattr(args, "workspace", None):
+            run_directory, manifest_path = workspace_run_paths(getattr(args, "workspace", None), result.manifest)
+            print(f"Run ID: {result.manifest.run_id}")
+            print(f"Run status: {result.manifest.status}")
+            print(f"Run directory: {run_directory}")
+            print(f"Manifest path: {manifest_path}")
         markdown = artifact_path(result, "daily_report_markdown")
         if markdown:
             print(f"\nMarkdown report exported to {markdown}")
