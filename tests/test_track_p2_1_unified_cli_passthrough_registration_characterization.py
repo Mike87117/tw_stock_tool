@@ -35,6 +35,7 @@ class Route:
 
 ROUTES = (
     Route(("doctor",), "Check local environment", "tw_stock_tool.utils.doctor", "doctor.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("run",), "Inspect existing Workspace runs offline", "tw_stock_tool.cli.workspace_run_cli", "twstock run", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("scan",), "Run multi-stock technical scanner", "tw_stock_tool.cli.scan_stocks", "scan_stocks.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("daily",), "Run daily candidate report", "tw_stock_tool.cli.daily_report_cli", "daily_report_cli.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(
@@ -124,6 +125,7 @@ ROUTES = (
 ROUTE_BY_NAME = {route.name: route for route in ROUTES}
 TOP_LEVEL_ORDER = (
     "doctor",
+    "run",
     "scan",
     "daily",
     "daily-report-artifact",
@@ -148,51 +150,6 @@ TOP_LEVEL_ORDER = (
     "simulated-portfolio-trading",
 )
 NESTED_ORDER = ("update", "smoke-check", "clean")
-
-
-TOP_HELP = """usage: twstock [-h]
-               {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,ai-report,ml-dataset,gui,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export,simulated-portfolio-artifact,simulated-portfolio-trading}
-               ...
-
-Unified tw_stock_tool CLI
-
-positional arguments:
-  {doctor,scan,daily,daily-report-artifact,stock-list,price-smoke-check,ai-scan,ai-report,ml-dataset,gui,cache,benchmark,analyze,strategy-compare,parameter-sweep,backtest-report,walk-forward,simulated-paper-trading,simulated-paper-trading-export,backtest-artifact,backtest-result-export,simulated-portfolio-artifact,simulated-portfolio-trading}
-    doctor              Check local environment
-    scan                Run multi-stock technical scanner
-    daily               Run daily candidate report
-    daily-report-artifact
-                        Validate, inspect, or export a Daily Report JSON artifact
-    stock-list          Stock-list utilities
-    price-smoke-check   Smoke check price data sources
-    ai-scan             Run multi-stock AI baseline scanner
-    ai-report           Run baseline ML prediction report
-    ml-dataset          Build research ML dataset
-    gui                 Launch local GUI prototype
-    cache               Manage price data cache
-    benchmark           Run multi-stock scanner benchmark
-    analyze             Run single-stock analysis
-    strategy-compare    Run strategy comparison
-    parameter-sweep     Run parameter sweep
-    backtest-report     Run backtest report
-    walk-forward        Run walk forward report
-    simulated-paper-trading
-                        Run historical simulated paper trading
-    simulated-paper-trading-export
-                        Export reports from a simulated paper trading JSON artifact
-    backtest-artifact   Validate or inspect BacktestResult JSON artifacts
-    backtest-result-export
-                        Export historical BacktestResult JSON artifact
-    simulated-portfolio-artifact
-                        Validate, inspect, or export a simulated portfolio trading JSON artifact
-    simulated-portfolio-trading
-                        Run multi-symbol historical simulated portfolio trading
-
-options:
-  -h, --help            show this help message and exit
-"""
-
-
 
 
 STOCK_LIST_HELP = """usage: twstock stock-list [-h] {update,smoke-check,clean} ...
@@ -283,6 +240,7 @@ def _help_snapshot(argv: list[str]) -> tuple[int, str, str]:
 
 
 class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
+
     def test_parser_tree_order_help_descriptions_and_nested_structure(self) -> None:
         parser = _capture_parser()
         action = _subparser_action(parser)
@@ -315,6 +273,35 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertNotIn("stock-list", ROUTE_BY_NAME)
         self.assertEqual(tuple(action._name_parser_map), TOP_LEVEL_ORDER)
 
+    def test_run_help_and_argument_rejection_are_exposed_by_unified_cli(self) -> None:
+        status, stdout, stderr = _help_snapshot(["--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("run", stdout)
+        self.assertIn("Inspect existing Workspace runs offline", stdout)
+
+        status, stdout, stderr = _help_snapshot(["run", "--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("usage: twstock run", stdout)
+        self.assertIn("list", stdout)
+        self.assertIn("inspect", stdout)
+
+        status, stdout, stderr = _help_snapshot(["run", "list", "--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("usage: twstock run list", stdout)
+        self.assertIn("--workspace", stdout)
+
+        status, stdout, stderr = _help_snapshot(["run", "inspect", "--help"])
+        self.assertEqual((status, stderr), (0, ""))
+        self.assertIn("usage: twstock run inspect", stdout)
+        self.assertIn("run_id", stdout)
+        self.assertIn("Exact canonical lowercase UUID v4", stdout)
+        self.assertIn("--workspace", stdout)
+
+        for argv in (["run", "unknown"], ["run", "list", "--workspace", "workspace", "--unknown"], ["run", "inspect", "550e8400-e29b-41d4-a716-446655440000", "--workspace", "workspace", "--unknown"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit) as raised:
+                twstock_cli.main(argv)
+            self.assertEqual(raised.exception.code, 2)
+
     def test_direct_handlers_preserve_callable_targets_and_child_program_names(self) -> None:
         passthrough = ["--flag", "value", "--output-md", "report.md", "--option=-2", "artifact.json"]
         for route in ROUTES:
@@ -328,6 +315,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             self.assertEqual(result, 17)
             dispatch.assert_called_once_with(expected_main, route.program_name, passthrough)
             self.assertEqual(sys.argv, original_argv)
+
     def test_custom_nested_runners_remain_distinct_dispatch_boundaries(self) -> None:
         cases = (
             ("update", "_run_stock_list_update", ["--flag", "value", "stocks.txt", "--option=-2"]),
@@ -338,6 +326,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 result = twstock_cli.main(["stock-list", command, *passthrough])
             self.assertEqual(result, 19)
             mocked.assert_called_once_with(passthrough)
+
     def test_unknown_and_incomplete_routes_fail_at_parser_boundary(self) -> None:
         for argv in ([], ["unknown"], ["stock-list"], ["stock-list", "unknown"]):
             stdout = StringIO()
@@ -354,9 +343,9 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertEqual(parsed.command, "stock-list")
         self.assertEqual(parsed.stock_list_command, "smoke-check")
         self.assertEqual(parsed.args, ["--future-option", "value"])
+
     def test_help_snapshots_freeze_order_wording_wrapping_and_descriptions(self) -> None:
         snapshots = (
-            (["--help"], TOP_HELP),
             (["stock-list", "--help"], STOCK_LIST_HELP),
             (["stock-list", "update", "--help"], NESTED_HELP),
             (["simulated-paper-trading", "--help"], SAFETY_HELP),
@@ -401,6 +390,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                         twstock_cli.main([*route_tokens, *passthrough])
                 self.assertEqual(raised.exception.code, exit_code)
                 self.assertEqual(sys.argv, original_argv)
+
     def test_lazy_import_timing_is_characterized_without_network_access(self) -> None:
         script = (
             "import contextlib\n"
@@ -445,6 +435,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(json.loads(completed.stdout), expected)
+
     def test_gui_dispatch_is_lazy_and_rejects_unknown_arguments(self) -> None:
         with self.assertRaises(SystemExit) as raised:
             twstock_cli.main(["gui", "--unknown"])
@@ -482,8 +473,8 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 self.assertEqual(json.loads(completed.stdout), {"before": False, "after": False})
 
     def test_registration_inventory_matches_source_counts_and_helper_boundary(self) -> None:
-        self.assertEqual(len(ROUTES), 25)
-        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 14)
+        self.assertEqual(len(ROUTES), 26)
+        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 15)
         self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_WITH_DESCRIPTION" for route in ROUTES), 4)
         self.assertEqual(sum(route.classification == "NESTED_STANDARD_PASSTHROUGH" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "NESTED_CUSTOM_RUNNER" for route in ROUTES), 2)
@@ -492,7 +483,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
 
         source = (REPOSITORY_ROOT / "src" / "tw_stock_tool" / "cli" / "twstock_cli.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("def _add_passthrough_parser"), 1)
-        self.assertEqual(source.count("_add_passthrough_parser("), 23)
+        self.assertEqual(source.count("_add_passthrough_parser("), 24)
         self.assertEqual(source.count(".add_parser("), 5)
         self.assertEqual(source.count(".set_defaults("), 4)
         self.assertEqual(source.count("stock_list_parser = subparsers.add_parser"), 1)
@@ -505,7 +496,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertNotIn("dataclass", source)
         self.assertEqual(
             sum(route.classification != "NESTED_CUSTOM_RUNNER" for route in ROUTES),
-            23,
+            24,
         )
 
 

@@ -93,6 +93,18 @@ def _ensure_directory(path: Path, operation: str) -> None:
         raise WorkspaceValidationError(operation, path, "path is not a directory")
 
 
+def _require_existing_directory(path: Path, operation: str) -> None:
+    _ensure_no_reparse_components(path, operation)
+    try:
+        result = path.lstat()
+    except FileNotFoundError as exc:
+        raise WorkspaceValidationError(operation, path, "directory does not exist") from exc
+    except OSError as exc:
+        raise WorkspaceValidationError(operation, path, "directory cannot be inspected") from exc
+    if not stat.S_ISDIR(result.st_mode):
+        raise WorkspaceValidationError(operation, path, "path is not a directory")
+
+
 def _validate_utc_timestamp(value: str, operation: str = "validate timestamp") -> datetime:
     if type(value) is not str:
         raise WorkspaceValidationError(operation, None, f"timestamp must be exact str, got {type(value).__name__}")
@@ -114,6 +126,11 @@ def _validate_run_id(value: str, operation: str = "validate run id") -> str:
     if parsed.version != 4 or str(parsed) != value:
         raise WorkspaceValidationError(operation, None, "run_id must be a canonical lowercase UUID v4")
     return value
+
+
+def validate_run_id(value: str) -> str:
+    """Validate and return an exact canonical lowercase UUID v4."""
+    return _validate_run_id(value)
 
 
 def validate_workflow_slug(value: str) -> str:
@@ -235,6 +252,16 @@ class Workspace:
         runs = normalized / "runs"
         _ensure_directory(runs, "validate workspace runs directory")
         object.__setattr__(self, "root", normalized)
+
+    @classmethod
+    def open_existing(cls, root: Path | str) -> "Workspace":
+        """Open an existing Workspace without creating directories."""
+        normalized = _absolute_path(root, "open existing workspace root")
+        _require_existing_directory(normalized, "open existing workspace root")
+        _require_existing_directory(normalized / "runs", "open existing workspace runs directory")
+        workspace = object.__new__(cls)
+        object.__setattr__(workspace, "root", normalized)
+        return workspace
 
     @property
     def runs_directory(self) -> Path:

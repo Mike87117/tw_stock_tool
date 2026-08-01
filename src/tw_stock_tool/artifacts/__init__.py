@@ -6,6 +6,7 @@ from tw_stock_tool.artifacts.catalog import (
     RunHealth,
     WorkspaceCatalog,
     WorkspaceRunEntry,
+    lookup_workspace_run,
     scan_catalog,
     scan_workspace,
 )
@@ -15,6 +16,8 @@ from tw_stock_tool.artifacts.errors import (
     WorkspaceError,
     WorkspaceManifestError,
     WorkspacePathError,
+    WorkspaceRunNotFoundError,
+    WorkspaceDuplicateRunIdError,
     WorkspaceValidationError,
 )
 from tw_stock_tool.artifacts.workspace import (
@@ -27,6 +30,7 @@ from tw_stock_tool.artifacts.workspace import (
     read_manifest,
     resolve_artifact_path,
     validate_artifact_path,
+    validate_run_id,
     validate_workflow_slug,
     write_manifest,
 )
@@ -45,15 +49,19 @@ __all__ = [
     "WorkspaceError",
     "WorkspaceManifestError",
     "WorkspacePathError",
+    "WorkspaceRunNotFoundError",
+    "WorkspaceDuplicateRunIdError",
     "WorkspaceRunEntry",
     "WorkspaceValidationError",
     "canonical_run_directory_name",
     "parse_run_directory_name",
     "read_manifest",
     "resolve_artifact_path",
+    "lookup_workspace_run",
     "scan_catalog",
     "scan_workspace",
     "validate_artifact_path",
+    "validate_run_id",
     "validate_workflow_slug",
     "write_manifest",
 ]

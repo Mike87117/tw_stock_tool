@@ -652,8 +652,12 @@ Implemented contract details:
 - Controlled workflow failures publish failure or partial manifests when the provisional manifest is available; a publication failure preserves the original workflow error as its cause.
 - twstock scan --help, twstock daily --help and twstock backtest-report --help forward to their workflow parsers and display --workspace.
 
-Known limitations:
+Known limitations at the Phase 55.3C closeout:
 
 - Phase 55.3D read-only twstock run list／twstock run inspect commands are not included.
 - The existing standalone Parameter Sweep、Walk Forward、Strategy Compare、AI／ML and simulated-trading workflows remain outside this integration.
 - Local Windows symlink privilege limitations remain covered by the Phase 55.3B path-safety tests and CI evidence.
+
+## 20. Phase 55.3D implementation record
+
+Phase 55.3D provides offline, read-only `twstock run list` and `twstock run inspect`. It reuses the Workspace/catalog boundary, opens only existing roots without mkdir, requires exact lowercase UUID v4 IDs, and leaves damaged runs visible through catalog findings. No reproduce, deletion, cleanup, artifact preview, JSON output, database, or migration scope is included.

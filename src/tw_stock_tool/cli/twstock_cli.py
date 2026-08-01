@@ -30,6 +30,7 @@ from tw_stock_tool.cli import simulated_paper_trading_export_cli
 from tw_stock_tool.cli import simulated_portfolio_artifact_cli
 from tw_stock_tool.cli import simulated_portfolio_trading_cli
 from tw_stock_tool.cli import backtest_artifact_cli
+from tw_stock_tool.cli import workspace_run_cli
 
 from tw_stock_tool.data import cache_manager
 from tw_stock_tool.data import stock_list_updater
@@ -87,6 +88,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     _add_passthrough_parser(subparsers, "doctor", doctor.main, "doctor.py", "Check local environment")
+
+    _add_passthrough_parser(
+        subparsers, "run", workspace_run_cli.main, "twstock run", "Inspect existing Workspace runs offline", forward_help=True
+    )
 
     _add_passthrough_parser(subparsers, "scan", scan_stocks.main, "scan_stocks.py", "Run multi-stock technical scanner", forward_help=True)
 
