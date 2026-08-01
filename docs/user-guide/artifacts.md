@@ -76,3 +76,16 @@ twstock simulated-portfolio-artifact export-csv \
 - 此功能是歷史研究輸出，不是投資建議。
 
 所有 artifact、Markdown、Excel 與 CSV 都是歷史研究輸出，不是交易指令或投資建議。
+
+## Workspace-managed Runs
+
+Workspace mode stores each supported Scan、Daily Report 或 Backtest run below:
+
+~~~text
+workspace/
+└── runs/YYYY/MM/<timestamp>_<workflow>_<run-id-prefix>/
+    ├── manifest.json
+    └── artifacts/
+~~~
+
+manifest.json is the run-level record and remains Run Manifest schema 1.0. Its managed artifact references are relative POSIX paths such as artifacts/stock_ranking.csv; they do not contain the original machine absolute Workspace path. The existing scan_catalog／scan_workspace API can scan the runs offline and reports missing or unsafe artifacts without fetching data or rerunning research. Re-running the same command creates another run directory and does not overwrite the earlier run.

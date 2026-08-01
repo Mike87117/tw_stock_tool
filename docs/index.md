@@ -4,11 +4,11 @@
 
 ## 目前開發狀態
 
-- Phase 55.3A planning baseline：`main` at `09156976def5a31f32e3b719214bc70b4639752e`（2026-07-31）。
-- Current package version：`0.4.0`。
-- Latest completed product phase：Phase 55.2 Research Run 與 Run Manifest，已完成 Scan、Daily Report、Backtest foundation。
-- Current approved plan：**Phase 55.3A — Artifact Hub 與 Research Workspace Contract Planning**。
-- Next production-code phase after planning approval：Phase 55.3B Workspace Storage Foundation。
+- Phase 55.3C implementation branch：phase-55-3c-workspace-workflow-integration。
+- Current package version：0.4.0。
+- Latest completed product phase：Phase 55.3C，已完成 Workspace storage foundation 與 Scan、Daily Report、Backtest 的 opt-in managed execution。
+- Current approved plan：Phase 55.3C — Scan／Daily／Backtest Workspace Workflow Integration。
+- Next phase：Phase 55.3D read-only run list／run inspect CLI。
 
 目前規劃與 closeout：
 

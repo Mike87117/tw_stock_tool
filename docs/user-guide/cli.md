@@ -77,3 +77,15 @@ AI Report 與 ML Dataset 僅供歷史研究；GUI 是本機 prototype，不提�
 - [Root entry removal record](../archive/root-wrapper-removal.md)
 
 以 twstock --help 或 twstock <command> --help 確認目前可用參數。
+
+## Workspace-managed Research Runs
+
+--workspace PATH 是 opt-in 的 append-only 模式。每次執行會在 Workspace 的 runs/YYYY/MM/ 下建立新的 run directory，並將 canonical manifest.json 與 managed artifacts 放在該 run directory 內。未指定 --workspace 時，既有 output paths 與 CLI 行為不變。
+
+~~~bash
+twstock scan --stocks 2330 2317 --workspace research-workspace
+twstock daily --stocks 2330 2317 --output-json --workspace research-workspace
+twstock backtest-report --stock 2330 --strategy ma_cross --output-md --workspace research-workspace
+~~~
+
+Workspace mode 的 manifest artifact paths 是相對於 run directory 的 POSIX paths，可在整個 Workspace 搬移後繼續由 catalog 解析。--output-dir、--manifest-path 以及明確指定外部 report path 與 --workspace 衝突時會 fail closed。

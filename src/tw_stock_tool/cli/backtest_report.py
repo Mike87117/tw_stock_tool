@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any
 
 from tw_stock_tool.application.research_run import BacktestRunRequest, run_backtest
+from tw_stock_tool.application.workspace_run import run_backtest_workspace
+from tw_stock_tool.application.workspace_summary import workspace_run_paths
 from tw_stock_tool.application.symbol_resolution import resolve_symbol_request
 from tw_stock_tool.cli._research_run_cli import artifact_path
 from tw_stock_tool.analysis.analysis import analyze_stock
@@ -46,6 +48,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     add_stock_strategy_period_arguments(parser, strategy_help="Strategy name (e.g., ma_cross)")
     parser.add_argument("--initial-capital", type=float, default=100000.0, help="Initial capital")
     add_report_output_arguments(parser)
+    parser.add_argument("--workspace", help="建立 append-only managed Research Run 的 Workspace 路徑")
     add_force_refresh_argument(parser)
     parser.add_argument("--short-window", type=int, default=5, help="Short MA window")
     parser.add_argument("--long-window", type=int, default=20, help="Long MA window")
@@ -114,12 +117,12 @@ def main() -> int | None:
         markdown_path = (
             None
             if args.output_md is None
-            else args.output_md or str(Path(args.output_dir) / "backtest_report.md")
+            else args.output_md or ("backtest_report.md" if getattr(args, "workspace", None) else str(Path(args.output_dir) / "backtest_report.md"))
         )
         excel_path = (
             None
             if args.output_excel is None
-            else args.output_excel or str(Path(args.output_dir) / "backtest_report.xlsx")
+            else args.output_excel or ("backtest_report.xlsx" if getattr(args, "workspace", None) else str(Path(args.output_dir) / "backtest_report.xlsx"))
         )
         request = BacktestRunRequest(
             symbol=resolved_symbol,
@@ -137,11 +140,24 @@ def main() -> int | None:
                 else None
             ),
         )
-        result = run_backtest(
-            request,
-            stage_callback=_stage_callback(args, strategy_name),
-        )
+        if getattr(args, "workspace", None):
+            result = run_backtest_workspace(
+                request,
+                getattr(args, "workspace", None),
+                stage_callback=_stage_callback(args, strategy_name),
+            )
+        else:
+            result = run_backtest(
+                request,
+                stage_callback=_stage_callback(args, strategy_name),
+            )
 
+        if getattr(args, "workspace", None):
+            run_directory, manifest_path = workspace_run_paths(getattr(args, "workspace", None), result.manifest)
+            print(f"Run ID: {result.manifest.run_id}")
+            print(f"Run status: {result.manifest.status}")
+            print(f"Run directory: {run_directory}")
+            print(f"Manifest path: {manifest_path}")
         if args.output_excel is not None:
             print(f"Excel report: {artifact_path(result, 'backtest_report_excel')}")
         if args.output_md is not None:
