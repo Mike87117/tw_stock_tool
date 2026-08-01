@@ -57,6 +57,9 @@ jobs:
           python -c "from tw_stock_tool.cli import twstock_cli"
           python -m tw_stock_tool.cli.twstock_cli --help
           twstock --help
+          twstock run --help
+          twstock run list --help
+          twstock run inspect --help
           twstock doctor --help
           twstock analyze --help
           twstock daily --help

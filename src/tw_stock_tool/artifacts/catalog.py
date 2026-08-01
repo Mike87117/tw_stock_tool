@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING
 
 from tw_stock_tool.artifacts.errors import (
     WorkspaceCatalogError,
+    WorkspaceDuplicateRunIdError,
+    WorkspaceRunNotFoundError,
+    WorkspaceDuplicateRunIdError,
+    WorkspaceRunNotFoundError,
     WorkspaceError,
     WorkspacePathError,
     WorkspaceManifestError,
@@ -465,6 +469,19 @@ def scan_workspace(workspace: Workspace) -> WorkspaceCatalog:
 
     return WorkspaceCatalog(workspace=workspace, entries=_ordered_entries(_mark_duplicate_run_ids(entries)))
 
+def lookup_workspace_run(catalog: WorkspaceCatalog, run_id: str) -> WorkspaceRunEntry:
+    """Return the sole catalog entry for one exact canonical UUID v4."""
+    from tw_stock_tool.artifacts.workspace import validate_run_id
+
+    if not isinstance(catalog, WorkspaceCatalog):
+        raise WorkspaceCatalogError("lookup workspace run", None, "catalog must be a WorkspaceCatalog")
+    canonical = validate_run_id(run_id)
+    matches = tuple(entry for entry in catalog.entries if entry.run_id == canonical)
+    if not matches:
+        raise WorkspaceRunNotFoundError("lookup workspace run", catalog.workspace.root, f"run_id not found: {canonical}")
+    if len(matches) != 1:
+        raise WorkspaceDuplicateRunIdError("lookup workspace run", catalog.workspace.root, f"duplicate run_id: {canonical}")
+    return matches[0]
 
 scan_catalog = scan_workspace
 
@@ -475,6 +492,8 @@ __all__ = [
     "RunHealth",
     "WorkspaceCatalog",
     "WorkspaceRunEntry",
+    "lookup_workspace_run",
+    "lookup_workspace_run",
     "scan_catalog",
     "scan_workspace",
 ]

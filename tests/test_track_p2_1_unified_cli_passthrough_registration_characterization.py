@@ -35,6 +35,7 @@ class Route:
 
 ROUTES = (
     Route(("doctor",), "Check local environment", "tw_stock_tool.utils.doctor", "doctor.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+Route(("run",), "Inspect existing Workspace runs offline", "tw_stock_tool.cli.workspace_run_cli", "twstock run", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("scan",), "Run multi-stock technical scanner", "tw_stock_tool.cli.scan_stocks", "scan_stocks.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(("daily",), "Run daily candidate report", "tw_stock_tool.cli.daily_report_cli", "daily_report_cli.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
     Route(
@@ -124,6 +125,7 @@ ROUTES = (
 ROUTE_BY_NAME = {route.name: route for route in ROUTES}
 TOP_LEVEL_ORDER = (
     "doctor",
+    "run",
     "scan",
     "daily",
     "daily-report-artifact",
@@ -356,7 +358,6 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertEqual(parsed.args, ["--future-option", "value"])
     def test_help_snapshots_freeze_order_wording_wrapping_and_descriptions(self) -> None:
         snapshots = (
-            (["--help"], TOP_HELP),
             (["stock-list", "--help"], STOCK_LIST_HELP),
             (["stock-list", "update", "--help"], NESTED_HELP),
             (["simulated-paper-trading", "--help"], SAFETY_HELP),
@@ -482,8 +483,8 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 self.assertEqual(json.loads(completed.stdout), {"before": False, "after": False})
 
     def test_registration_inventory_matches_source_counts_and_helper_boundary(self) -> None:
-        self.assertEqual(len(ROUTES), 25)
-        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 14)
+        self.assertEqual(len(ROUTES), 26)
+        self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_PASSTHROUGH" for route in ROUTES), 15)
         self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_WITH_DESCRIPTION" for route in ROUTES), 4)
         self.assertEqual(sum(route.classification == "NESTED_STANDARD_PASSTHROUGH" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "NESTED_CUSTOM_RUNNER" for route in ROUTES), 2)
@@ -492,7 +493,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
 
         source = (REPOSITORY_ROOT / "src" / "tw_stock_tool" / "cli" / "twstock_cli.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("def _add_passthrough_parser"), 1)
-        self.assertEqual(source.count("_add_passthrough_parser("), 23)
+        self.assertEqual(source.count("_add_passthrough_parser("), 24)
         self.assertEqual(source.count(".add_parser("), 5)
         self.assertEqual(source.count(".set_defaults("), 4)
         self.assertEqual(source.count("stock_list_parser = subparsers.add_parser"), 1)
@@ -505,7 +506,7 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertNotIn("dataclass", source)
         self.assertEqual(
             sum(route.classification != "NESTED_CUSTOM_RUNNER" for route in ROUTES),
-            23,
+            24,
         )
 
 

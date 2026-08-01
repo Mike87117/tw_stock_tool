@@ -40,6 +40,12 @@ class WorkspaceManifestError(WorkspaceError):
 class WorkspaceCatalogError(WorkspaceError):
     """Raised when the catalog cannot inspect the Workspace layout."""
 
+class WorkspaceRunNotFoundError(WorkspaceCatalogError):
+    """Raised when an exact Run ID does not appear in a catalog."""
+
+
+class WorkspaceDuplicateRunIdError(WorkspaceCatalogError):
+    """Raised when an exact Run ID appears in multiple catalog entries."""
 
 __all__ = [
     "WorkspaceError",
@@ -48,4 +54,8 @@ __all__ = [
     "WorkspacePathError",
     "WorkspaceManifestError",
     "WorkspaceCatalogError",
+    "WorkspaceRunNotFoundError",
+    "WorkspaceDuplicateRunIdError",
+    "WorkspaceRunNotFoundError",
+    "WorkspaceDuplicateRunIdError",
 ]
