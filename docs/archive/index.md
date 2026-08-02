@@ -6,6 +6,8 @@
 
 ## 最新 closeout
 
+- [Phase 55.3 Closeout：Artifact Hub 與 Research Workspace](phase-55-3-closeout.md)
+- [Phase 55.3D Closeout：Read-only Workspace Run CLI](phase-55-3d-closeout.md)
 - [Phase 55.2 Closeout：Research Run 與 Run Manifest](phase-55-2-closeout.md)
 
 ## 起點
