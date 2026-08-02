@@ -4,19 +4,22 @@
 
 ## 目前開發狀態
 
-- Phase 55.3C implementation branch：phase-55-3c-workspace-workflow-integration。
-- Current package version：0.4.0。
-- Latest completed product phase：Phase 55.3C，已完成 Workspace storage foundation 與 Scan、Daily Report、Backtest 的 opt-in managed execution。
-- Current approved plan：Phase 55.3C — Scan／Daily／Backtest Workspace Workflow Integration。
-- Next phase：Phase 55.3D read-only run list／run inspect CLI。
+- Current package version：`0.4.0`。
+- Latest completed product phase：Phase 55.3 — Artifact Hub 與 Research Workspace。
+- Latest merged runtime phase：Phase 55.3D，已完成 offline read-only `twstock run list`／`twstock run inspect`。
+- Phase 55.3E documentation and migration audit：本次文件更新完成後 closeout。
+- Current approved planning topic：Phase 56 — Strategy Qualification and Recommendation Evidence。
+- Next production-code phase after planning：Phase 56.1 Qualification Models and Pure Policy Evaluator。
 
 目前規劃與 closeout：
 
+- [Phase 55.3 Closeout：Artifact Hub 與 Research Workspace](archive/phase-55-3-closeout.md)
+- [Phase 56 Strategy Qualification Planning](architecture/phase-56-strategy-qualification-plan.md)
 - [Phase 55.3 Artifact Hub 與 Research Workspace Planning](architecture/phase-55-3-artifact-hub-workspace-plan.md)
 - [Phase 55.2 Closeout：Research Run 與 Run Manifest](archive/phase-55-2-closeout.md)
 - [產品架構與後續開發計畫](architecture/product-architecture-and-roadmap.md)
 
-若 roadmap 的歷史「下一步」敘述與上述 approved plan 不一致，以現行 runtime、Phase 55.2 closeout 與 Phase 55.3 planning 文件為準。
+Phase 55.3 planning 與較早 roadmap 中的歷史「下一步」敘述若與最新 closeout 或 Phase 56 planning 不一致，以現行 runtime、tests、Phase 55.3 closeout 與 Phase 56 planning 為準。
 
 ## 使用者
 
@@ -33,6 +36,7 @@
 - [開發指南](developer-guide/contributing.md)
 - [架構概覽](architecture/overview.md)
 - [產品架構與後續開發計畫](architecture/product-architecture-and-roadmap.md)
+- [Phase 56 Strategy Qualification Planning](architecture/phase-56-strategy-qualification-plan.md)
 - [Phase 55.3 Artifact Hub 與 Research Workspace Planning](architecture/phase-55-3-artifact-hub-workspace-plan.md)
 - [Market Data Provider 拆分規劃](architecture/market-data-provider-decomposition-plan.md)
 - [Root entry removal record](archive/root-wrapper-removal.md)
@@ -52,6 +56,7 @@
 
 [歷史與決策紀錄](archive/index.md) 導覽完成的 phase、characterization、audit 與 roadmap 文件。以下盤點只供歷史參考，不是目前 root invocation 或 import 指南：
 
+- [Phase 55.3 Closeout](archive/phase-55-3-closeout.md)
 - [Phase 55.2 Closeout](archive/phase-55-2-closeout.md)
 - [Development Roadmap](DEVELOPMENT_ROADMAP.md)
 - [Public API and wrapper inventory](PUBLIC_API_AND_WRAPPER_INVENTORY.md)
