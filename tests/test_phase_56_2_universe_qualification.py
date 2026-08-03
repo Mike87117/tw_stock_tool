@@ -11,6 +11,9 @@ import pandas as pd
 
 from tw_stock_tool.application.universe_qualification import (
     UniverseQualificationRequest,
+    UniverseQualificationError,
+    WindowEvidence,
+    aggregate_universe_evidence,
     UniverseEvidenceSerializationError,
     build_universe_oos_evidence,
     deserialize_universe_oos_evidence,
@@ -188,6 +191,87 @@ class UniverseQualificationTests(unittest.TestCase):
             unstable = evaluate_universe_qualification(_request({"2330": _frame()}))
         self.assertFalse(unstable.symbols[0].windows[0].parameter_stable)
         self.assertFalse(unstable.qualification.request.metrics.parameter_stable)
+
+    def test_failure_and_mixed_evidence_strict_round_trip(self):
+        failed = evaluate_universe_qualification(_request({"bad": pd.DataFrame()}))
+        failed_artifact = build_universe_oos_evidence(failed)
+        self.assertEqual(load_universe_oos_evidence_json(export_universe_oos_evidence_json(failed_artifact)), failed_artifact)
+
+        def fail_second_test(frame, strategy, params, *args):
+            if len(frame) == 5 and frame.index[0].day == 16:
+                raise RuntimeError("second test failed")
+            return {"Total Return %": 1.0, "Sharpe Ratio": 1.0, "Trade Count": 1, "Max Drawdown %": 0.0}
+
+        with patch("tw_stock_tool.application.universe_qualification.run_strategy_backtest", side_effect=fail_second_test):
+            mixed = evaluate_universe_qualification(_request({"good": _frame(), "bad": pd.DataFrame()}))
+        mixed_artifact = build_universe_oos_evidence(mixed)
+        self.assertEqual(load_universe_oos_evidence_json(export_universe_oos_evidence_json(mixed_artifact)), mixed_artifact)
+        self.assertFalse(next(item for item in mixed.symbols if item.symbol == "good").windows[-1].valid)
+
+    def test_canonical_aggregation_rejects_forged_symbol_and_qualification_metrics(self):
+        result = evaluate_universe_qualification(_request({"2330": _frame()}, _frame()))
+        self.assertEqual(result.aggregate_metrics, aggregate_universe_evidence(result.symbols))
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        payload["symbols"][0]["oos_observations"] += 1
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        payload["qualification"]["request"]["metrics"]["oos_observations"] += 1
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+
+    def test_duplicate_windows_and_neighbor_contracts_are_rejected(self):
+        result = evaluate_universe_qualification(_request({"2330": _frame()}, _frame()))
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        windows = payload["symbols"][0]["windows"]
+        if len(windows) > 1:
+            duplicate = dict(windows[1])
+            duplicate["window"] = windows[0]["window"]
+            windows.append(duplicate)
+            with self.assertRaises(UniverseEvidenceSerializationError):
+                deserialize_universe_oos_evidence(payload)
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        window = payload["symbols"][0]["windows"][0]
+        window["neighborhood_errors"] = "not-a-list"
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        window = payload["symbols"][0]["windows"][0]
+        window["neighborhood_returns_pct"] = []
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+
+    def test_parameter_stability_rule_handles_surface_cases(self):
+        def fake_surface(selected_return, neighbor_return, fail_neighbor=False):
+            def fake(frame, strategy, params, *args):
+                train = len(frame) == 10
+                selected = params["short_window"] == 2
+                if fail_neighbor and not train and not selected:
+                    raise RuntimeError("neighbor failed")
+                value = 10.0 if train and selected else 1.0 if train else (selected_return if selected else neighbor_return)
+                return {"Total Return %": value, "Sharpe Ratio": value, "Trade Count": 1, "Max Drawdown %": 0.0}
+            return fake
+
+        cases = ((10.0, 9.0, False, True), (10.0, -80.0, False, False), (-10.0, -80.0, False, False), (10.0, 9.0, True, False))
+        for selected, neighbor, failed, expected in cases:
+            with self.subTest(selected=selected, neighbor=neighbor, failed=failed), patch("tw_stock_tool.application.universe_qualification.run_strategy_backtest", side_effect=fake_surface(selected, neighbor, failed)):
+                result = evaluate_universe_qualification(_request({"2330": _frame()}))
+            self.assertEqual(result.symbols[0].windows[0].parameter_stable, expected)
+
+    def test_provided_input_does_not_change_research_run_source_schema(self):
+        with tempfile.TemporaryDirectory() as root:
+            result = run_universe_qualification(_request({"2330": _frame()}), workspace_root=root)
+        self.assertEqual(result.manifest.data_sources, ())
+        self.assertTrue(result.manifest.config.workflow_options["provided_input"])
+        self.assertFalse(result.manifest.config.auto_adjust)
+
+    def test_cleanup_failure_surfaces_original_and_cleanup_paths(self):
+        with tempfile.TemporaryDirectory() as root:
+            result = evaluate_universe_qualification(_request({"2330": _frame()}))
+            lifecycle = WorkspaceRunLifecycle.begin(root, "universe-oos-evaluation")
+            with patch.object(WorkspaceRunLifecycle, "publish", side_effect=RuntimeError("publish failed")), patch.object(Path, "unlink", side_effect=OSError("unlink failed")):
+                with self.assertRaisesRegex(UniverseQualificationError, "publication failed: publish failed; publication cleanup failed; possible orphaned paths"):
+                    publish_universe_qualification(result, lifecycle)
 
     def test_request_snapshots_inputs_and_source_ids(self):
         frame = _frame()
