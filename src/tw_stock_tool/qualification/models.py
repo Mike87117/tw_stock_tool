@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import math
 from types import MappingProxyType
@@ -215,7 +215,9 @@ class QualificationPolicy:
     minimum_positive_window_ratio: float
     maximum_symbol_concentration_pct: float
     require_parameter_stability: bool
-    finding_severities: Mapping[str, FindingSeverity] = DEFAULT_FINDING_SEVERITIES
+    finding_severities: Mapping[str, FindingSeverity] = field(
+        default_factory=lambda: DEFAULT_FINDING_SEVERITIES
+    )
 
     def __post_init__(self) -> None:
         _clean_string("policy_id", self.policy_id)
