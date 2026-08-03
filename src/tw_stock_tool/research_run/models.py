@@ -27,6 +27,7 @@ RunStatus: TypeAlias = Literal[
 SourceKind: TypeAlias = Literal[
     "live",
     "cache",
+    "provided",
 ]
 
 CacheState: TypeAlias = Literal[
@@ -220,13 +221,15 @@ class DataSourceRecord:
         source_kind = _require_clean_string("source_kind", self.source_kind)
         cache_state = _require_clean_string("cache_state", self.cache_state)
 
-        if source_kind not in ("live", "cache"):
-            raise ResearchRunModelError(f"source_kind must be 'live' or 'cache', got {source_kind!r}")
+        if source_kind not in ("live", "cache", "provided"):
+            raise ResearchRunModelError(f"source_kind must be 'live' or 'cache' (or 'provided'), got {source_kind!r}")
         if cache_state not in ("not_applicable", "fresh", "stale"):
             raise ResearchRunModelError(f"cache_state must be 'not_applicable', 'fresh', or 'stale', got {cache_state!r}")
 
-        if source_kind == "live" and cache_state != "not_applicable":
-            raise ResearchRunModelError("cache_state must be 'not_applicable' when source_kind is 'live'")
+        if source_kind in ("live", "provided") and cache_state != "not_applicable":
+            raise ResearchRunModelError(
+                f"cache_state must be 'not_applicable' when source_kind is '{source_kind}'"
+            )
         if source_kind == "cache" and cache_state not in ("fresh", "stale"):
             raise ResearchRunModelError("cache_state must be 'fresh' or 'stale' when source_kind is 'cache'")
 

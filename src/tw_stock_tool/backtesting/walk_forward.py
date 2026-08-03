@@ -230,6 +230,47 @@ def _run_strategy_backtest(
     )
 
 
+def parameter_grid(
+    strategy: str,
+    ma_short_windows: tuple[int, ...] | None = None,
+    ma_long_windows: tuple[int, ...] | None = None,
+    rsi_buy_below: tuple[int, ...] | None = None,
+    rsi_sell_above: tuple[int, ...] | None = None,
+    score_buy: tuple[int, ...] | None = None,
+    score_sell: tuple[int, ...] | None = None,
+) -> list[dict[str, int]]:
+    """Return the deterministic parameter grid used by Walk Forward."""
+    return _parameter_grid(
+        strategy, ma_short_windows, ma_long_windows, rsi_buy_below,
+        rsi_sell_above, score_buy, score_sell,
+    )
+
+
+def run_strategy_backtest(
+    df: pd.DataFrame,
+    strategy: str,
+    params: dict[str, int],
+    stop_loss_pct: float | None,
+    take_profit_pct: float | None,
+    max_hold_days: int | None,
+    position_size: float,
+    initial_capital: float,
+    fee_rate: float,
+    tax_rate: float,
+    interval: str = DEFAULT_INTERVAL,
+) -> dict[str, Any]:
+    """Run one strategy backtest through the stable Walk Forward boundary."""
+    return _run_strategy_backtest(
+        df, strategy, params, stop_loss_pct, take_profit_pct, max_hold_days,
+        position_size, initial_capital, fee_rate, tax_rate, interval,
+    )
+
+
+def sort_train_metric(train_result: dict[str, Any], sort_by: str) -> float:
+    """Read the same train-only selection metric used by Walk Forward."""
+    return _sort_metric(train_result, sort_by)
+
+
 def _base_row(
     window_number: int,
     train: pd.DataFrame,
