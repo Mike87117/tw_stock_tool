@@ -24,6 +24,44 @@ EvidenceScope: TypeAlias = Literal["in_sample", "out_of_sample"]
 JsonScalar: TypeAlias = str | int | float | bool | None
 FrozenJsonValue: TypeAlias = JsonScalar | tuple["FrozenJsonValue", ...] | Mapping[str, "FrozenJsonValue"]
 
+SUPPORTED_FINDING_CODES = (
+    "data_leakage_risk",
+    "insufficient_oos_observations",
+    "insufficient_trades",
+    "insufficient_symbols",
+    "insufficient_valid_windows",
+    "benchmark_missing",
+    "underperforms_benchmark",
+    "cost_stress_failure",
+    "max_drawdown_exceeded",
+    "window_instability",
+    "symbol_concentration",
+    "parameter_instability",
+    "non_finite_metric",
+    "partial_data_failure",
+    "unsupported_policy",
+)
+
+DEFAULT_FINDING_SEVERITIES = MappingProxyType(
+    {
+        "data_leakage_risk": "blocking",
+        "insufficient_oos_observations": "blocking",
+        "insufficient_trades": "blocking",
+        "insufficient_symbols": "blocking",
+        "insufficient_valid_windows": "blocking",
+        "benchmark_missing": "blocking",
+        "underperforms_benchmark": "warning",
+        "cost_stress_failure": "blocking",
+        "max_drawdown_exceeded": "blocking",
+        "window_instability": "blocking",
+        "symbol_concentration": "blocking",
+        "parameter_instability": "blocking",
+        "non_finite_metric": "blocking",
+        "partial_data_failure": "blocking",
+        "unsupported_policy": "blocking",
+    }
+)
+
 
 def _clean_string(name: str, value: Any) -> str:
     if type(value) is not str:
@@ -63,7 +101,12 @@ def _positive_int(name: str, value: Any) -> int:
 def _finite_float(name: str, value: Any) -> float:
     if type(value) not in (int, float):
         raise QualificationModelError(f"{name} must be an exact finite number, got {type(value).__name__}")
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise QualificationModelError(
+            f"{name} must be a finite number; conversion failed"
+        ) from exc
     if not math.isfinite(result):
         raise QualificationModelError(f"{name} must be finite, got {value!r}")
     return result
@@ -172,6 +215,7 @@ class QualificationPolicy:
     minimum_positive_window_ratio: float
     maximum_symbol_concentration_pct: float
     require_parameter_stability: bool
+    finding_severities: Mapping[str, FindingSeverity] = DEFAULT_FINDING_SEVERITIES
 
     def __post_init__(self) -> None:
         _clean_string("policy_id", self.policy_id)
@@ -206,6 +250,23 @@ class QualificationPolicy:
             ),
         )
         _exact_bool("require_parameter_stability", self.require_parameter_stability)
+        if not isinstance(self.finding_severities, Mapping):
+            raise QualificationModelError("finding_severities must be a Mapping")
+        if set(self.finding_severities) != set(SUPPORTED_FINDING_CODES):
+            raise QualificationModelError(
+                "finding_severities must contain exactly the supported finding codes"
+            )
+        severities: dict[str, str] = {}
+        for code in SUPPORTED_FINDING_CODES:
+            severity = _clean_string(
+                f"finding_severities[{code!r}]", self.finding_severities[code]
+            )
+            if severity not in ("info", "warning", "blocking"):
+                raise QualificationModelError(
+                    f"finding_severities[{code!r}] has unsupported severity {severity!r}"
+                )
+            severities[code] = severity
+        object.__setattr__(self, "finding_severities", MappingProxyType(severities))
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +366,10 @@ class QualificationFinding:
 
     def __post_init__(self) -> None:
         _clean_string("code", self.code)
+        if self.code not in SUPPORTED_FINDING_CODES:
+            raise QualificationModelError(
+                f"unsupported qualification finding code: {self.code}"
+            )
         severity = _clean_string("severity", self.severity)
         if severity not in ("info", "warning", "blocking"):
             raise QualificationModelError(
@@ -387,6 +452,24 @@ class StrategyQualificationResult:
         if not isinstance(self.decision, PromotionDecision):
             raise QualificationModelError("decision must be PromotionDecision")
 
+        from tw_stock_tool.qualification.derivation import derive_qualification_outcome
+        from tw_stock_tool.qualification.findings import normalize_findings
+
+        normalized = normalize_findings(self.findings, self.request.policy)
+        if self.findings != normalized:
+            raise QualificationModelError(
+                "findings must be canonical, supported, unique, and deterministically ordered"
+            )
+        canonical_findings, canonical_decision = derive_qualification_outcome(self.request)
+        if self.findings != canonical_findings:
+            raise QualificationModelError(
+                "findings must equal canonical evaluator findings"
+            )
+        if self.decision != canonical_decision:
+            raise QualificationModelError(
+                "decision must equal canonical evaluator decision"
+            )
+
         unique_codes: list[str] = []
         for finding in self.findings:
             if finding.code not in unique_codes:
@@ -414,6 +497,7 @@ class StrategyQualificationResult:
 __all__ = [
     "STRATEGY_QUALIFICATION_ARTIFACT_TYPE",
     "STRATEGY_QUALIFICATION_SCHEMA_VERSION",
+    "DEFAULT_FINDING_SEVERITIES",
     "EvidenceScope",
     "FindingSeverity",
     "PromotionState",
@@ -421,6 +505,7 @@ __all__ = [
     "QualificationMetricSet",
     "QualificationModelError",
     "QualificationPolicy",
+    "SUPPORTED_FINDING_CODES",
     "PromotionDecision",
     "StrategyDescriptor",
     "StrategyQualificationRequest",

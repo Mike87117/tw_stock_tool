@@ -4,30 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from tw_stock_tool.qualification.models import QualificationFinding
+from tw_stock_tool.qualification.models import (
+    DEFAULT_FINDING_SEVERITIES,
+    SUPPORTED_FINDING_CODES,
+    QualificationFinding,
+    QualificationModelError,
+    QualificationPolicy,
+)
 
 
-class QualificationFindingError(ValueError):
+class QualificationFindingError(QualificationModelError):
     """Raised when a finding is not part of the first-version registry."""
 
-
-SUPPORTED_FINDING_CODES = (
-    "data_leakage_risk",
-    "insufficient_oos_observations",
-    "insufficient_trades",
-    "insufficient_symbols",
-    "insufficient_valid_windows",
-    "benchmark_missing",
-    "underperforms_benchmark",
-    "cost_stress_failure",
-    "max_drawdown_exceeded",
-    "window_instability",
-    "symbol_concentration",
-    "parameter_instability",
-    "non_finite_metric",
-    "partial_data_failure",
-    "unsupported_policy",
-)
 
 _SEVERITY_ORDER = {"blocking": 0, "warning": 1, "info": 2}
 
@@ -62,6 +50,7 @@ def _finding_sort_key(finding: QualificationFinding) -> tuple[object, ...]:
 
 def normalize_findings(
     findings: Iterable[QualificationFinding],
+    policy: QualificationPolicy | None = None,
 ) -> tuple[QualificationFinding, ...]:
     """Validate, deduplicate, and sort findings deterministically."""
     unique: dict[tuple[object, ...], QualificationFinding] = {}
@@ -74,16 +63,27 @@ def normalize_findings(
             raise QualificationFindingError(
                 f"unsupported qualification finding code: {finding.code}"
             )
+        if policy is None:
+            authorized = DEFAULT_FINDING_SEVERITIES[finding.code]
+        else:
+            from tw_stock_tool.qualification.policies import resolve_finding_severity
+
+            authorized = resolve_finding_severity(policy, finding.code)
+        if finding.severity != authorized:
+            raise QualificationFindingError(
+                f"{finding.code} requires severity {authorized!r}, got {finding.severity!r}"
+            )
         unique.setdefault(_finding_identity(finding), finding)
     return tuple(sorted(unique.values(), key=_finding_sort_key))
 
 
 def finding_reason_codes(
     findings: Iterable[QualificationFinding],
+    policy: QualificationPolicy | None = None,
 ) -> tuple[str, ...]:
     """Return unique finding codes in normalized finding order."""
     codes: list[str] = []
-    for finding in normalize_findings(findings):
+    for finding in normalize_findings(findings, policy):
         if finding.code not in codes:
             codes.append(finding.code)
     return tuple(codes)

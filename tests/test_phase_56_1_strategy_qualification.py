@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
+from types import MappingProxyType
 import json
 import unittest
 
@@ -15,6 +16,7 @@ from tw_stock_tool.qualification import (
     QualificationSerializationError,
     StrategyDescriptor,
     StrategyQualificationRequest,
+    StrategyQualificationResult,
     deserialize_strategy_qualification_result,
     evaluate_strategy_qualification,
     export_strategy_qualification_json,
@@ -98,7 +100,7 @@ class QualificationModelsTests(unittest.TestCase):
 class FindingTests(unittest.TestCase):
     def test_findings_are_deduplicated_and_sorted_deterministically(self):
         warning = QualificationFinding(
-            code="insufficient_trades",
+            code="underperforms_benchmark",
             severity="warning",
             scope="aggregate",
             message="warning",
@@ -139,7 +141,7 @@ class EvaluatorTests(unittest.TestCase):
                 )
             )
         )
-        self.assertEqual(result.decision.state, "RESEARCH_CANDIDATE")
+        self.assertEqual(result.decision.state, "REJECTED")
         self.assertEqual(
             result.decision.reason_codes,
             (
@@ -151,8 +153,8 @@ class EvaluatorTests(unittest.TestCase):
                 "max_drawdown_exceeded",
                 "parameter_instability",
                 "symbol_concentration",
-                "underperforms_benchmark",
                 "window_instability",
+                "underperforms_benchmark",
             ),
         )
 
@@ -295,6 +297,231 @@ class SerializationTests(unittest.TestCase):
         )
         self.assertEqual(payload["schema_version"], STRATEGY_QUALIFICATION_SCHEMA_VERSION)
         self.assertEqual(payload["artifact_type"], "strategy_qualification")
+
+
+    def test_direct_result_rejects_inconsistent_findings_and_decision(self):
+        result = evaluate_strategy_qualification(request_with())
+        with self.assertRaises(QualificationModelError):
+            type(result)(
+                schema_version=result.schema_version,
+                artifact_type=result.artifact_type,
+                request=result.request,
+                findings=(
+                    QualificationFinding(
+                        code="benchmark_missing",
+                        severity="blocking",
+                        scope="aggregate",
+                        message="forged",
+                    ),
+                ),
+                decision=result.decision,
+            )
+
+    def test_direct_result_rejects_paper_ready_for_invalid_evidence(self):
+        invalid_requests = (
+            request_with(policy=replace(TAIWAN_EQUITY_DAILY_V1, policy_id="unknown")),
+            request_with(
+                policy=replace(TAIWAN_EQUITY_DAILY_V1, policy_version="2.0")
+            ),
+            request_with(
+                policy=replace(TAIWAN_EQUITY_DAILY_V1, minimum_completed_trades=1)
+            ),
+            request_with(metrics=passing_metrics(evidence_scope="in_sample")),
+            request_with(metrics=passing_metrics(partial_failure_count=1)),
+            request_with(metrics=passing_metrics(completed_trades=1)),
+            request_with(
+                metrics=passing_metrics(
+                    benchmark_available=False,
+                    benchmark_return_pct=None,
+                )
+            ),
+        )
+        for request in invalid_requests:
+            with self.subTest(request=request):
+                with self.assertRaises(QualificationModelError):
+                    StrategyQualificationResult(
+                        schema_version=STRATEGY_QUALIFICATION_SCHEMA_VERSION,
+                        artifact_type="strategy_qualification",
+                        request=request,
+                        findings=(),
+                        decision=PromotionDecision(
+                            state="PAPER_READY",
+                            reason_codes=(),
+                        ),
+                    )
+
+    def test_policy_severity_mapping_is_immutable_and_exact(self):
+        self.assertIsInstance(TAIWAN_EQUITY_DAILY_V1.finding_severities, MappingProxyType)
+        with self.assertRaises(TypeError):
+            TAIWAN_EQUITY_DAILY_V1.finding_severities["benchmark_missing"] = "info"
+        missing = dict(TAIWAN_EQUITY_DAILY_V1.finding_severities)
+        missing.pop("benchmark_missing")
+        with self.assertRaises(QualificationModelError):
+            replace(TAIWAN_EQUITY_DAILY_V1, finding_severities=missing)
+        unknown = dict(TAIWAN_EQUITY_DAILY_V1.finding_severities)
+        unknown["unknown_code"] = "blocking"
+        with self.assertRaises(QualificationModelError):
+            replace(TAIWAN_EQUITY_DAILY_V1, finding_severities=unknown)
+
+    def test_supported_findings_use_policy_severity(self):
+        self.assertEqual(
+            TAIWAN_EQUITY_DAILY_V1.finding_severities["benchmark_missing"],
+            "blocking",
+        )
+        result = evaluate_strategy_qualification(
+            request_with(
+                metrics=passing_metrics(
+                    benchmark_available=False,
+                    benchmark_return_pct=None,
+                )
+            )
+        )
+        self.assertEqual(result.findings[0].severity, "blocking")
+        self.assertEqual(result.decision.state, "REJECTED")
+
+    def test_duplicate_findings_are_rejected_at_result_boundary(self):
+        result = evaluate_strategy_qualification(
+            request_with(metrics=passing_metrics(completed_trades=1))
+        )
+        with self.assertRaises(QualificationModelError):
+            StrategyQualificationResult(
+                schema_version=result.schema_version,
+                artifact_type=result.artifact_type,
+                request=result.request,
+                findings=result.findings + (result.findings[0],),
+                decision=result.decision,
+            )
+
+    def test_normalization_preserves_scope_metric_symbol_and_window_identity(self):
+        findings = (
+            QualificationFinding(
+                code="underperforms_benchmark",
+                severity="warning",
+                scope="symbol",
+                message="same",
+                metric_name="return",
+                symbol="2330",
+                window=1,
+            ),
+            QualificationFinding(
+                code="underperforms_benchmark",
+                severity="warning",
+                scope="symbol",
+                message="same",
+                metric_name="return",
+                symbol="2317",
+                window=1,
+            ),
+            QualificationFinding(
+                code="underperforms_benchmark",
+                severity="warning",
+                scope="window",
+                message="same",
+                metric_name="return",
+                window=1,
+            ),
+        )
+        self.assertEqual(len(normalize_findings(findings)), 3)
+
+    def test_parameter_mapping_order_is_canonical_recursively(self):
+        first = replace(
+            request_with(),
+            strategy=StrategyDescriptor(
+                strategy_id="ma_cross",
+                parameters={
+                    "b": 2,
+                    "a": 1,
+                    "nested": {"z": 3, "a": 1},
+                },
+            ),
+        )
+        second = replace(
+            request_with(),
+            strategy=StrategyDescriptor(
+                strategy_id="ma_cross",
+                parameters={
+                    "nested": {"a": 1, "z": 3},
+                    "a": 1,
+                    "b": 2,
+                },
+            ),
+        )
+        self.assertEqual(
+            export_strategy_qualification_json(
+                evaluate_strategy_qualification(first)
+            ),
+            export_strategy_qualification_json(
+                evaluate_strategy_qualification(second)
+            ),
+        )
+
+    def test_direct_numeric_overflow_is_a_model_error_with_path(self):
+        for value in (10**10000, -(10**10000)):
+            with self.subTest(value="overflow"):
+                with self.assertRaisesRegex(
+                    QualificationModelError, "total_return_pct"
+                ):
+                    passing_metrics(total_return_pct=value)
+
+    def test_json_numeric_overflow_is_a_serialization_error(self):
+        payload = serialize_strategy_qualification_result(
+            evaluate_strategy_qualification(request_with())
+        )
+        payload["request"]["metrics"]["total_return_pct"] = 10**10000
+        with self.assertRaisesRegex(
+            QualificationSerializationError, "total_return_pct"
+        ):
+            deserialize_strategy_qualification_result(payload)
+
+    def test_json_read_back_rejects_forged_paper_ready_metrics(self):
+        invalid_metrics = (
+            {"evidence_scope": "in_sample"},
+            {"partial_failure_count": 1},
+            {"completed_trades": 1},
+            {"benchmark_available": False, "benchmark_return_pct": None},
+        )
+        for changes in invalid_metrics:
+            with self.subTest(changes=changes):
+                payload = serialize_strategy_qualification_result(
+                    evaluate_strategy_qualification(request_with())
+                )
+                payload["request"]["metrics"].update(changes)
+                with self.assertRaises(QualificationSerializationError):
+                    deserialize_strategy_qualification_result(payload)
+
+    def test_json_read_back_rejects_severity_downgrade(self):
+        payload = serialize_strategy_qualification_result(
+            evaluate_strategy_qualification(
+                request_with(
+                    metrics=passing_metrics(
+                        benchmark_available=False,
+                        benchmark_return_pct=None,
+                    )
+                )
+            )
+        )
+        payload["findings"][0]["severity"] = "info"
+        with self.assertRaises(QualificationSerializationError):
+            deserialize_strategy_qualification_result(payload)
+
+    def test_json_read_back_rejects_duplicate_and_noncanonical_findings(self):
+        result = evaluate_strategy_qualification(
+            request_with(
+                metrics=passing_metrics(
+                    completed_trades=1,
+                    valid_windows=1,
+                )
+            )
+        )
+        payload = serialize_strategy_qualification_result(result)
+        payload["findings"].append(dict(payload["findings"][0]))
+        with self.assertRaises(QualificationSerializationError):
+            deserialize_strategy_qualification_result(payload)
+
+        payload = serialize_strategy_qualification_result(result)
+        payload["findings"].reverse()
+        with self.assertRaises(QualificationSerializationError):
+            deserialize_strategy_qualification_result(payload)
 
 
 if __name__ == "__main__":

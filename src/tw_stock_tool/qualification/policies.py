@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Mapping
 
-from tw_stock_tool.qualification.models import QualificationPolicy
+from tw_stock_tool.qualification.models import (
+    DEFAULT_FINDING_SEVERITIES,
+    QualificationPolicy,
+)
 
 
 class QualificationPolicyError(ValueError):
@@ -26,6 +29,7 @@ TAIWAN_EQUITY_DAILY_V1 = QualificationPolicy(
     minimum_positive_window_ratio=0.5,
     maximum_symbol_concentration_pct=50.0,
     require_parameter_stability=True,
+    finding_severities=DEFAULT_FINDING_SEVERITIES,
 )
 
 _POLICY_REGISTRY: Mapping[tuple[str, str], QualificationPolicy] = MappingProxyType(
@@ -67,6 +71,22 @@ def is_supported_qualification_policy(policy: QualificationPolicy) -> bool:
     return registered == policy
 
 
+def resolve_finding_severity(policy: QualificationPolicy, code: str) -> str:
+    """Resolve severity from the exact versioned policy, failing closed."""
+    if not isinstance(policy, QualificationPolicy):
+        raise QualificationPolicyError("policy must be QualificationPolicy")
+    if code not in DEFAULT_FINDING_SEVERITIES:
+        raise QualificationPolicyError(f"unsupported qualification finding code: {code}")
+    if not is_supported_qualification_policy(policy):
+        if code == "unsupported_policy":
+            return DEFAULT_FINDING_SEVERITIES[code]
+        raise QualificationPolicyError(
+            f"cannot resolve findings for unsupported policy "
+            f"{policy.policy_id}@{policy.policy_version}"
+        )
+    return policy.finding_severities[code]
+
+
 SUPPORTED_QUALIFICATION_POLICIES = tuple(_POLICY_REGISTRY.values())
 
 
@@ -75,5 +95,6 @@ __all__ = [
     "TAIWAN_EQUITY_DAILY_V1",
     "QualificationPolicyError",
     "is_supported_qualification_policy",
+    "resolve_finding_severity",
     "resolve_qualification_policy",
 ]

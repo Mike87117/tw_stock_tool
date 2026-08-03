@@ -1,5 +1,6 @@
 """Research-only strategy qualification models and pure evaluation boundary."""
 
+from tw_stock_tool.qualification.derivation import derive_qualification_outcome
 from tw_stock_tool.qualification.evaluator import evaluate_strategy_qualification
 from tw_stock_tool.qualification.findings import (
     SUPPORTED_FINDING_CODES,
@@ -14,6 +15,7 @@ from tw_stock_tool.qualification.models import (
     FindingSeverity,
     PromotionState,
     PromotionDecision,
+    DEFAULT_FINDING_SEVERITIES,
     QualificationFinding,
     QualificationMetricSet,
     QualificationModelError,
@@ -27,6 +29,7 @@ from tw_stock_tool.qualification.policies import (
     TAIWAN_EQUITY_DAILY_V1,
     QualificationPolicyError,
     is_supported_qualification_policy,
+    resolve_finding_severity,
     resolve_qualification_policy,
 )
 from tw_stock_tool.qualification.serialization import (
@@ -58,12 +61,14 @@ __all__ = [
     "StrategyQualificationRequest",
     "StrategyQualificationResult",
     "deserialize_strategy_qualification_result",
+    "derive_qualification_outcome",
     "evaluate_strategy_qualification",
     "export_strategy_qualification_json",
     "finding_reason_codes",
     "is_supported_qualification_policy",
     "load_strategy_qualification_json",
     "normalize_findings",
+    "resolve_finding_severity",
     "resolve_qualification_policy",
     "serialize_strategy_qualification_result",
 ]

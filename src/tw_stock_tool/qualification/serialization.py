@@ -46,6 +46,7 @@ _POLICY_KEYS = (
     "minimum_positive_window_ratio",
     "maximum_symbol_concentration_pct",
     "require_parameter_stability",
+    "finding_severities",
 )
 _METRIC_KEYS = (
     "evidence_scope",
@@ -94,7 +95,8 @@ def _json_value(value: Any, path: str) -> Any:
         return [_json_value(item, f"{path}[{index}]") for index, item in enumerate(value)]
     if isinstance(value, Mapping):
         output: dict[str, Any] = {}
-        for key, item in value.items():
+        for key in sorted(value):
+            item = value[key]
             if type(key) is not str or not key or key.strip() != key:
                 _fail(path, "mapping keys must be clean exact strings")
             output[key] = _json_value(item, f"{path}.{key}")
@@ -154,6 +156,10 @@ def serialize_strategy_qualification_result(
                 "minimum_positive_window_ratio": policy.minimum_positive_window_ratio,
                 "maximum_symbol_concentration_pct": policy.maximum_symbol_concentration_pct,
                 "require_parameter_stability": policy.require_parameter_stability,
+                "finding_severities": _json_value(
+                    policy.finding_severities,
+                    "$.request.policy.finding_severities",
+                ),
             },
         },
         "findings": [
@@ -259,10 +265,22 @@ def deserialize_strategy_qualification_result(
         **metrics_raw,
     )
     policy_raw = _dict(request_raw["policy"], "$.request.policy", _POLICY_KEYS)
+    policy_severities_raw = _dict(
+        policy_raw["finding_severities"],
+        "$.request.policy.finding_severities",
+        tuple(policy_raw["finding_severities"].keys())
+        if type(policy_raw["finding_severities"]) is dict
+        else (),
+    )
+    policy_kwargs = dict(policy_raw)
+    policy_kwargs["finding_severities"] = _native_json(
+        policy_severities_raw,
+        "$.request.policy.finding_severities",
+    )
     policy = _construct(
         "$.request.policy",
         QualificationPolicy,
-        **policy_raw,
+        **policy_kwargs,
     )
     request = _construct(
         "$.request",
@@ -284,7 +302,10 @@ def deserialize_strategy_qualification_result(
             _fail(f"{path}.code", f"unsupported finding code {finding.code!r}")
         findings.append(finding)
 
-    normalized_findings = normalize_findings(findings)
+    try:
+        normalized_findings = normalize_findings(findings, request.policy)
+    except QualificationModelError as exc:
+        _fail("$.findings", str(exc))
     if tuple(findings) != normalized_findings:
         _fail("$.findings", "findings must be deduplicated and in canonical order")
 
@@ -317,6 +338,7 @@ def export_strategy_qualification_json(
             ensure_ascii=False,
             indent=2,
             allow_nan=False,
+            sort_keys=True,
         )
         + "\n"
     )
