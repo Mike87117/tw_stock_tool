@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 import shutil
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ import pandas as pd
 from tw_stock_tool.application.universe_qualification import (
     UniverseQualificationRequest,
     UniverseQualificationError,
+    CONCENTRATION_RULE,
     WindowEvidence,
     aggregate_universe_evidence,
     UniverseEvidenceSerializationError,
@@ -25,6 +27,14 @@ from tw_stock_tool.application.universe_qualification import (
 )
 from tw_stock_tool.application.workspace_execution import WorkspaceRunLifecycle
 from tw_stock_tool.qualification import load_strategy_qualification_json
+
+
+def _plain(value):
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_plain(item) for item in value]
+    return value
 
 
 def _frame(size=20, close=None):
@@ -272,6 +282,111 @@ class UniverseQualificationTests(unittest.TestCase):
             with patch.object(WorkspaceRunLifecycle, "publish", side_effect=RuntimeError("publish failed")), patch.object(Path, "unlink", side_effect=OSError("unlink failed")):
                 with self.assertRaisesRegex(UniverseQualificationError, "publication failed: publish failed; publication cleanup failed; possible orphaned paths"):
                     publish_universe_qualification(result, lifecycle)
+
+    def test_json_chronology_and_cross_window_overlap_are_rejected(self):
+        result = evaluate_universe_qualification(_request({"2330": _frame()}, _frame()))
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        first, second = payload["symbols"][0]["windows"][:2]
+        first["train_start"] = "2020-01-01"
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        first, second = payload["symbols"][0]["windows"][:2]
+        second["train_start"] = "2020-01-01T00:00:00Z"
+        second["train_end"] = "2020-01-13T00:00:00Z"
+        second["test_start"] = "2020-01-14T00:00:00Z"
+        second["test_end"] = "2020-01-18T00:00:00Z"
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+
+    def test_stress_costs_must_be_strictly_higher(self):
+        with self.assertRaises(ValueError):
+            _request({"2330": _frame()}, fee_rate=0.001, tax_rate=0.001, stress_fee_rate=0.001, stress_tax_rate=0.001)
+        with self.assertRaises(ValueError):
+            _request({"2330": _frame()}, fee_rate=0.001, tax_rate=0.001, stress_fee_rate=0.0005, stress_tax_rate=0.002)
+        request = _request({"2330": _frame()}, fee_rate=0.001, tax_rate=0.001, stress_fee_rate=0.001, stress_tax_rate=0.002)
+        self.assertEqual((request.resolved_stress_fee_rate, request.resolved_stress_tax_rate), (0.001, 0.002))
+
+    def test_invalid_price_rows_fail_closed_without_observations(self):
+        invalid = _frame()
+        invalid.iloc[10, invalid.columns.get_loc("Close")] = np.nan
+        result = evaluate_universe_qualification(_request({"2330": invalid}))
+        self.assertEqual(result.symbols[0].error_code, "symbol_evaluation_failed")
+        self.assertEqual(result.aggregate_metrics.oos_observations, 0)
+
+        invalid = _frame()
+        invalid["Open"] = invalid["Open"].astype(object)
+        invalid.iloc[10, invalid.columns.get_loc("Open")] = "not numeric"
+        result = evaluate_universe_qualification(_request({"2330": invalid}))
+        self.assertEqual(result.aggregate_metrics.oos_observations, 0)
+
+    def test_exact_types_and_invalid_window_neighborhood_are_rejected(self):
+        result = evaluate_universe_qualification(_request({"2330": _frame()}, _frame()))
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        symbol = payload["symbols"][0]
+        symbol["oos_observations"] = True
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        payload["symbols"][0]["total_return_pct"] = True
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(result)))
+        payload["resolved_configuration"]["parameter_stability_rule"]["minimum_neighbor_coverage"] = True
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+
+        def fail_second(frame, strategy, params, *args):
+            if len(frame) == 5 and frame.index[0].day == 16:
+                raise RuntimeError("typed failure")
+            return {"Total Return %": 1.0, "Sharpe Ratio": 1.0, "Trade Count": 1, "Max Drawdown %": 0.0}
+
+        with patch("tw_stock_tool.application.universe_qualification.run_strategy_backtest", side_effect=fail_second):
+            partial = evaluate_universe_qualification(_request({"2330": _frame()}))
+        payload = json.loads(export_universe_oos_evidence_json(build_universe_oos_evidence(partial)))
+        invalid = payload["symbols"][0]["windows"][1]
+        invalid["neighborhood_parameters"] = [{"long_window": 4, "short_window": 3}]
+        invalid["neighborhood_returns_pct"] = [None]
+        invalid["neighborhood_errors"] = ["should be empty"]
+        with self.assertRaises(UniverseEvidenceSerializationError):
+            deserialize_universe_oos_evidence(payload)
+
+    def test_resolved_configuration_round_trip_and_manifest_consistency(self):
+        source_ids = (str(uuid4()), str(uuid4()))
+        benchmark = _frame(close=np.arange(10.0, 30.0))
+        request = _request({"2330": _frame()}, benchmark, source_run_ids=source_ids, auto_adjust=True, fee_rate=0.001, tax_rate=0.001, stress_fee_rate=0.001, stress_tax_rate=0.002, stop_loss_pct=2.0, take_profit_pct=3.0, max_hold_days=4, position_size=0.5)
+        result = evaluate_universe_qualification(request)
+        artifact = build_universe_oos_evidence(result)
+        loaded = load_universe_oos_evidence_json(export_universe_oos_evidence_json(artifact))
+        self.assertEqual(loaded.resolved_configuration, artifact.resolved_configuration)
+        self.assertEqual(loaded.resolved_configuration.source_run_ids, request.source_run_ids)
+        self.assertEqual(loaded.qualification.request.strategy.parameters["resolved_configuration"], artifact.qualification.request.strategy.parameters["resolved_configuration"])
+        with tempfile.TemporaryDirectory() as root:
+            published = run_universe_qualification(request, workspace_root=root)
+        manifest_config = published.manifest.config.walk_forward
+        self.assertEqual(_plain(manifest_config), artifact.resolved_configuration.to_payload())
+        self.assertEqual(_plain(published.manifest.config.workflow_options["resolved_configuration"]), artifact.resolved_configuration.to_payload())
+        self.assertEqual(list(published.manifest.config.workflow_options["resolved_configuration"]["source_run_ids"]), list(request.source_run_ids))
+        self.assertEqual(dict(artifact.resolved_configuration.concentration_rule), dict(CONCENTRATION_RULE))
+
+    def test_concentration_uses_non_cancelling_window_basis(self):
+        def fake(frame, strategy, params, *args):
+            if len(frame) == 10:
+                value = 1.0
+            elif frame["Close"].iloc[0] > 50:
+                value = 1.0
+            elif frame.index[0].day == 11:
+                value = 10.0
+            elif frame.index[0].day == 16:
+                value = -10.0
+            else:
+                value = 1.0
+            return {"Total Return %": value, "Sharpe Ratio": value, "Trade Count": 1, "Max Drawdown %": 0.0}
+
+        with patch("tw_stock_tool.application.universe_qualification.run_strategy_backtest", side_effect=fake):
+            result = evaluate_universe_qualification(_request({"a": _frame(), "b": _frame(close=np.arange(101.0, 121.0))}, _frame()))
+        self.assertGreater(result.aggregate_metrics.symbol_concentration_pct, 80.0)
+        self.assertEqual(dict(result.qualification.request.strategy.parameters["resolved_configuration"]["concentration_rule"]), dict(CONCENTRATION_RULE))
 
     def test_request_snapshots_inputs_and_source_ids(self):
         frame = _frame()
