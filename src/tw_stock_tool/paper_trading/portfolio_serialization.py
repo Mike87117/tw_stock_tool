@@ -324,7 +324,7 @@ def serialize_simulated_portfolio_trading_result(
             audit_log.append(_serialize_trade_log_record(validated_record, i))
         except PaperTradingModelError:
             raise
-        except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+        except (AttributeError, TypeError, ValueError, OverflowError):
             raise PaperTradingModelError(f"audit_log[{i}] is invalid.") from None
 
     if _require_exact_int("order_count", result.order_count) != len(orders):

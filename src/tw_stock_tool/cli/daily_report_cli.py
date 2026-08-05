@@ -11,13 +11,17 @@ from tw_stock_tool.cli._research_run_cli import (
 )
 from tw_stock_tool.backtesting.parameter_sweep import SORTABLE_COLUMNS as PARAMETER_SWEEP_SORTABLE_COLUMNS
 from tw_stock_tool.backtesting.walk_forward import SORTABLE_COLUMNS as WALK_FORWARD_SORTABLE_COLUMNS
-from tw_stock_tool.reports.daily_pipeline import (
+# run_daily_research_pipeline, collect_stock_ids and export_daily_report_json_file
+# are the pre-application-service legacy path. They are no longer called here,
+# but test_daily_report_cli patches them on this module and asserts they stay
+# uncalled, which is what proves the CLI delegates to the application service.
+from tw_stock_tool.reports.daily_pipeline import (  # noqa: F401
     DailyPipelineConfig,
     run_daily_research_pipeline,
     validate_daily_pipeline_config,
 )
-from tw_stock_tool.reports.daily_report import DEFAULT_MIN_SCORE, DEFAULT_SIGNALS, DEFAULT_TOP, collect_stock_ids
-from tw_stock_tool.reports.daily_report_serialization_files import export_daily_report_json_file
+from tw_stock_tool.reports.daily_report import DEFAULT_MIN_SCORE, DEFAULT_SIGNALS, DEFAULT_TOP, collect_stock_ids  # noqa: F401
+from tw_stock_tool.reports.daily_report_serialization_files import export_daily_report_json_file  # noqa: F401
 from tw_stock_tool.utils.config import DEFAULT_AUTO_ADJUST, DEFAULT_INTERVAL, DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, TAX_RATE
 from pathlib import Path
 

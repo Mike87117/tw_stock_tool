@@ -41,6 +41,7 @@ from tw_stock_tool.qualification.serialization import (
 )
 
 __all__ = [
+    "DEFAULT_FINDING_SEVERITIES",
     "STRATEGY_QUALIFICATION_ARTIFACT_TYPE",
     "STRATEGY_QUALIFICATION_SCHEMA_VERSION",
     "SUPPORTED_FINDING_CODES",

@@ -1,6 +1,5 @@
 import argparse
 import sys
-from pathlib import Path
 
 from tw_stock_tool.paper_trading.models import PaperTradingModelError
 from tw_stock_tool.paper_trading.serialization_files import (

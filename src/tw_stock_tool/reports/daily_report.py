@@ -20,8 +20,7 @@ from tw_stock_tool.analysis.scanner import ScanConfig, load_stock_ids_from_file,
 from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
 from tw_stock_tool.analysis.stock_selection import apply_stock_selection
 from tw_stock_tool.reports.daily_report_markdown import (
-    DAILY_REPORT_SECTION_ORDER,
-    render_daily_report_markdown,
+    render_daily_report_markdown,  # noqa: F401  re-exported: callers use daily_report.render_daily_report_markdown
 )
 
 DEFAULT_SIGNALS = ("BUY", "WATCH")

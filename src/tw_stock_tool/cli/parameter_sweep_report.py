@@ -15,7 +15,7 @@ from tw_stock_tool.cli._report_cli_arguments import (
     add_stock_strategy_period_arguments,
     build_backtest_parameters,
 )
-from tw_stock_tool.utils.config import DEFAULT_PERIOD, INITIAL_CAPITAL, FEE_RATE, TAX_RATE
+from tw_stock_tool.utils.config import INITIAL_CAPITAL, FEE_RATE, TAX_RATE
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -41,14 +41,14 @@ def _preflight_output_path(path: str | Path) -> None:
         if p.is_dir():
             raise ValueError(f"Output path is a directory, not a file: {path}")
         try:
-            with open(p, "a", encoding="utf-8") as f:
+            with open(p, "a", encoding="utf-8"):
                 pass
         except Exception as exc:
             raise PermissionError(f"Cannot write to output path {path}: {exc}") from exc
     else:
         p.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with tempfile.NamedTemporaryFile(dir=p.parent, delete=True) as f:
+            with tempfile.NamedTemporaryFile(dir=p.parent, delete=True):
                 pass
         except Exception as exc:
             raise PermissionError(f"Cannot write to output path {path}: {exc}") from exc

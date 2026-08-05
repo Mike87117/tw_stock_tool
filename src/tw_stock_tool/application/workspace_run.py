@@ -282,7 +282,10 @@ def run_daily_workspace(
     market_data_loader: Callable[..., Any] | None = None,
 ) -> ResearchRunResult:
     _validate_workspace_common(request.output_dir, request.manifest_path)
-    markdown = _portable_requested_path("output-md", request.markdown_path, "daily_report.md")
+    # Daily always writes Markdown in both legacy and Workspace mode, so the
+    # return value is unused here; this call is only the conflict check that
+    # rejects an explicit external --output-md destination.
+    _portable_requested_path("output-md", request.markdown_path, "daily_report.md")
     json_path = _portable_requested_path("output-json", request.json_path, "daily_report.json")
     excel = request.config.output_excel
     if excel not in (None, "", "daily_report.xlsx", "artifacts/daily_report.xlsx"):
