@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass, field
-from typing import Any, Tuple, Union, Sequence, Literal
+from typing import Any, Tuple, Union, Literal
 
 class RiskModelError(Exception):
     """Custom exception for invalid risk model data."""

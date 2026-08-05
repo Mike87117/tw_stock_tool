@@ -7,10 +7,14 @@ from tw_stock_tool.application.workspace_run import run_backtest_workspace
 from tw_stock_tool.application.workspace_summary import workspace_run_paths
 from tw_stock_tool.application.symbol_resolution import resolve_symbol_request
 from tw_stock_tool.cli._research_run_cli import artifact_path
-from tw_stock_tool.analysis.analysis import analyze_stock
-from tw_stock_tool.backtesting.backtest import run_backtest as legacy_run_backtest
+# analyze_stock, legacy_run_backtest and the two exporters are the
+# pre-application-service legacy path. They are no longer called here, but
+# test_backtest_report_cli patches them on this module and asserts they stay
+# uncalled, which is what proves the CLI delegates to the application service.
+from tw_stock_tool.analysis.analysis import analyze_stock  # noqa: F401
+from tw_stock_tool.backtesting.backtest import run_backtest as legacy_run_backtest  # noqa: F401
 from tw_stock_tool.backtesting.strategies import STRATEGIES
-from tw_stock_tool.reports.backtest_report import (
+from tw_stock_tool.reports.backtest_report import (  # noqa: F401  legacy-delegation seam, see comment above
     export_backtest_report_markdown,
     export_backtest_report_excel,
 )

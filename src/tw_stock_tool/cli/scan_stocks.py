@@ -16,15 +16,17 @@ from tw_stock_tool.utils.config import (
     VALID_INTERVALS,
     VALID_PERIODS,
 )
-from tw_stock_tool.reports.report import ReportError, export_stock_ranking
+# export_stock_ranking and scan_stocks are the pre-application-service legacy
+# path. They are no longer called here, but the CLI exit-behavior tests patch
+# them on this module and assert they stay uncalled, which is what proves the
+# CLI delegates to the application service. Removing them removes that proof.
+from tw_stock_tool.reports.report import ReportError, export_stock_ranking  # noqa: F401
 from tw_stock_tool.analysis.scanner import (
     SUPPORTED_SORT_COLUMNS,
     ScanConfig,
-    load_stock_ids_from_file,
     normalize_stock_ids,
-    scan_stocks,
+    scan_stocks,  # noqa: F401  legacy-delegation seam, see comment above
 )
-from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
 
 
 def _ask_stock_ids() -> list[str]:

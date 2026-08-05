@@ -10,7 +10,7 @@ import argparse
 import importlib
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
 from tw_stock_tool.utils.config import CACHE_DIR, OUTPUT_DIR
 from tw_stock_tool.cli import price_data_smoke_check

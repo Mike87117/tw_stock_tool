@@ -216,8 +216,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "place orders, produce live signals, recommend stocks, or provide investment advice.",
     )
 
-    from tw_stock_tool.cli import simulated_portfolio_trading_cli
-
     _add_passthrough_parser(
         subparsers,
         "simulated-portfolio-trading",

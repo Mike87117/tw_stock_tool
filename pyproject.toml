@@ -22,9 +22,22 @@ dependencies = [
 [project.scripts]
 twstock = "tw_stock_tool.cli.twstock_cli:main"
 
+[project.optional-dependencies]
+lint = ["ruff>=0.16,<0.17"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["tw_stock_tool*"]
+
+[tool.ruff]
+line-length = 200
+target-version = "py311"
+
+[tool.ruff.lint]
+# F catches dead imports/variables and undefined names; E9 catches syntax and
+# IO errors. Style and modernization rules stay off: this gate exists to stop
+# residue from accumulating, not to reformat the existing codebase.
+select = ["F", "E9"]

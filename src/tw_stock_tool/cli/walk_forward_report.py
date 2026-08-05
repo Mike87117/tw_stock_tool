@@ -1,6 +1,5 @@
 import argparse
 from pathlib import Path
-import sys
 
 from tw_stock_tool.backtesting.walk_forward import run_walk_forward
 from tw_stock_tool.reports.walk_forward_report import (
@@ -15,7 +14,7 @@ from tw_stock_tool.cli._report_cli_arguments import (
     add_stock_strategy_period_arguments,
     build_backtest_parameters,
 )
-from tw_stock_tool.utils.config import DEFAULT_PERIOD, FEE_RATE, INITIAL_CAPITAL, TAX_RATE
+from tw_stock_tool.utils.config import FEE_RATE, INITIAL_CAPITAL, TAX_RATE
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Walk Forward Report CLI")

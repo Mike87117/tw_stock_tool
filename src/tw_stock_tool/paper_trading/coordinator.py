@@ -7,7 +7,6 @@ from tw_stock_tool.paper_trading.models import SimulatedOrder, SimulatedPortfoli
 from tw_stock_tool.paper_trading.runtime import SimulatedPaperTradingRuntimeState
 from tw_stock_tool.simulated_paper_trading_guard.adapter import SimulatedPaperTradingGuardDecision
 from tw_stock_tool.paper_trading.stepper import (
-    step_simulated_symbol_bar,
     process_simulated_pending_fill,
     build_simulated_symbol_candidate_order,
     evaluate_and_record_simulated_candidate,

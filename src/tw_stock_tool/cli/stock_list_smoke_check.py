@@ -8,7 +8,6 @@ stock-list sources still work in the current network environment.
 from __future__ import annotations
 
 import argparse
-import sys
 from typing import Any
 
 import pandas as pd
@@ -103,7 +102,7 @@ def main() -> int | None:
         print("=================================")
         print("Stock List Smoke Check")
         print("=================================")
-        print(f"Status: FAIL")
+        print("Status: FAIL")
         print(f"Error: {exc}")
         return 1
 

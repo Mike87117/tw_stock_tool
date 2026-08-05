@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 import importlib.metadata
@@ -10,7 +10,7 @@ import math
 import os
 from pathlib import Path
 import re
-from typing import Any, TypeAlias
+from typing import TypeAlias
 from uuid import uuid4
 
 import pandas as pd
