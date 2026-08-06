@@ -1,6 +1,7 @@
 import argparse
 import ast
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
+import json
 from io import StringIO
 import importlib
 import inspect
@@ -151,69 +152,171 @@ def _run_subprocess(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _package_harness(spec: dict[str, object], success: bool) -> str:
-    module = spec["module"]
-    args = spec["args"].__dict__
-    boundary = spec["boundary"]
-    exports = spec["exports"]
-    if spec["name"] == "ai_stock_scanner" and success:
-        setup = (
-            "module.collect_stock_ids = lambda *args, **kwargs: ['2330']\n"
-            "module.scan_ai_stocks = lambda *args, **kwargs: module.pd.DataFrame({'Stock': ['2330']})"
-        )
-    elif success:
-        setup = f"module.{boundary} = lambda *args, **kwargs: module.pd.DataFrame({{'Value': [1]}})"
-        if spec["name"] == "ai_prediction_report":
-            setup = (
-                "module.run_ai_prediction_report = lambda *args, **kwargs: "
-                "{'Summary': module.pd.DataFrame({'Stock': ['2330']}), 'Detail': module.pd.DataFrame({'Window': [1]})}"
-            )
-    else:
-        setup = (
-            "def controlled_failure(*args, **kwargs):\n"
-            "    raise RuntimeError('offline controlled failure')\n"
-            f"module.{boundary} = controlled_failure"
-        )
-    export_setup = "\n".join(
-        f"module.{name} = lambda *args, **kwargs: None" for name in exports
-    )
-    return (
-        "import argparse\n"
-        "import importlib\n"
-        f"module = importlib.import_module({module.__name__!r})\n"
-        f"module._parse_args = lambda: argparse.Namespace(**{args!r})\n"
-        f"{setup}\n"
-        f"{export_setup}\n"
-        "raise SystemExit(module.main())\n"
-    )
+def _package_probe_harness() -> str:
+    cases = [
+        {
+            "key": f"{spec['name']}-{'success' if success else 'failure'}",
+            "name": spec["name"],
+            "module": spec["module"].__name__,
+            "args": spec["args"].__dict__,
+            "boundary": spec["boundary"],
+            "exports": spec["exports"],
+            "success": success,
+        }
+        for spec in DIRECT_CASES
+        for success in (True, False)
+    ]
+    return f"""
+import argparse
+import importlib
+import json
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from io import StringIO
+from unittest.mock import patch
 
+import pandas as pd
 
-def _unified_harness(route: str, target: object, args: list[str], boundary: str, success: bool) -> str:
-    if success:
-        if route == "ai-scan":
-            setup = (
-                "target.collect_stock_ids = lambda *args, **kwargs: ['2330']\n"
-                "target.scan_ai_stocks = lambda *args, **kwargs: target.pd.DataFrame({'Stock': ['2330']})\n"
-                "target.export_ai_stock_ranking = lambda *args, **kwargs: None"
-            )
+cases = {cases!r}
+results = []
+for case in cases:
+    module = importlib.import_module(case["module"])
+    output = StringIO()
+    errors = StringIO()
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(module, "_parse_args", return_value=argparse.Namespace(**case["args"])))
+        if case["success"]:
+            if case["name"] == "ai_stock_scanner":
+                stack.enter_context(patch.object(module, "collect_stock_ids", return_value=["2330"]))
+                stack.enter_context(patch.object(module, "scan_ai_stocks", return_value=pd.DataFrame({{"Stock": ["2330"]}})))
+            elif case["name"] == "ai_prediction_report":
+                stack.enter_context(patch.object(
+                    module, case["boundary"], return_value={{
+                        "Summary": pd.DataFrame({{"Stock": ["2330"]}}),
+                        "Detail": pd.DataFrame({{"Window": [1]}}),
+                    }}
+                ))
+            else:
+                stack.enter_context(patch.object(module, case["boundary"], return_value=pd.DataFrame({{"Value": [1]}})))
         else:
-            setup = (
-                "target.compare_strategies = lambda *args, **kwargs: "
-                "target.pd.DataFrame({'Strategy': ['ma_cross']})"
-            )
-    else:
-        setup = (
-            "def controlled_failure(*args, **kwargs):\n"
-            "    raise RuntimeError('offline controlled failure')\n"
-            f"target.{boundary} = controlled_failure"
-        )
-    return (
-        "import importlib\n"
-        "from tw_stock_tool.cli import twstock_cli\n"
-        f"target = importlib.import_module({target.__name__!r})\n"
-        f"{setup}\n"
-        f"raise SystemExit(twstock_cli.main({args!r}))\n"
-    )
+            def controlled_failure(*args, **kwargs):
+                raise RuntimeError("offline controlled failure")
+            stack.enter_context(patch.object(module, case["boundary"], side_effect=controlled_failure))
+        for export in case["exports"]:
+            stack.enter_context(patch.object(module, export, return_value=None))
+        with redirect_stdout(output), redirect_stderr(errors):
+            result = module.main()
+    results.append({{
+        "key": case["key"],
+        "returncode": 0 if result is None else result,
+        "stdout": output.getvalue(),
+        "stderr": errors.getvalue(),
+    }})
+print(json.dumps(results))
+"""
+
+
+def _unified_probe_harness() -> str:
+    cases = [
+        {
+            "key": "strategy-compare-success",
+            "route": "strategy-compare",
+            "module": strategy_compare.__name__,
+            "argv": ["strategy-compare", "--stock", "2330"],
+            "boundary": "compare_strategies",
+            "success": True,
+        },
+        {
+            "key": "strategy-compare-failure",
+            "route": "strategy-compare",
+            "module": strategy_compare.__name__,
+            "argv": ["strategy-compare", "--stock", "2330"],
+            "boundary": "compare_strategies",
+            "success": False,
+        },
+        {
+            "key": "ai-scan-success",
+            "route": "ai-scan",
+            "module": ai_stock_scanner.__name__,
+            "argv": ["ai-scan", "--stocks", "2330"],
+            "boundary": "collect_stock_ids",
+            "success": True,
+        },
+        {
+            "key": "ai-scan-failure",
+            "route": "ai-scan",
+            "module": ai_stock_scanner.__name__,
+            "argv": ["ai-scan", "--stocks", "2330"],
+            "boundary": "collect_stock_ids",
+            "success": False,
+        },
+        {
+            "key": "strategy-compare-parser-failure",
+            "argv": ["strategy-compare"],
+            "success": None,
+        },
+        {
+            "key": "ai-scan-parser-failure",
+            "argv": ["ai-scan", "--horizon", "bad"],
+            "success": None,
+        },
+    ]
+    return f"""
+import importlib
+import json
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from io import StringIO
+from unittest.mock import patch
+
+import pandas as pd
+from tw_stock_tool.cli import twstock_cli
+
+cases = {cases!r}
+results = []
+for case in cases:
+    output = StringIO()
+    errors = StringIO()
+    with redirect_stdout(output), redirect_stderr(errors):
+        if case["success"] is None:
+            try:
+                status = twstock_cli.main(case["argv"])
+            except SystemExit as exc:
+                status = exc.code
+        else:
+            target = importlib.import_module(case["module"])
+            with ExitStack() as stack:
+                if case["success"]:
+                    if case["route"] == "ai-scan":
+                        stack.enter_context(patch.object(target, "collect_stock_ids", return_value=["2330"]))
+                        stack.enter_context(patch.object(target, "scan_ai_stocks", return_value=pd.DataFrame({{"Stock": ["2330"]}})))
+                        stack.enter_context(patch.object(target, "export_ai_stock_ranking", return_value=None))
+                    else:
+                        stack.enter_context(patch.object(target, "compare_strategies", return_value=pd.DataFrame({{"Strategy": ["ma_cross"]}})))
+                else:
+                    def controlled_failure(*args, **kwargs):
+                        raise RuntimeError("offline controlled failure")
+                    stack.enter_context(patch.object(
+                        target,
+                        "collect_stock_ids" if case["route"] == "ai-scan" else "compare_strategies",
+                        side_effect=controlled_failure,
+                    ))
+                try:
+                    status = twstock_cli.main(case["argv"])
+                except SystemExit as exc:
+                    status = exc.code
+    results.append({{
+        "key": case["key"],
+        "returncode": 0 if status is None else status,
+        "stdout": output.getvalue(),
+        "stderr": errors.getvalue(),
+    }})
+print(json.dumps(results))
+"""
+
+
+def _probe_results(completed: subprocess.CompletedProcess[str]) -> dict[str, dict[str, object]]:
+    if completed.returncode != 0:
+        raise AssertionError(completed.stdout + completed.stderr)
+    return {result["key"]: result for result in json.loads(completed.stdout)}
 
 
 class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
@@ -300,14 +403,18 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
                 self.assertEqual(statement.exc.args[0].func.id, "main")
 
     def test_package_process_success_and_failure_statuses_are_offline(self) -> None:
+        results = _probe_results(_run_subprocess("-c", _package_probe_harness()))
+        self.assertEqual(len(results), len(DIRECT_CASES) * 2)
         for spec in DIRECT_CASES:
             for success, expected in ((True, 0), (False, 1)):
+                key = f"{spec['name']}-{'success' if success else 'failure'}"
                 with self.subTest(target=spec["name"], success=success):
-                    completed = _run_subprocess("-c", _package_harness(spec, success))
-                    self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
+                    result = results[key]
+                    self.assertEqual(result["returncode"], expected, result["stdout"] + result["stderr"])
                     if not success:
                         prefix = "Unexpected error:" if spec["name"] == "strategy_compare" else spec["error"]
-                        self.assertIn(prefix, completed.stdout)
+                        self.assertIn(prefix, result["stdout"])
+                    self.assertNotIn("Network", result["stdout"] + result["stderr"])
 
     def test_package_process_help_and_missing_argument_statuses(self) -> None:
         for spec in DIRECT_CASES:
@@ -354,18 +461,21 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
             self.assertEqual(sys.argv, original)
 
     def test_unified_process_statuses_are_offline(self) -> None:
-        cases = (
-            ("strategy-compare", strategy_compare, ["strategy-compare", "--stock", "2330"], "compare_strategies"),
-            ("ai-scan", ai_stock_scanner, ["ai-scan", "--stocks", "2330"], "collect_stock_ids"),
-        )
-        for route, module, argv, boundary in cases:
-            for success, expected in ((True, 0), (False, 1)):
-                with self.subTest(route=route, success=success):
-                    completed = _run_subprocess("-c", _unified_harness(route, module, argv, boundary, success))
-                    self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
-            parser_args = ["strategy-compare"] if route == "strategy-compare" else ["ai-scan", "--horizon", "bad"]
-            completed = _run_subprocess("-c", f"from tw_stock_tool.cli import twstock_cli; raise SystemExit(twstock_cli.main({parser_args!r}))")
-            self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
+        results = _probe_results(_run_subprocess("-c", _unified_probe_harness()))
+        expected_statuses = {
+            "strategy-compare-success": 0,
+            "strategy-compare-failure": 1,
+            "ai-scan-success": 0,
+            "ai-scan-failure": 1,
+            "strategy-compare-parser-failure": 2,
+            "ai-scan-parser-failure": 2,
+        }
+        self.assertEqual(set(results), set(expected_statuses))
+        for key, expected in expected_statuses.items():
+            with self.subTest(case=key):
+                result = results[key]
+                self.assertEqual(result["returncode"], expected, result["stdout"] + result["stderr"])
+                self.assertNotIn("Network", result["stdout"] + result["stderr"])
 
 
     def test_batch_b_target_inventory_is_exact_and_excludes_other_batches(self) -> None:
