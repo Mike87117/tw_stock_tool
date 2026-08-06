@@ -59,7 +59,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run unittest
-        run: python -m unittest --durations 30 discover -s tests
+        run: python -m unittest discover -s tests --durations 30
 
   python-311-compatibility:
     if: github.event_name == 'push'
