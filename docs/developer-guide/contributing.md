@@ -37,7 +37,7 @@ Windows 開發者可使用 `scripts/test_local_safe.ps1` 以 Python 3.12 執行�
 
 這五個環境變數只在安全測試腳本執行期間暫時覆寫。腳本會保存呼叫者目前 PowerShell process 中每個變數原本是否存在及其值，並在成功、測試失敗或啟動錯誤等所有結束路徑恢復原狀；原本不存在的變數會被移除。因此執行安全測試後，同一個 PowerShell session 中後續 Python 工作不會被意外限制為單執行緒，也不會被持續強制使用 `MPLBACKEND=Agg`。
 
-本機安全模式與 CI 的責任不同：本機腳本只降低開發者電腦的資源優先權與數值運算執行緒數，不跳過、分片或平行化測試。GitHub Actions 仍以正常 runner 執行既有完整 Python 3.11／3.12 unittest、package smoke 與 CLI smoke；完整 Python 3.11 compatibility 與 package smoke 主要由 CI 負責。
+本機安全模式與 CI 的責任不同：本機腳本只降低開發者電腦的資源優先權與數值運算執行緒數，不跳過、分片或平行化測試。Pull Request 的 GitHub Actions 會執行 Python 3.12 完整 unittest 與 Python 3.12 package/CLI smoke；變更合併到 `main` 後，CI 會額外執行 Python 3.11 compatibility suite。完整跨版本驗證與 package smoke 主要由 CI 負責。
 
 ## 相容性注意事項
 
