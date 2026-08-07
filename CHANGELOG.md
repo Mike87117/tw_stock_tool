@@ -25,9 +25,10 @@
 
 - `scikit-learn` and `mplfinance` are now imported when first used rather than at
   module scope. Both sat on the unified CLI's import path but are only reachable
-  from the ML and chart routes, so every `twstock ...` invocation paid ~1.5s to
-  build machinery it never touched. CLI startup drops from ~2.6s to ~1.0s. Public
-  behavior, command routes, and output are unchanged.
+  from the ML and chart routes, so unrelated `twstock ...` invocations no longer
+  pay to initialize model and plotting machinery they never touch. In measured
+  clean-interpreter probes this roughly halves CLI startup time. Public behavior,
+  command routes, and output are unchanged.
 
 ### Notes
 
