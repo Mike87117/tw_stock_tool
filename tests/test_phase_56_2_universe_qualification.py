@@ -156,7 +156,7 @@ class UniverseQualificationTests(unittest.TestCase):
                 return {"Total Return %": 1.0, "Sharpe Ratio": 1.0, "Trade Count": 1, "Max Drawdown %": 0.0}
             with patch("tw_stock_tool.application.universe_qualification.run_strategy_backtest", side_effect=fail_tests):
                 partial_window = run_universe_qualification(_request({"good": _frame()}), workspace_root=root)
-            self.assertEqual((partial_window.manifest.status, partial_window.manifest.success_count, partial_window.manifest.failure_count, partial_window.manifest.partial_count), ("partial", 0, 0, 1))
+            self.assertEqual((partial_window.manifest.status, partial_window.manifest.success_count, partial_window.manifest.failure_count, partial_window.manifest.partial_count), ("failure", 0, 1, 0))
             self.assertTrue(any("window=2:window_evaluation_failed:test failure" in error for error in partial_window.manifest.errors))
 
     def test_publication_rolls_back_on_reference_and_manifest_failure(self):

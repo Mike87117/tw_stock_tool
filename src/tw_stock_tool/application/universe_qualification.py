@@ -1229,8 +1229,9 @@ def _manifest_outcome(symbols: tuple[SymbolEvidence, ...]) -> tuple[str, int, in
     complete_symbols = tuple(item for item in symbols if item.evaluated and not any(not window.valid for window in item.windows))
     errors = tuple(f"{window.symbol}:window={window.window}:{window.error_code}:{window.error}" for window in failed_windows)
     errors += tuple(f"{item.symbol}:symbol:{item.error_code}:{item.error}" for item in failed_symbols if not item.windows)
-    if not complete_symbols and failed_symbols:
-        return "failure", 0, len(failed_symbols), 0, errors
+    if not complete_symbols:
+        failed_count = len({item.symbol for item in failed_symbols} | {window.symbol for window in failed_windows})
+        return "failure", 0, failed_count, 0, errors
     if failed_symbols or failed_windows:
         return "partial", len(complete_symbols), len(failed_symbols), len(failed_windows), errors
     return "success", len(symbols), 0, 0, errors
