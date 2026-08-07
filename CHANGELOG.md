@@ -21,6 +21,15 @@
 - Deterministic same-timestamp symbol ordering.
 - Installed-package smoke coverage for newly supported CLI commands.
 
+### Performance
+
+- `scikit-learn` and `mplfinance` are now imported when first used rather than at
+  module scope. Both sat on the unified CLI's import path but are only reachable
+  from the ML and chart routes, so unrelated `twstock ...` invocations no longer
+  pay to initialize model and plotting machinery they never touch. In measured
+  clean-interpreter probes this roughly halves CLI startup time. Public behavior,
+  command routes, and output are unchanged.
+
 ### Notes
 
 `tw_stock_tool` remains for historical research only. It has no broker integration, does not place real orders, does not provide investment advice, and provides no guarantee of returns or risk prevention.

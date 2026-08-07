@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
@@ -11,6 +10,12 @@ def plot_stock_chart(
     symbol: str,
     save_path: Path | None = None,
 ) -> None:
+    # Imported here rather than at module scope: mplfinance pulls in matplotlib
+    # (~0.35s), and this module sits on the unified CLI's import path, so a
+    # top-level import made every `twstock ...` invocation pay for it even
+    # though only chart rendering reaches this function.
+    import mplfinance as mpf
+
     plot_df = df.copy().dropna(subset=["Open", "High", "Low", "Close"])
 
     buy_y = np.where(plot_df["Signal"] == "BUY", plot_df["Low"] * 0.98, np.nan)
