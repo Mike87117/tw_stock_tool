@@ -35,7 +35,13 @@ if found:
     print("unexpectedly imported: " + ", ".join(found))
     raise SystemExit(1)
 """
-    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
 
 
 class CliStartupDependencyBoundaryTest(unittest.TestCase):
