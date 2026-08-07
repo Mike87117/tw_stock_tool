@@ -226,9 +226,7 @@ class DataSourceRecord:
             raise ResearchRunModelError(f"cache_state must be 'not_applicable', 'fresh', or 'stale', got {cache_state!r}")
 
         if source_kind == "live" and cache_state != "not_applicable":
-            raise ResearchRunModelError(
-                "cache_state must be 'not_applicable' when source_kind is 'live'"
-            )
+            raise ResearchRunModelError("cache_state must be 'not_applicable' when source_kind is 'live'")
         if source_kind == "cache" and cache_state not in ("fresh", "stale"):
             raise ResearchRunModelError("cache_state must be 'fresh' or 'stale' when source_kind is 'cache'")
 

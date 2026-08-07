@@ -6,9 +6,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
+import importlib.metadata
 import json
 import math
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Any
 from uuid import UUID
@@ -153,6 +155,29 @@ class UniverseEvidenceSerializationError(ValueError):
 
 class UniverseQualificationError(RuntimeError):
     """Raised when a universe qualification cannot be evaluated or published."""
+
+
+def _source_tree_tool_version() -> str:
+    pyproject = Path(__file__).resolve().parents[2].parent / "pyproject.toml"
+    try:
+        text = pyproject.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise UniverseQualificationError("Unable to determine tw-stock-tool package version") from exc
+    match = re.search(r'(?ms)^\[project\].*?^version\s*=\s*["\']([^"\']+)["\']', text)
+    if match is None or not match.group(1).strip():
+        raise UniverseQualificationError("Unable to determine tw-stock-tool package version")
+    return match.group(1)
+
+
+def _tool_version() -> str:
+    try:
+        return importlib.metadata.version("tw-stock-tool")
+    except importlib.metadata.PackageNotFoundError:
+        return _source_tree_tool_version()
+
+
+def _error_message(exc: Exception) -> str:
+    return str(exc).strip() or type(exc).__name__
 
 
 @dataclass(frozen=True, slots=True)
@@ -491,7 +516,7 @@ class UniverseQualificationRequest:
         elif isinstance(benchmark, Mapping):
             benchmark_snapshot = {}
             for symbol, frame in benchmark.items():
-                if type(symbol) is not str or not symbol or not isinstance(frame, pd.DataFrame):
+                if type(symbol) is not str or not symbol or symbol.strip() != symbol or not isinstance(frame, pd.DataFrame):
                     raise ValueError("benchmark_data mapping must contain clean strings and DataFrames")
                 benchmark_snapshot[symbol] = frame.copy(deep=True)
             object.__setattr__(self, "benchmark_data", MappingProxyType(dict(sorted(benchmark_snapshot.items()))))
@@ -983,7 +1008,7 @@ def _window_evidence(request: UniverseQualificationRequest, symbol: str, number:
         return WindowEvidence(
             symbol=symbol, window=number, train_start=starts[0], train_end=starts[1], test_start=starts[2], test_end=starts[3], strategy=request.strategy, parameters=None,
             train_return_pct=None, test_return_pct=None, benchmark_return_pct=None, stressed_return_pct=None, completed_trades=0, oos_observations=0, max_drawdown_pct=None,
-            valid=False, error_code="window_evaluation_failed", error=str(exc),
+            valid=False, error_code="window_evaluation_failed", error=_error_message(exc),
         )
 
 
@@ -993,7 +1018,7 @@ def _symbol_evidence(request: UniverseQualificationRequest, symbol: str, frame: 
         windows = split_windows(clean, request.train_days, request.test_days, request.step_days)
         _validate_windows(symbol, windows)
     except Exception as exc:
-        return SymbolEvidence(symbol, (), 0, 0, 0, 0.0, False, "symbol_evaluation_failed", str(exc), False)
+        return SymbolEvidence(symbol, (), 0, 0, 0, 0.0, False, "symbol_evaluation_failed", _error_message(exc), False)
     benchmark = _benchmark_frame(request.benchmark_data, symbol)
     details = tuple(_window_evidence(request, symbol, number, train, test, benchmark) for number, train, test in windows)
     values = _canonical_symbol_values(details)
@@ -1289,7 +1314,7 @@ def publish_universe_qualification(result: UniverseQualificationResult, lifecycl
         )
         status, success_count, failure_count, partial_count, errors = _manifest_outcome(result.symbols)
         manifest = RunManifest(
-            RUN_MANIFEST_SCHEMA_VERSION, lifecycle.run_id, lifecycle.created_at, "0.4.0", status, lifecycle.normalize_config(config), (), success_count, failure_count, partial_count, refs, errors,
+            RUN_MANIFEST_SCHEMA_VERSION, lifecycle.run_id, lifecycle.created_at, _tool_version(), status, lifecycle.normalize_config(config), (), success_count, failure_count, partial_count, refs, errors,
             ("caller-provided in-memory input; data-source provenance was not supplied", "partial symbol/window failures are retained as typed evidence") if status == "partial" else ("caller-provided in-memory input; data-source provenance was not supplied",),
         )
         lifecycle.publish(manifest)

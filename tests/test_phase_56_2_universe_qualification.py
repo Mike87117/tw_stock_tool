@@ -1,4 +1,5 @@
 import json
+import importlib.metadata
 from collections.abc import Mapping
 import shutil
 import tempfile
@@ -158,6 +159,43 @@ class UniverseQualificationTests(unittest.TestCase):
                 partial_window = run_universe_qualification(_request({"good": _frame()}), workspace_root=root)
             self.assertEqual((partial_window.manifest.status, partial_window.manifest.success_count, partial_window.manifest.failure_count, partial_window.manifest.partial_count), ("failure", 0, 1, 0))
             self.assertTrue(any("window=2:window_evaluation_failed:test failure" in error for error in partial_window.manifest.errors))
+
+    def test_manifest_tool_version_uses_metadata_then_source_fallback(self):
+        result = evaluate_universe_qualification(_request({"2330": _frame()}))
+        with tempfile.TemporaryDirectory() as root:
+            with patch("tw_stock_tool.application.universe_qualification.importlib.metadata.version", return_value="9.9.9"):
+                metadata_manifest = publish_universe_qualification(result, WorkspaceRunLifecycle.begin(root, "universe-oos-evaluation")).manifest
+            with patch("tw_stock_tool.application.universe_qualification.importlib.metadata.version", side_effect=importlib.metadata.PackageNotFoundError), patch("tw_stock_tool.application.universe_qualification._source_tree_tool_version", return_value="8.8.8"):
+                fallback_manifest = publish_universe_qualification(result, WorkspaceRunLifecycle.begin(root, "universe-oos-evaluation")).manifest
+        self.assertEqual(metadata_manifest.tool_version, "9.9.9")
+        self.assertEqual(fallback_manifest.tool_version, "8.8.8")
+
+    def test_blank_exception_messages_remain_typed_failures(self):
+        def blank_test_failure(frame, strategy, params, *args):
+            if len(frame) == 5:
+                raise RuntimeError()
+            return {"Total Return %": 1.0, "Sharpe Ratio": 1.0, "Trade Count": 1, "Max Drawdown %": 0.0}
+
+        with patch("tw_stock_tool.application.universe_qualification.run_strategy_backtest", side_effect=blank_test_failure):
+            result = evaluate_universe_qualification(_request({"2330": _frame()}))
+        window = result.symbols[0].windows[0]
+        self.assertFalse(window.valid)
+        self.assertEqual(window.error_code, "window_evaluation_failed")
+        self.assertEqual(window.error, "RuntimeError")
+        self.assertEqual(result.decision, "REJECTED")
+        with patch("tw_stock_tool.application.universe_qualification._clean_frame", side_effect=RuntimeError()):
+            symbol_result = evaluate_universe_qualification(_request({"2330": _frame()}))
+        self.assertEqual(symbol_result.symbols[0].error_code, "symbol_evaluation_failed")
+        self.assertEqual(symbol_result.symbols[0].error, "RuntimeError")
+
+    def test_benchmark_mapping_keys_are_clean_at_request_boundary(self):
+        for key in ("", "   ", " 2330", "2330 ", 2330):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                _request({"2330": _frame()}, {key: _frame()})
+        for key in ("2330", "__benchmark__"):
+            with self.subTest(key=key):
+                result = evaluate_universe_qualification(_request({"2330": _frame()}, {key: _frame()}))
+            self.assertTrue(result.symbols[0].windows[0].benchmark_available)
 
     def test_publication_rolls_back_on_reference_and_manifest_failure(self):
         with tempfile.TemporaryDirectory() as root:
