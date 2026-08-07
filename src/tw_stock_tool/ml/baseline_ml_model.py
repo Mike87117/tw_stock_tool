@@ -10,8 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 from tw_stock_tool.ml.ai_walk_forward import ml_feature_columns, split_time_windows
 from tw_stock_tool.utils.config import DEFAULT_PERIOD
@@ -94,6 +92,13 @@ def _evaluate_window(
 ) -> dict[str, Any]:
     if train.index[-1] >= test.index[0]:
         raise ValueError("train data must end before test data starts.")
+
+    # Imported here rather than at module scope: sklearn costs ~1.1s to import,
+    # and this module sits on the unified CLI's import path, so a top-level
+    # import made every `twstock ...` invocation pay for it even though only
+    # the ML routes reach this function.
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
     x_train = train[feature_columns]
     y_train = train[target_column].astype(bool)
