@@ -337,6 +337,11 @@ class StrategyBoundRecommendationEvidence:
             raise StrategyBoundRecommendationError(
                 f"schema-1.0 recommendation invariants failed: {exc}"
             ) from exc
+        object.__setattr__(
+            self,
+            "strategy_parameters",
+            self.qualification.request.strategy.parameters,
+        )
 
         provenance = self.signal_snapshot.provenance
         qualified_strategy, selection, train_days, grid = (
