@@ -35,6 +35,12 @@ from tw_stock_tool.recommendation.strategy_bound import (
     load_strategy_bound_recommendation_evidence_json,
     serialize_strategy_bound_recommendation_evidence,
 )
+from tw_stock_tool.recommendation.artifacts import (
+    RecommendationArtifact,
+    RecommendationArtifactSerializationError,
+    export_recommendation_artifact_json,
+    load_recommendation_artifact_json,
+)
 
 __all__ = [
     "RECOMMENDATION_EVIDENCE_ARTIFACT_TYPE",
@@ -44,6 +50,8 @@ __all__ = [
     "CurrentSignal",
     "CurrentSignalSnapshot",
     "RecommendationAction",
+    "RecommendationArtifact",
+    "RecommendationArtifactSerializationError",
     "RecommendationEvidence",
     "RecommendationModelError",
     "RecommendationSerializationError",
@@ -58,8 +66,10 @@ __all__ = [
     "derive_recommendation_action",
     "deserialize_recommendation_evidence",
     "deserialize_strategy_bound_recommendation_evidence",
+    "export_recommendation_artifact_json",
     "export_recommendation_evidence_json",
     "export_strategy_bound_recommendation_evidence_json",
+    "load_recommendation_artifact_json",
     "load_recommendation_evidence_json",
     "load_strategy_bound_recommendation_evidence_json",
     "serialize_recommendation_evidence",
