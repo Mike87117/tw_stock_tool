@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Fixed
+
+- `twstock doctor` no longer fails. It required eight root wrapper scripts that
+  Cleanup 4A/4B intentionally removed, and resolved them (and `requirements.txt`)
+  from `src/tw_stock_tool/utils/` instead of the repository root, so every run
+  reported 9 FAIL and exited 1. The obsolete inventory is gone; repository-only
+  checks now resolve from a detected source checkout and are skipped rather than
+  failed when running from an installed distribution. A new `Package version`
+  check reports the resolved `tw-stock-tool` version in either context.
+- `twstock <command> --help` now shows the command's real options. 19 of 23
+  passthrough subcommands - including `analyze`, `parameter-sweep`,
+  `walk-forward`, `ai-report`, `stock-list update` and `stock-list smoke-check` -
+  let the wrapper's argparse layer answer `--help` first and printed an
+  option-less stub. Help is now delegated to the underlying CLI by default;
+  `stock-list` and `gui` keep wrapper-owned help because they have no underlying
+  parser. Research-only scope wording is unchanged: every underlying parser
+  already carried it. Command arguments, exit codes and dispatch are unchanged.
+
 ### Added
 
 - Multi-symbol historical simulated portfolio trading.
@@ -20,6 +38,18 @@
 - Pending BUY exposure reservation.
 - Deterministic same-timestamp symbol ordering.
 - Installed-package smoke coverage for newly supported CLI commands.
+- Package smoke now runs from a temporary directory outside the repository with
+  the checkout stripped from the import path, and asserts that the imported
+  module resolves to the installed distribution. Running it from the checkout
+  could resolve the repository-root compatibility shim instead, so it could not
+  demonstrate that the installed wheel worked.
+- Package smoke asserts a command-specific option in every
+  `twstock <command> --help` rather than only a successful exit status, which
+  the previous option-less wrapper help also satisfied.
+- The shared subprocess test helper decodes child output as strict UTF-8 and
+  pins `PYTHONIOENCODING=utf-8` in the child environment. It previously relied
+  on the host ANSI code page, so Chinese CLI output was corrupted or failed to
+  decode on Windows while Ubuntu CI stayed green.
 
 ### Performance
 

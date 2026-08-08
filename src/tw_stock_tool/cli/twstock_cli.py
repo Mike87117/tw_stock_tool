@@ -2,6 +2,19 @@
 
 This module routes subcommands to the existing CLI modules without changing
 those modules' original command-line behavior.
+
+Help ownership contract
+-----------------------
+A passthrough command delegates every argument to an underlying CLI, so it
+must delegate ``--help`` too: registering ``-h/--help`` on the wrapper parser
+would make argparse answer first and print an option-less stub instead of the
+real command's options. ``_add_passthrough_parser`` therefore builds parsers
+with ``add_help=False`` and lets ``parse_known_args`` forward the flag.
+
+Only routes the wrapper genuinely implements own their help:
+
+* ``stock-list`` - a grouping node with no underlying CLI of its own.
+* ``gui``        - accepts no arguments and must not import Tk to print help.
 """
 
 from __future__ import annotations
@@ -75,8 +88,18 @@ def _run_stock_list_smoke_check(args: list[str]) -> int:
     return _dispatch_existing_main(stock_list_smoke_check.main, "stock_list_smoke_check.py", args)
 
 
-def _add_passthrough_parser(subparsers, name, module_main, program_name, help_text, description=None, forward_help=False) -> None:
-    parser_kwargs = {"help": help_text, "add_help": not forward_help}
+def _add_passthrough_parser(subparsers, name, module_main, program_name, help_text, description=None) -> None:
+    """Register one passthrough route whose --help is owned by the underlying CLI.
+
+    ``add_help=False`` is the whole point: the wrapper must not intercept
+    ``-h/--help``, so ``parse_known_args`` forwards it to ``module_main``.
+
+    ``description`` is consequently no longer rendered by argparse -- the
+    underlying parser prints its own, which carries the same research-only
+    wording. It is kept as the registration-site record of each route's scope
+    and stays pinned by the passthrough characterization test.
+    """
+    parser_kwargs = {"help": help_text, "add_help": False}
     if description is not None:
         parser_kwargs["description"] = description
     parser = subparsers.add_parser(name, **parser_kwargs)
@@ -90,12 +113,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_passthrough_parser(subparsers, "doctor", doctor.main, "doctor.py", "Check local environment")
 
     _add_passthrough_parser(
-        subparsers, "run", workspace_run_cli.main, "twstock run", "Inspect existing Workspace runs offline", forward_help=True
+        subparsers, "run", workspace_run_cli.main, "twstock run", "Inspect existing Workspace runs offline"
     )
 
-    _add_passthrough_parser(subparsers, "scan", scan_stocks.main, "scan_stocks.py", "Run multi-stock technical scanner", forward_help=True)
+    _add_passthrough_parser(subparsers, "scan", scan_stocks.main, "scan_stocks.py", "Run multi-stock technical scanner")
 
-    _add_passthrough_parser(subparsers, "daily", daily_report_cli.main, "daily_report_cli.py", "Run daily candidate report", forward_help=True)
+    _add_passthrough_parser(subparsers, "daily", daily_report_cli.main, "daily_report_cli.py", "Run daily candidate report")
 
     _add_passthrough_parser(
         subparsers,
@@ -111,13 +134,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
 
+    # Wrapper-owned help: "stock-list" is a grouping node with no underlying CLI.
     stock_list_parser = subparsers.add_parser("stock-list", help="Stock-list utilities")
     stock_list_subparsers = stock_list_parser.add_subparsers(dest="stock_list_command", required=True)
 
-    update_parser = stock_list_subparsers.add_parser("update", help="Update stocks.txt from official sources")
+    # The nested leaves do have underlying CLIs, so they forward help like any
+    # other passthrough route.
+    update_parser = stock_list_subparsers.add_parser("update", help="Update stocks.txt from official sources", add_help=False)
     update_parser.set_defaults(handler=lambda args: _run_stock_list_update(args.args))
 
-    smoke_parser = stock_list_subparsers.add_parser("smoke-check", help="Smoke check official stock-list sources")
+    smoke_parser = stock_list_subparsers.add_parser("smoke-check", help="Smoke check official stock-list sources", add_help=False)
     smoke_parser.set_defaults(handler=lambda args: _run_stock_list_smoke_check(args.args))
 
     _add_passthrough_parser(stock_list_subparsers, "clean", clean_stocks.main, "clean_stocks.py", "Clean stock list")
@@ -136,7 +162,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     _add_passthrough_parser(subparsers, "ml-dataset", ml_dataset.main, "ml_dataset.py", "Build research ML dataset")
 
-    gui_parser = subparsers.add_parser("gui", help="Launch local GUI prototype")
+    # Wrapper-owned help: gui takes no arguments and has no underlying parser,
+    # and answering here keeps `twstock gui --help` from importing Tk.
+    gui_parser = subparsers.add_parser(
+        "gui",
+        help="Launch local GUI prototype",
+        description=(
+            "Launch the local research GUI prototype. Takes no arguments.\n"
+            "Runs offline research workflows only. Does not connect to brokers, "
+            "place orders, produce live signals, or provide investment advice."
+        ),
+    )
     gui_parser.set_defaults(handler=lambda args: _run_gui(args.args))
 
     _add_passthrough_parser(subparsers, "cache", cache_manager.main, "cache_manager.py", "Manage price data cache")
@@ -149,7 +185,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     _add_passthrough_parser(subparsers, "parameter-sweep", parameter_sweep_report.main, "parameter_sweep_report.py", "Run parameter sweep")
 
-    _add_passthrough_parser(subparsers, "backtest-report", backtest_report.main, "backtest_report.py", "Run backtest report", forward_help=True)
+    _add_passthrough_parser(subparsers, "backtest-report", backtest_report.main, "backtest_report.py", "Run backtest report")
 
     _add_passthrough_parser(
         subparsers,

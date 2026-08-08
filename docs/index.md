@@ -41,6 +41,7 @@ Phase 55.3 planning 與較早 roadmap 中的歷史「下一步」敘述若與最
 - [Market Data Provider 拆分規劃](architecture/market-data-provider-decomposition-plan.md)
 - [Root entry removal record](archive/root-wrapper-removal.md)
 - [資料提供者與快取契約](DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md)
+- [Issue #84 Validation baseline：doctor／CLI help／subprocess／installed-package 契約](ISSUE_84_VALIDATION_BASELINE.md)
 
 ## Authoritative source hierarchy
 

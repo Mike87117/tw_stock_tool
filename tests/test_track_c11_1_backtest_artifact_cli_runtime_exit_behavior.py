@@ -101,6 +101,11 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
     def _unified_process(self, *args: str):
         return run_repo_python("-m", UNIFIED_MODULE, *args)
 
+    @staticmethod
+    def _unwrapped(text: str) -> str:
+        """Collapse argparse line wrapping so a phrase can span wrapped lines."""
+        return " ".join(text.split())
+
     def _write_invalid_json(self) -> Path:
         path = self.root / "invalid.json"
         path.write_text("{not valid json", encoding="utf-8")
@@ -554,7 +559,11 @@ class TrackC111BacktestArtifactCliRuntimeExitCharacterizationTest(unittest.TestC
         completed = self._unified_process("backtest-artifact", "--help")
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("research-only BacktestResult JSON artifact", completed.stdout)
+        # Since Issue #84 B2 this help is delegated to backtest_artifact_cli, so
+        # argparse wraps the same research-only wording at a different column.
+        # Match on the unwrapped text to assert the wording, not the layout.
+        self.assertIn("research-only BacktestResult JSON artifact", self._unwrapped(completed.stdout))
+        self.assertIn("convert-to-simulated-paper-trading", completed.stdout)
         self.assertNotIn("Traceback", completed.stdout + completed.stderr)
         self.assertEqual(self._files(), {"backtest.json"})
 

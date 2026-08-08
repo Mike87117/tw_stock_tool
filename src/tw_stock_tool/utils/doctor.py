@@ -1,5 +1,10 @@
 """Local environment checker for tw_stock_tool.
 
+This is an end-user environment checker first: it must produce a correct
+verdict for an installed distribution that has no source checkout at all.
+Source-checkout-only checks are therefore added only when a checkout is
+actually detected, never assumed.
+
 By default this checks only local Python/runtime prerequisites. Use --live to
 also run live external data-source smoke checks.
 """
@@ -8,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.metadata
 import sys
+import tomllib
 from pathlib import Path
 from typing import Iterable
 
@@ -19,6 +26,8 @@ from tw_stock_tool.cli import stock_list_smoke_check
 PASS = "PASS"
 WARNING = "WARNING"
 FAIL = "FAIL"
+
+DISTRIBUTION_NAME = "tw-stock-tool"
 
 REQUIRED_IMPORTS = {
     "yfinance": "yfinance",
@@ -31,20 +40,35 @@ REQUIRED_IMPORTS = {
     "sklearn": "sklearn",
 }
 
-REQUIRED_CLI_FILES = [
-    "main.py",
-    "scan_stocks.py",
-    "daily_report.py",
-    "stock_list_updater.py",
-    "stock_list_smoke_check.py",
-    "price_data_smoke_check.py",
-    "ai_prediction_report.py",
-    "ai_stock_scanner.py",
-]
-
 
 def _row(name: str, status: str, message: str = "") -> dict[str, str]:
     return {"Check": name, "Status": status, "Message": message}
+
+
+def find_repository_root(start: str | Path | None = None) -> Path | None:
+    """Return the source-checkout root for this module, or None when installed.
+
+    A checkout is identified by the two markers that define this project's
+    src-layout: a top-level ``pyproject.toml`` next to ``src/tw_stock_tool``.
+    An installed distribution matches neither, so callers can distinguish the
+    two contexts instead of guessing a parent index.
+    """
+    base = Path(start) if start is not None else Path(__file__)
+    base = base.resolve()
+    for candidate in base.parents:
+        if (candidate / "pyproject.toml").is_file() and (candidate / "src" / "tw_stock_tool").is_dir():
+            return candidate
+    return None
+
+
+def _pyproject_version(repository_root: Path) -> str | None:
+    try:
+        with (repository_root / "pyproject.toml").open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    version = data.get("project", {}).get("version")
+    return version if isinstance(version, str) and version.strip() else None
 
 
 def check_python_version(version_info: tuple[int, int, int] | None = None) -> dict[str, str]:
@@ -87,27 +111,47 @@ def check_directories(paths: Iterable[str | Path] | None = None) -> list[dict[st
     return [check_directory_writable(path) for path in (paths or [CACHE_DIR, OUTPUT_DIR])]
 
 
-def check_required_files(
-    files: Iterable[str | Path] | None = None,
-    base_dir: str | Path | None = None,
-) -> list[dict[str, str]]:
-    """Check that required project files exist."""
-    root = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parent
-    rows: list[dict[str, str]] = []
-    for file_path in files or REQUIRED_CLI_FILES:
-        path = root / file_path
-        if path.exists():
-            rows.append(_row(f"File {file_path}", PASS, str(path)))
-        else:
-            rows.append(_row(f"File {file_path}", FAIL, f"Missing: {path}"))
-    return rows
+def check_package_version() -> dict[str, str]:
+    """Check that this tool's own version resolves in the current context.
+
+    Replaces the removed root-wrapper file inventory: the wrappers it listed
+    were retired in full (see docs/archive/root-wrapper-removal.md), so the
+    meaningful question is no longer "are the root scripts present" but "is
+    tw-stock-tool itself resolvable here".
+    """
+    try:
+        installed = importlib.metadata.version(DISTRIBUTION_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        installed = None
+    if installed is not None:
+        return _row("Package version", PASS, f"{DISTRIBUTION_NAME} {installed} (installed distribution)")
+
+    repository_root = find_repository_root()
+    if repository_root is None:
+        return _row(
+            "Package version",
+            FAIL,
+            f"{DISTRIBUTION_NAME} is not installed and no source checkout was found",
+        )
+    declared = _pyproject_version(repository_root)
+    if declared is None:
+        return _row(
+            "Package version",
+            FAIL,
+            f"Cannot read project version from {repository_root / 'pyproject.toml'}",
+        )
+    return _row("Package version", PASS, f"{DISTRIBUTION_NAME} {declared} (source checkout: {repository_root})")
 
 
-def check_requirements_file(base_dir: str | Path | None = None) -> dict[str, str]:
-    """Check requirements.txt exists."""
-    root = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parent
-    path = root / "requirements.txt"
-    if path.exists():
+def check_repository_requirements(repository_root: str | Path) -> dict[str, str]:
+    """Check requirements.txt in a source checkout.
+
+    Only meaningful for a checkout; ``requirements.txt`` is a development file
+    and is not shipped in the wheel, so run_doctor() calls this only when
+    find_repository_root() actually locates a checkout.
+    """
+    path = Path(repository_root) / "requirements.txt"
+    if path.is_file():
         return _row("requirements.txt", PASS, str(path))
     return _row("requirements.txt", FAIL, f"Missing: {path}")
 
@@ -134,8 +178,10 @@ def run_doctor(live: bool = False) -> list[dict[str, str]]:
     rows = [check_python_version()]
     rows.extend(check_imports())
     rows.extend(check_directories())
-    rows.extend(check_required_files())
-    rows.append(check_requirements_file())
+    rows.append(check_package_version())
+    repository_root = find_repository_root()
+    if repository_root is not None:
+        rows.append(check_repository_requirements(repository_root))
     if live:
         rows.extend(check_live_sources())
     return rows

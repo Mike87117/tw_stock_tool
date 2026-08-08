@@ -441,162 +441,79 @@ class TwStockCliTest(unittest.TestCase):
         self.assertIn("smoke-check", output)
         self.assertIn("clean", output)
 
-    def test_stock_list_update_help_exits_successfully(self) -> None:
+    # Every route's --help must prove it reached its intended owner. Asserting
+    # only exit 0 + "usage:" was satisfied by the option-less wrapper stub that
+    # Issue #84 B2 describes, so each case pins a command-specific marker.
+    HELP_CONTRACT = (
+        (["doctor", "--help"], "--live"),
+        (["scan", "--help"], "--min-volume-ratio"),
+        (["daily", "--help"], "--validation-strategy"),
+        (["price-smoke-check", "--help"], "--tpex-stock"),
+        (["ai-scan", "--help"], "--n-estimators"),
+        (["cache", "--help"], "--summary"),
+        (["benchmark", "--help"], "--warmup"),
+        (["analyze", "--help"], "--save-chart"),
+        (["strategy-compare", "--help"], "--score-sell"),
+        (["parameter-sweep", "--help"], "--output-excel"),
+        (["backtest-report", "--help"], "--manifest-path"),
+        (["walk-forward", "--help"], "--train-days"),
+        (["stock-list", "update", "--help"], "--add-suffix"),
+        (["stock-list", "smoke-check", "--help"], "--min-tpex"),
+        (["stock-list", "clean", "--help"], "--write-clean-file"),
+        (["simulated-paper-trading-export", "--help"], "--output-csv-dir"),
+        (["backtest-result-export", "--help"], "--output-json"),
+    )
+
+    WRAPPER_OWNED_HELP_CONTRACT = (
+        (["stock-list", "--help"], "{update,smoke-check,clean}"),
+        (["gui", "--help"], "Takes no arguments"),
+    )
+
+    def _help_output(self, argv: list[str]) -> str:
         out = StringIO()
-        with redirect_stdout(out):
+        # argparse derives prog from sys.argv[0]; pin it so assertions describe
+        # the CLI rather than how the test suite happens to be launched.
+        with patch.object(sys, "argv", ["twstock"]), redirect_stdout(out):
             with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["stock-list", "update", "--help"])
-
+                twstock_cli.main(argv)
         self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
+        return out.getvalue()
 
-    def test_stock_list_smoke_check_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["stock-list", "smoke-check", "--help"])
+    @staticmethod
+    def _unwrapped(text: str) -> str:
+        """Collapse argparse line wrapping so a marker can span wrapped lines."""
+        return " ".join(text.lower().split())
 
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
+    def test_passthrough_help_is_answered_by_the_underlying_cli(self) -> None:
+        for argv, marker in self.HELP_CONTRACT:
+            with self.subTest(argv=argv):
+                output = self._help_output(argv)
+                self.assertIn("usage:", output)
+                self.assertIn(marker, output)
+                # The stub this replaces advertised no options at all.
+                stub = f"usage: twstock {' '.join(argv[:-1])} [-h]\n\noptions:\n"
+                self.assertNotIn(stub, output)
 
-    def test_stock_list_clean_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["stock-list", "clean", "--help"])
+    def test_wrapper_owned_help_is_answered_by_the_unified_cli(self) -> None:
+        for argv, marker in self.WRAPPER_OWNED_HELP_CONTRACT:
+            with self.subTest(argv=argv):
+                output = self._help_output(argv)
+                self.assertIn(f"usage: twstock {argv[0]}", output)
+                self.assertIn(marker, output)
 
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_cache_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["cache", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_benchmark_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["benchmark", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_analyze_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["analyze", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_strategy_compare_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["strategy-compare", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_parameter_sweep_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["parameter-sweep", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_backtest_report_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["backtest-report", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_walk_forward_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["walk-forward", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_simulated_paper_trading_export_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["simulated-paper-trading-export", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        output = out.getvalue()
-        self.assertIn("usage:", output)
-        self.assertIn("simulated paper trading", output)
-
-    def test_backtest_result_export_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["backtest-result-export", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        output = out.getvalue()
-        self.assertIn("usage:", output)
-        self.assertIn("historical backtest artifact", output.lower() + output)
-
-    def test_doctor_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["doctor", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_scan_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["scan", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_daily_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["daily", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_price_smoke_check_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["price-smoke-check", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
-
-    def test_ai_scan_help_exits_successfully(self) -> None:
-        out = StringIO()
-        with redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                twstock_cli.main(["ai-scan", "--help"])
-
-        self.assertEqual(ctx.exception.code, 0)
-        self.assertIn("usage:", out.getvalue())
+    def test_safety_scope_text_survives_help_forwarding(self) -> None:
+        cases = (
+            (["simulated-paper-trading-export", "--help"], "research-only simulated paper trading json artifact"),
+            (["backtest-result-export", "--help"], "historical backtest artifact for offline research only"),
+            (["simulated-paper-trading", "--help"], "does not connect to brokers, place real orders, or provide investment advice"),
+            (["backtest-artifact", "--help"], "or provide investment advice"),
+            (["simulated-portfolio-trading", "--help"], "research-only multi-symbol simulated portfolio trading"),
+            (["daily-report-artifact", "--help"], "existing offline daily research report json artifact"),
+            (["simulated-portfolio-artifact", "--help"], "existing offline simulated portfolio trading json artifact"),
+        )
+        for argv, marker in cases:
+            with self.subTest(argv=argv):
+                self.assertIn(marker, self._unwrapped(self._help_output(argv)))
 
     def test_pyproject_twstock_entrypoint_targets_unified_cli_main(self) -> None:
         import tomllib
