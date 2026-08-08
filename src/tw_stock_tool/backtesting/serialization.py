@@ -1,3 +1,20 @@
+"""BacktestResult JSON artifact schema.
+
+Schema history
+--------------
+1. Every numeric summary field is a finite JSON number.
+2. ``summary.profit_factor`` becomes ``number | null``. ``null`` means the
+   profit factor is *mathematically unbounded*: gross profit is positive and
+   gross loss is exactly zero, so the ratio has no finite value. This is the
+   only case that produces ``null``; ``0.0`` continues to mean "no trades, or
+   no gross profit" and the two stay distinguishable.
+
+Version 1 artifacts remain readable and their meaning is unchanged - an
+all-winning backtest simply could not be serialized as version 1 at all,
+because ``math.inf`` is not a finite number and JSON has no infinity literal.
+Version 1 therefore still requires a finite number for ``profit_factor``.
+"""
+
 import json
 import math
 from typing import Any
@@ -5,6 +22,14 @@ import pandas as pd
 import numpy as np
 
 from tw_stock_tool.backtesting.results import BacktestResult
+
+BACKTEST_RESULT_SCHEMA_VERSION = 2
+SUPPORTED_BACKTEST_RESULT_SCHEMA_VERSIONS = (1, 2)
+
+# The JSON value carrying "unbounded profit factor". Keeping this named makes
+# the two distinct zero-ish states impossible to confuse at call sites.
+UNBOUNDED_PROFIT_FACTOR_JSON: None = None
+
 
 class BacktestResultSerializationError(Exception):
     """Raised when an error occurs during backtest result serialization or deserialization."""
@@ -39,6 +64,40 @@ def _normalize_numeric(val: Any, name: str) -> int | float:
             raise BacktestResultSerializationError(f"Numeric value for {name} must be finite, got: {val}")
         return val_float
     raise BacktestResultSerializationError(f"{name} must be numeric.")
+
+def _profit_factor_to_json(val: Any) -> float | None:
+    """Encode BacktestResult.profit_factor for the artifact.
+
+    ``+inf`` is the value calculate_profit_factor() produces when gross loss is
+    zero and gross profit is positive, so it is a legitimate derived state and
+    is encoded as ``null``. ``NaN`` and ``-inf`` are not reachable from that
+    calculation, so they are treated as malformed and rejected - this helper
+    deliberately does not widen the general finite-number rule.
+    """
+    if isinstance(val, bool) or isinstance(val, np.bool_):
+        raise BacktestResultSerializationError("profit_factor must be numeric, got bool.")
+    if not isinstance(val, (int, float, np.integer, np.floating)):
+        raise BacktestResultSerializationError("profit_factor must be numeric.")
+    val_float = float(val)
+    if math.isinf(val_float) and val_float > 0:
+        return UNBOUNDED_PROFIT_FACTOR_JSON
+    if not math.isfinite(val_float):
+        raise BacktestResultSerializationError(
+            f"Numeric value for profit_factor must be finite or positive infinity, got: {val}"
+        )
+    return val_float
+
+
+def _profit_factor_from_json(val: Any, schema_version: int) -> float:
+    """Decode summary.profit_factor back to its internal mathematical meaning."""
+    if val is UNBOUNDED_PROFIT_FACTOR_JSON:
+        if schema_version < 2:
+            raise BacktestResultSerializationError(
+                f"profit_factor must be numeric in schema_version {schema_version}."
+            )
+        return math.inf
+    return _normalize_float(val, "profit_factor")
+
 
 def _is_finite_number(val: Any) -> bool:
     if isinstance(val, bool) or isinstance(val, np.bool_):
@@ -85,7 +144,7 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
         "trade_count": _normalize_int(result.trade_count, "trade_count"),
         "win_rate_pct": _normalize_float(result.win_rate_pct, "win_rate_pct"),
         "max_drawdown_pct": _normalize_float(result.max_drawdown_pct, "max_drawdown_pct"),
-        "profit_factor": _normalize_float(result.profit_factor, "profit_factor"),
+        "profit_factor": _profit_factor_to_json(result.profit_factor),
         "best_trade_pct": _normalize_float(result.best_trade_pct, "best_trade_pct"),
         "worst_trade_pct": _normalize_float(result.worst_trade_pct, "worst_trade_pct"),
         "avg_hold_days": _normalize_float(result.avg_hold_days, "avg_hold_days"),
@@ -124,7 +183,7 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
             })
 
     return {
-        "schema_version": 1,
+        "schema_version": BACKTEST_RESULT_SCHEMA_VERSION,
         "result_type": "backtest_result",
         "summary": summary,
         "trades": trades_list,
@@ -149,8 +208,9 @@ def deserialize_backtest_result(data: dict[str, Any]) -> BacktestResult:
     if unknown:
         raise BacktestResultSerializationError(f"Unknown top-level fields: {unknown}")
 
-    if data["schema_version"] != 1:
-        raise BacktestResultSerializationError(f"Unsupported schema_version: {data['schema_version']}")
+    schema_version = data["schema_version"]
+    if isinstance(schema_version, bool) or schema_version not in SUPPORTED_BACKTEST_RESULT_SCHEMA_VERSIONS:
+        raise BacktestResultSerializationError(f"Unsupported schema_version: {schema_version}")
 
     if data["result_type"] != "backtest_result":
         raise BacktestResultSerializationError(f"Unsupported result_type: {data['result_type']}")
@@ -211,7 +271,7 @@ def deserialize_backtest_result(data: dict[str, Any]) -> BacktestResult:
         trade_count=_normalize_int(summary["trade_count"], "trade_count"),
         win_rate_pct=_normalize_float(summary["win_rate_pct"], "win_rate_pct"),
         max_drawdown_pct=_normalize_float(summary["max_drawdown_pct"], "max_drawdown_pct"),
-        profit_factor=_normalize_float(summary["profit_factor"], "profit_factor"),
+        profit_factor=_profit_factor_from_json(summary["profit_factor"], schema_version),
         best_trade_pct=_normalize_float(summary["best_trade_pct"], "best_trade_pct"),
         worst_trade_pct=_normalize_float(summary["worst_trade_pct"], "worst_trade_pct"),
         avg_hold_days=_normalize_float(summary["avg_hold_days"], "avg_hold_days"),

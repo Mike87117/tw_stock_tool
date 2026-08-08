@@ -42,6 +42,7 @@ Phase 55.3 planning 與較早 roadmap 中的歷史「下一步」敘述若與最
 - [Root entry removal record](archive/root-wrapper-removal.md)
 - [資料提供者與快取契約](DATA_PROVIDER_CACHE_BOUNDARY_CONTRACT.md)
 - [Issue #84 Validation baseline：doctor／CLI help／subprocess／installed-package 契約](ISSUE_84_VALIDATION_BASELINE.md)
+- [Issue #84 BacktestResult correctness：profit factor artifact 表示法與 terminal accounting invariant](ISSUE_84_BACKTEST_RESULT_CORRECTNESS.md)
 
 ## Authoritative source hierarchy
 

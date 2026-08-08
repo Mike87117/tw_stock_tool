@@ -19,6 +19,33 @@
   `stock-list` and `gui` keep wrapper-owned help because they have no underlying
   parser. Research-only scope wording is unchanged: every underlying parser
   already carried it. Command arguments, exit codes and dispatch are unchanged.
+- An all-winning backtest can be exported again. `profit_factor` is `math.inf`
+  when there is gross profit and no gross loss, and the artifact serializer
+  rejected every non-finite value, so a valid single-trade or short-window
+  backtest failed export with `BacktestResultSerializationError`. The artifact
+  now encodes that state as `summary.profit_factor: null`, meaning
+  "mathematically unbounded". `0.0` still means "no trades, or no gross
+  profit", so the two remain distinguishable. JSON stays standards-compliant -
+  no `Infinity` or `NaN` literals. `BacktestResult.profit_factor` and
+  `run_backtest()["Profit Factor"]` still report `math.inf` and are unchanged.
+- A backtest holding a position on the final bar no longer reports fabricated
+  numbers when that bar's close is unusable. Previously the end-of-day close
+  was skipped for a close of `0` or negative, but final equity was still forced
+  to cash, so the result showed zero trades, cash-only capital and a near-total
+  loss while the position was logically still open. Such a run now fails closed
+  with `BacktestError`, matching the documented contract that a
+  `BacktestResult` is closed-trade-only. A positive final close still closes as
+  `SELL_EOD` with unchanged fees, tax and PnL; non-finite prices still fail at
+  input validation as before.
+
+### Changed
+
+- `BacktestResult` JSON artifact `schema_version` is now `2`. Version 1
+  artifacts remain readable and keep their exact meaning; version 1 continues
+  to require a finite `profit_factor`, while version 2 additionally allows
+  `null` for the unbounded case. `BACKTEST_RESULT_SCHEMA_VERSION` and
+  `SUPPORTED_BACKTEST_RESULT_SCHEMA_VERSIONS` are exported from
+  `tw_stock_tool.backtesting.serialization`.
 
 ### Added
 

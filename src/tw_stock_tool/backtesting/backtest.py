@@ -224,10 +224,25 @@ def run_backtest_result(
 
         equity_curve.append(cash + shares * close_price)
 
+    # Terminal invariant: a BacktestResult never carries an open position.
+    # docs/phase_30_1_backtest_to_artifact_mapping.md records that this output
+    # is closed-trade-only precisely because remaining shares are force-closed
+    # as SELL_EOD, and that no last-price / mark-price policy exists for an
+    # open position. So if the final bar cannot supply a usable exit price we
+    # fail closed rather than silently dropping the holding: previously the
+    # close was skipped but `equity_curve[-1] = cash` still ran, reporting
+    # cash-only equity, zero trades and a fabricated near-total loss while the
+    # position was still logically held.
     if shares > 0:
         last_price = float(df.iloc[-1]["Close"])
-        if not (pd.isna(last_price) or last_price <= 0):
-            close_position(len(df) - 1, "SELL_EOD", last_price)
+        if pd.isna(last_price) or last_price <= 0:
+            raise BacktestError(
+                "無法在最後一根 K 線平倉：收盤價必須大於 0，"
+                f"實際為 {last_price}。"
+            )
+        close_position(len(df) - 1, "SELL_EOD", last_price)
+        if shares > 0:
+            raise BacktestError("最後一根 K 線平倉失敗，回測結果不得含有未平倉部位。")
         equity_curve[-1] = cash
 
     equity = pd.Series(equity_curve, index=df.index, name="Equity")
