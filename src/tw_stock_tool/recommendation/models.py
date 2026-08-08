@@ -128,6 +128,24 @@ def _freeze_mapping(name: str, value: Any) -> Mapping[str, FrozenJsonValue]:
     return frozen
 
 
+def _same_frozen_json(left: Any, right: Any) -> bool:
+    """Compare frozen JSON trees without Python numeric type coercion."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, Mapping):
+        if set(left) != set(right):
+            return False
+        return all(_same_frozen_json(left[key], right[key]) for key in left)
+    if type(left) is tuple:
+        if len(left) != len(right):
+            return False
+        return all(
+            _same_frozen_json(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    return left == right
+
+
 @dataclass(frozen=True, slots=True)
 class CurrentSignalSnapshot:
     symbol: str
@@ -220,9 +238,9 @@ class RecommendationEvidence:
             "qualification strategy parameters",
             qualification_request.strategy.parameters,
         )
-        if frozen_parameters != canonical_parameters:
+        if not _same_frozen_json(frozen_parameters, canonical_parameters):
             raise RecommendationModelError(
-                "strategy_parameters must equal qualification strategy parameters"
+                "strategy_parameters must exactly equal qualification strategy parameters"
             )
         object.__setattr__(self, "strategy_parameters", frozen_parameters)
 
