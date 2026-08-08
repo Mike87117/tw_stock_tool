@@ -907,7 +907,7 @@ def _neighbors(selected: Mapping[str, int], grid: Sequence[Mapping[str, int]]) -
         deltas = [abs(positions[key][candidate[key]] - positions[key][selected[key]]) for key in keys]
         if deltas and max(deltas) <= 1:
             neighbors.append(dict(candidate))
-    return tuple(neighbors)
+    return tuple(sorted(neighbors, key=lambda item: tuple(sorted(item.items()))))
 
 
 def _benchmark_frame(benchmark: pd.DataFrame | Mapping[str, pd.DataFrame] | None, symbol: str) -> pd.DataFrame | None:
