@@ -27,6 +27,10 @@ class Route:
     program_name: str
     classification: str
     description: str | None = None
+    # A string that only the underlying parser can produce. Asserting it is
+    # what stops a route from silently regressing to wrapper-only stub help
+    # (Issue #84 B2); `usage:` and exit code 0 cannot tell the two apart.
+    help_marker: str = ""
 
     @property
     def name(self) -> str:
@@ -34,10 +38,10 @@ class Route:
 
 
 ROUTES = (
-    Route(("doctor",), "Check local environment", "tw_stock_tool.utils.doctor", "doctor.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("run",), "Inspect existing Workspace runs offline", "tw_stock_tool.cli.workspace_run_cli", "twstock run", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("scan",), "Run multi-stock technical scanner", "tw_stock_tool.cli.scan_stocks", "scan_stocks.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("daily",), "Run daily candidate report", "tw_stock_tool.cli.daily_report_cli", "daily_report_cli.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("doctor",), "Check local environment", "tw_stock_tool.utils.doctor", "doctor.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--live"),
+    Route(("run",), "Inspect existing Workspace runs offline", "tw_stock_tool.cli.workspace_run_cli", "twstock run", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="inspect"),
+    Route(("scan",), "Run multi-stock technical scanner", "tw_stock_tool.cli.scan_stocks", "scan_stocks.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--min-volume-ratio"),
+    Route(("daily",), "Run daily candidate report", "tw_stock_tool.cli.daily_report_cli", "daily_report_cli.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--validation-strategy"),
     Route(
         ("daily-report-artifact",),
         "Validate, inspect, or export a Daily Report JSON artifact",
@@ -47,22 +51,33 @@ ROUTES = (
         "Operate on an existing offline Daily Research Report JSON artifact.\n"
         "Does not fetch market data, run analysis, execute strategies or backtests, connect to brokers, place orders, "
         "produce live signals, or provide investment advice.",
+        help_marker="export-markdown",
     ),
-    Route(("stock-list", "update"), "Update stocks.txt from official sources", "tw_stock_tool.data.stock_list_updater", "stock_list_updater.py", "NESTED_CUSTOM_RUNNER"),
-    Route(("stock-list", "smoke-check"), "Smoke check official stock-list sources", "tw_stock_tool.cli.stock_list_smoke_check", "stock_list_smoke_check.py", "NESTED_CUSTOM_RUNNER"),
-    Route(("stock-list", "clean"), "Clean stock list", "tw_stock_tool.cli.clean_stocks", "clean_stocks.py", "NESTED_STANDARD_PASSTHROUGH"),
-    Route(("price-smoke-check",), "Smoke check price data sources", "tw_stock_tool.cli.price_data_smoke_check", "price_data_smoke_check.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("ai-scan",), "Run multi-stock AI baseline scanner", "tw_stock_tool.ml.ai_stock_scanner", "ai_stock_scanner.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("ai-report",), "Run baseline ML prediction report", "tw_stock_tool.reports.ai_prediction_report", "ai_prediction_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("ml-dataset",), "Build research ML dataset", "tw_stock_tool.ml.ml_dataset", "ml_dataset.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("gui",), "Launch local GUI prototype", "tw_stock_tool.gui.gui_app", "gui_app.py", "LAZY_IMPORTED_STANDARD"),
-    Route(("cache",), "Manage price data cache", "tw_stock_tool.data.cache_manager", "cache_manager.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("benchmark",), "Run multi-stock scanner benchmark", "tw_stock_tool.cli.benchmark", "benchmark.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("analyze",), "Run single-stock analysis", "tw_stock_tool.cli.main", "main.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("strategy-compare",), "Run strategy comparison", "tw_stock_tool.backtesting.strategy_compare", "strategy_compare.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("parameter-sweep",), "Run parameter sweep", "tw_stock_tool.cli.parameter_sweep_report", "parameter_sweep_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("backtest-report",), "Run backtest report", "tw_stock_tool.cli.backtest_report", "backtest_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
-    Route(("walk-forward",), "Run walk forward report", "tw_stock_tool.cli.walk_forward_report", "walk_forward_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH"),
+    Route(("stock-list", "update"), "Update stocks.txt from official sources", "tw_stock_tool.data.stock_list_updater", "stock_list_updater.py", "NESTED_CUSTOM_RUNNER", help_marker="--add-suffix"),
+    Route(("stock-list", "smoke-check"), "Smoke check official stock-list sources", "tw_stock_tool.cli.stock_list_smoke_check", "stock_list_smoke_check.py", "NESTED_CUSTOM_RUNNER", help_marker="--min-tpex"),
+    Route(("stock-list", "clean"), "Clean stock list", "tw_stock_tool.cli.clean_stocks", "clean_stocks.py", "NESTED_STANDARD_PASSTHROUGH", help_marker="--write-clean-file"),
+    Route(("price-smoke-check",), "Smoke check price data sources", "tw_stock_tool.cli.price_data_smoke_check", "price_data_smoke_check.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--tpex-stock"),
+    Route(("ai-scan",), "Run multi-stock AI baseline scanner", "tw_stock_tool.ml.ai_stock_scanner", "ai_stock_scanner.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--n-estimators"),
+    Route(("ai-report",), "Run baseline ML prediction report", "tw_stock_tool.reports.ai_prediction_report", "ai_prediction_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--n-estimators"),
+    Route(("ml-dataset",), "Build research ML dataset", "tw_stock_tool.ml.ml_dataset", "ml_dataset.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--output-csv"),
+    Route(
+        ("gui",),
+        "Launch local GUI prototype",
+        "tw_stock_tool.gui.gui_app",
+        "gui_app.py",
+        "WRAPPER_OWNED_HELP",
+        "Launch the local research GUI prototype. Takes no arguments.\n"
+        "Runs offline research workflows only. Does not connect to brokers, "
+        "place orders, produce live signals, or provide investment advice.",
+        help_marker="Takes no arguments",
+    ),
+    Route(("cache",), "Manage price data cache", "tw_stock_tool.data.cache_manager", "cache_manager.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--summary"),
+    Route(("benchmark",), "Run multi-stock scanner benchmark", "tw_stock_tool.cli.benchmark", "benchmark.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--warmup"),
+    Route(("analyze",), "Run single-stock analysis", "tw_stock_tool.cli.main", "main.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--save-chart"),
+    Route(("strategy-compare",), "Run strategy comparison", "tw_stock_tool.backtesting.strategy_compare", "strategy_compare.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--score-sell"),
+    Route(("parameter-sweep",), "Run parameter sweep", "tw_stock_tool.cli.parameter_sweep_report", "parameter_sweep_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--output-excel"),
+    Route(("backtest-report",), "Run backtest report", "tw_stock_tool.cli.backtest_report", "backtest_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--manifest-path"),
+    Route(("walk-forward",), "Run walk forward report", "tw_stock_tool.cli.walk_forward_report", "walk_forward_report.py", "STANDARD_TOP_LEVEL_PASSTHROUGH", help_marker="--train-days"),
     Route(
         ("simulated-paper-trading",),
         "Run historical simulated paper trading",
@@ -71,6 +86,7 @@ ROUTES = (
         "LAZY_IMPORTED_WITH_DESCRIPTION",
         "Run research-only simulated paper trading over historical data.\n"
         "Does not connect to brokers, place real orders, or provide investment advice.",
+        help_marker="--slippage-per-share",
     ),
     Route(
         ("simulated-paper-trading-export",),
@@ -80,6 +96,7 @@ ROUTES = (
         "STANDARD_TOP_LEVEL_WITH_DESCRIPTION",
         "Export reports from an existing research-only simulated paper trading JSON artifact.\n"
         "Does not fetch market data, run strategies, connect to brokers, or place orders.",
+        help_marker="--output-csv-dir",
     ),
     Route(
         ("backtest-artifact",),
@@ -90,6 +107,7 @@ ROUTES = (
         "Validate or inspect existing research-only BacktestResult JSON artifacts.\n"
         "Does not fetch market data, run strategies, execute backtests, connect to brokers, place orders, "
         "produce live signals, or provide investment advice.",
+        help_marker="convert-to-simulated-paper-trading",
     ),
     Route(
         ("backtest-result-export",),
@@ -99,6 +117,7 @@ ROUTES = (
         "LAZY_IMPORTED_WITH_DESCRIPTION",
         "Export a structured BacktestResult JSON artifact from a historical backtest execution.\n"
         "This is a historical backtest artifact for offline research only. Not investment advice.",
+        help_marker="--output-json",
     ),
     Route(
         ("simulated-portfolio-artifact",),
@@ -110,6 +129,7 @@ ROUTES = (
         "Does not fetch market data, run analysis, execute strategies or backtests,\n"
         "execute simulated trading, run the portfolio coordinator, connect to brokers,\n"
         "place orders, produce live signals, recommend stocks, or provide investment advice.",
+        help_marker="export-csv",
     ),
     Route(
         ("simulated-portfolio-trading",),
@@ -119,8 +139,13 @@ ROUTES = (
         "LAZY_IMPORTED_WITH_DESCRIPTION",
         "Run research-only multi-symbol simulated portfolio trading over historical data.\n"
         "Does not connect to brokers, place real orders, or provide investment advice.",
+        help_marker="--quantity-per-trade",
     ),
 )
+
+# Routes whose --help is answered by twstock_cli itself rather than delegated.
+# Everything else must forward to the underlying CLI (Issue #84 B2).
+WRAPPER_OWNED_HELP_ROUTES = frozenset({("stock-list",), ("gui",)})
 
 ROUTE_BY_NAME = {route.name: route for route in ROUTES}
 TOP_LEVEL_ORDER = (
@@ -152,6 +177,8 @@ TOP_LEVEL_ORDER = (
 NESTED_ORDER = ("update", "smoke-check", "clean")
 
 
+# Wrapper-owned help. "stock-list" is a grouping node with no underlying CLI,
+# so twstock_cli answers for it and the snapshot stays exact.
 STOCK_LIST_HELP = """usage: twstock stock-list [-h] {update,smoke-check,clean} ...
 
 positional arguments:
@@ -164,31 +191,10 @@ options:
   -h, --help            show this help message and exit
 """
 
-ORDINARY_HELP = """usage: twstock backtest-report [-h]
+GUI_HELP = """usage: twstock gui [-h]
 
-options:
-  -h, --help  show this help message and exit
-"""
-
-NESTED_HELP = """usage: twstock stock-list update [-h]
-
-options:
-  -h, --help  show this help message and exit
-"""
-
-SAFETY_HELP = """usage: twstock simulated-paper-trading [-h]
-
-Run research-only simulated paper trading over historical data. Does not connect to brokers, place real orders, or
-provide investment advice.
-
-options:
-  -h, --help  show this help message and exit
-"""
-
-ARTIFACT_HELP = """usage: twstock backtest-artifact [-h]
-
-Validate or inspect existing research-only BacktestResult JSON artifacts. Does not fetch market data, run strategies,
-execute backtests, connect to brokers, place orders, produce live signals, or provide investment advice.
+Launch the local research GUI prototype. Takes no arguments. Runs offline research workflows only. Does not connect to
+brokers, place orders, produce live signals, or provide investment advice.
 
 options:
   -h, --help  show this help message and exit
@@ -305,7 +311,9 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
     def test_direct_handlers_preserve_callable_targets_and_child_program_names(self) -> None:
         passthrough = ["--flag", "value", "--output-md", "report.md", "--option=-2", "artifact.json"]
         for route in ROUTES:
-            if route.classification in {"NESTED_CUSTOM_RUNNER", "LAZY_IMPORTED_STANDARD"}:
+            # These routes have their own runners and never reach
+            # _dispatch_existing_main.
+            if route.classification in {"NESTED_CUSTOM_RUNNER", "WRAPPER_OWNED_HELP"}:
                 continue
             expected_main = importlib.import_module(route.module).main
             original_argv = sys.argv[:]
@@ -344,12 +352,10 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertEqual(parsed.stock_list_command, "smoke-check")
         self.assertEqual(parsed.args, ["--future-option", "value"])
 
-    def test_help_snapshots_freeze_order_wording_wrapping_and_descriptions(self) -> None:
+    def test_wrapper_owned_help_snapshots_freeze_order_wording_and_wrapping(self) -> None:
         snapshots = (
             (["stock-list", "--help"], STOCK_LIST_HELP),
-            (["stock-list", "update", "--help"], NESTED_HELP),
-            (["simulated-paper-trading", "--help"], SAFETY_HELP),
-            (["backtest-artifact", "--help"], ARTIFACT_HELP),
+            (["gui", "--help"], GUI_HELP),
         )
         for argv, expected in snapshots:
             with self.subTest(argv=argv):
@@ -357,6 +363,63 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 self.assertEqual(status, 0)
                 self.assertEqual(stderr, "")
                 self.assertEqual(stdout, expected)
+
+    def test_every_public_route_has_intentional_and_non_stub_help(self) -> None:
+        """Each route's --help must come from its declared owner.
+
+        Regression for Issue #84 B2: exit code 0 plus "usage:" was satisfied by
+        an option-less wrapper stub, so CI and the unit suite both passed while
+        `twstock analyze --help` told the user nothing.
+        """
+        for route in ROUTES:
+            with self.subTest(route=route.name):
+                status, stdout, stderr = _help_snapshot([*route.tokens, "--help"])
+                self.assertEqual(status, 0)
+                self.assertEqual(stderr, "")
+                self.assertIn("usage:", stdout)
+                self.assertIn(
+                    route.help_marker,
+                    stdout,
+                    f"'twstock {route.name} --help' lost its command-specific help",
+                )
+
+                if route.tokens in WRAPPER_OWNED_HELP_ROUTES:
+                    self.assertIn(f"usage: twstock {route.name}", stdout)
+                    continue
+
+                # A forwarded route renders the underlying parser's own prog
+                # name, never the wrapper's, and is never the bare stub.
+                self.assertNotEqual(
+                    stdout,
+                    f"usage: twstock {route.name} [-h]\n\noptions:\n  -h, --help  show this help message and exit\n",
+                )
+
+    def test_passthrough_parsers_do_not_register_their_own_help_option(self) -> None:
+        parser = _capture_parser()
+        action = _subparser_action(parser)
+
+        for route in ROUTES:
+            if len(route.tokens) != 1:
+                continue
+            child = action.choices[route.tokens[0]]
+            expected_owned = route.tokens in WRAPPER_OWNED_HELP_ROUTES
+            with self.subTest(route=route.name):
+                self.assertEqual(child.add_help, expected_owned)
+
+        nested = _subparser_action(action.choices["stock-list"])
+        self.assertTrue(action.choices["stock-list"].add_help)
+        for name in NESTED_ORDER:
+            with self.subTest(route=f"stock-list {name}"):
+                self.assertFalse(nested.choices[name].add_help)
+
+    def test_forwarded_help_reaches_the_underlying_main(self) -> None:
+        """--help must arrive as a passthrough argument, not be eaten upstream."""
+        for route in ROUTES:
+            if route.tokens in WRAPPER_OWNED_HELP_ROUTES:
+                continue
+            with self.subTest(route=route.name):
+                parsed = twstock_cli._parse_args([*route.tokens, "--help"])
+                self.assertEqual(parsed.args, ["--help"])
 
     def test_passthrough_status_argv_and_system_exit_are_preserved_across_route_shapes(self) -> None:
         cases = (
@@ -436,6 +499,40 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(json.loads(completed.stdout), expected)
 
+    def test_forwarded_help_does_not_break_the_heavy_import_boundary(self) -> None:
+        """Help forwarding must not re-import what PR #81 pushed off startup.
+
+        `--help` is now answered by the underlying main() instead of a wrapper
+        stub, so this proves the delegated call still exits at parse time and
+        never reaches the model/plotting code paths.
+        """
+        script = (
+            "import contextlib, io, json, sys\n"
+            "from tw_stock_tool.cli import twstock_cli\n"
+            "heavy = ('sklearn', 'matplotlib', 'mplfinance')\n"
+            "with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):\n"
+            "    try:\n"
+            "        twstock_cli.main(sys.argv[1:])\n"
+            "    except SystemExit:\n"
+            "        pass\n"
+            "print(json.dumps(sorted(name for name in heavy if name in sys.modules)))\n"
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join((str(REPOSITORY_ROOT / "src"), env.get("PYTHONPATH", "")))
+        for argv in (("--help",), ("analyze", "--help"), ("ai-report", "--help"), ("ml-dataset", "--help"), ("backtest-report", "--help")):
+            completed = subprocess.run(
+                [sys.executable, "-c", script, *argv],
+                cwd=REPOSITORY_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            with self.subTest(argv=argv):
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(json.loads(completed.stdout), [])
+
     def test_gui_dispatch_is_lazy_and_rejects_unknown_arguments(self) -> None:
         with self.assertRaises(SystemExit) as raised:
             twstock_cli.main(["gui", "--unknown"])
@@ -478,8 +575,11 @@ class UnifiedCliPassthroughCharacterizationTest(unittest.TestCase):
         self.assertEqual(sum(route.classification == "STANDARD_TOP_LEVEL_WITH_DESCRIPTION" for route in ROUTES), 4)
         self.assertEqual(sum(route.classification == "NESTED_STANDARD_PASSTHROUGH" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "NESTED_CUSTOM_RUNNER" for route in ROUTES), 2)
-        self.assertEqual(sum(route.classification == "LAZY_IMPORTED_STANDARD" for route in ROUTES), 1)
+        self.assertEqual(sum(route.classification == "WRAPPER_OWNED_HELP" for route in ROUTES), 1)
         self.assertEqual(sum(route.classification == "LAZY_IMPORTED_WITH_DESCRIPTION" for route in ROUTES), 3)
+        # Every route must declare a marker, so a new command cannot be added
+        # without deciding what its --help is expected to prove.
+        self.assertTrue(all(route.help_marker for route in ROUTES))
 
         source = (REPOSITORY_ROOT / "src" / "tw_stock_tool" / "cli" / "twstock_cli.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("def _add_passthrough_parser"), 1)

@@ -80,10 +80,22 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
             environment["PYTHONPATH"],
             os.pathsep.join(expected_pythonpath),
         )
+        # Every child inherits the same UTF-8 output contract, so decoding never
+        # depends on the host ANSI code page.
+        self.assertEqual(environment["PYTHONIOENCODING"], "utf-8")
         if expected_bytecode is None:
             self.assertNotIn("PYTHONDONTWRITEBYTECODE", environment)
         else:
             self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], expected_bytecode)
+
+    def _assert_io_contract(self, kwargs: dict[str, object]) -> None:
+        self.assertTrue(kwargs["capture_output"])
+        self.assertTrue(kwargs["text"])
+        self.assertEqual(kwargs["encoding"], "utf-8")
+        self.assertFalse(kwargs["check"])
+        # Strict decoding only: `errors="replace"` would repair malformed output
+        # into passing assertions instead of surfacing the defect.
+        self.assertNotIn("errors", kwargs)
 
     def _assert_process_snapshot(
         self,
@@ -92,7 +104,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
         args: tuple[str, ...],
         expected_pythonpath: list[str],
         expected_bytecode: str | None,
-        expected_errors: str | None,
     ) -> None:
         case = case_type("runTest")
         with (
@@ -117,13 +128,7 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
         kwargs = run.call_args.kwargs
         self.assertEqual(kwargs["cwd"], module.REPOSITORY_ROOT)
         self._assert_environment(kwargs["env"], expected_pythonpath, expected_bytecode)
-        self.assertTrue(kwargs["capture_output"])
-        self.assertTrue(kwargs["text"])
-        self.assertFalse(kwargs["check"])
-        if expected_errors is None:
-            self.assertNotIn("errors", kwargs)
-        else:
-            self.assertEqual(kwargs["errors"], expected_errors)
+        self._assert_io_contract(kwargs)
 
     def test_each_local_process_helper_preserves_its_exact_invocation_snapshot(self) -> None:
         modules = (
@@ -133,7 +138,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
                 "inherited-bytecode",
-                "replace",
             ),
             (
                 "tests.test_track_c5_1_cache_manager_cli_entrypoint_exit_behavior",
@@ -141,7 +145,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
                 "1",
-                None,
             ),
             (
                 "tests.test_track_c6_1_benchmark_cli_runtime_exit_behavior",
@@ -149,7 +152,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
                 "1",
-                "replace",
             ),
             (
                 "tests.test_track_c7_1_clean_stocks_cli_runtime_exit_behavior",
@@ -157,7 +159,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
                 "1",
-                "replace",
             ),
             (
                 "tests.test_track_c8_1_stock_list_updater_cli_runtime_exit_behavior",
@@ -165,7 +166,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
                 "1",
-                "replace",
             ),
             (
                 "tests.test_track_c9_1_smoke_check_cli_runtime_exit_behavior",
@@ -173,10 +173,9 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                 ("--flag", "value"),
                 [str(REPOSITORY_ROOT), str(REPOSITORY_ROOT / "src"), INHERITED_PYTHONPATH],
                 "1",
-                "replace",
             ),
         )
-        for module_name, case_name, args, pythonpath, bytecode, errors in modules:
+        for module_name, case_name, args, pythonpath, bytecode in modules:
             with self.subTest(module=module_name):
                 module = importlib.import_module(module_name)
                 self._assert_process_snapshot(
@@ -185,7 +184,6 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                     args,
                     pythonpath,
                     bytecode,
-                    errors,
                 )
 
     def test_c5_inline_source_is_dedented_and_delegated_unchanged(self) -> None:
@@ -266,10 +264,7 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
             ],
             "1",
         )
-        self.assertTrue(kwargs["capture_output"])
-        self.assertTrue(kwargs["text"])
-        self.assertEqual(kwargs["errors"], "replace")
-        self.assertFalse(kwargs["check"])
+        self._assert_io_contract(kwargs)
 
     def test_c8_offline_sitecustomize_and_cleanup_are_local_and_exact(self) -> None:
         module = importlib.import_module(
@@ -310,6 +305,40 @@ class TrackP31SubprocessTestHelperCharacterizationTest(unittest.TestCase):
                     expected_source,
                     mode=mode,
                 )
+
+    def test_non_ascii_child_output_round_trips_independently_of_host_code_page(self) -> None:
+        """Chinese stdout/stderr must survive the helper on any host code page.
+
+        Regression for Issue #84 B4: the helper used ``text=True`` with no
+        explicit ``encoding``, so Windows decoded UTF-8 child output with the
+        locale codec (cp950). That produced mojibake or a decode failure in the
+        reader thread depending on ``errors``.
+        """
+        marker_out = "臺股工具：輸出檢查 ✓"
+        marker_err = "臺股工具：錯誤輸出 ✗"
+        script = (
+            "import sys\n"
+            f"sys.stdout.write({marker_out!a})\n"
+            f"sys.stderr.write({marker_err!a})\n"
+        )
+
+        # A legacy ANSI code page must not leak into decoding. cp950 cannot
+        # represent these bytes, so an implicit locale decode fails here.
+        hostile_environment = {"PYTHONLEGACYWINDOWSSTDIO": "1", "LC_ALL": "C", "LANG": "C"}
+        with patch.dict(os.environ, hostile_environment):
+            completed = subprocess_support.run_repo_python("-c", script)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout, marker_out)
+        self.assertEqual(completed.stderr, marker_err)
+
+    def test_helper_pins_utf8_decoding_and_child_output_encoding(self) -> None:
+        support_source = Path(subprocess_support.__file__).read_text(encoding="utf-8")
+        self.assertIn('encoding=CHILD_ENCODING', support_source)
+        self.assertIn('environment["PYTHONIOENCODING"] = CHILD_ENCODING', support_source)
+        self.assertEqual(subprocess_support.CHILD_ENCODING, "utf-8")
+        # The per-caller `errors` knob is gone: one contract, strict decoding.
+        self.assertNotIn("errors", support_source.split('"""', 2)[-1])
 
     def test_offline_sources_encode_their_intended_dependency_boundaries(self) -> None:
         self.assertIn("import requests", C8_SITE_CUSTOMIZE)

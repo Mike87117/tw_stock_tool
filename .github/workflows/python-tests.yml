@@ -99,26 +99,15 @@ jobs:
       - name: Install package from repository metadata
         run: python -m pip install .
 
-      - name: Smoke installed package and console entrypoint
-        run: |
-          python -c "import tomllib; from importlib.metadata import version; expected = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']; actual = version('tw-stock-tool'); assert actual == expected, f'installed={actual} expected={expected}'; print(actual)"
-          python -c "import tw_stock_tool"
-          python -c "from tw_stock_tool.cli import twstock_cli"
-          python -m tw_stock_tool.cli.twstock_cli --help
-          twstock --help
-          twstock run --help
-          twstock run list --help
-          twstock run inspect --help
-          twstock doctor --help
-          twstock analyze --help
-          twstock daily --help
-          twstock backtest-report --help
-          twstock parameter-sweep --help
-          twstock walk-forward --help
-          twstock daily-report-artifact --help
-          twstock backtest-artifact --help
-          twstock backtest-result-export --help
-          twstock simulated-paper-trading --help
-          twstock simulated-paper-trading-export --help
-          twstock simulated-portfolio-artifact --help
-          twstock simulated-portfolio-trading --help
+      # Runs from a temporary directory with the checkout stripped from the
+      # import path, so the repository-root compatibility shim cannot stand in
+      # for the installed distribution. Also asserts a command-specific marker
+      # in every `twstock <command> --help`, which exit status alone cannot do.
+      - name: Smoke installed package outside the repository tree
+        run: python scripts/package_smoke.py --repository-root .
+
+      # Outside the checkout, so doctor must not depend on repository-only
+      # files being present (Issue #84 B1).
+      - name: Verify twstock doctor passes against the installed distribution
+        working-directory: ${{ runner.temp }}
+        run: twstock doctor

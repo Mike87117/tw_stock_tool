@@ -34,7 +34,7 @@ class CacheManagerCliEntrypointExitCharacterizationTest(unittest.TestCase):
         return result, output.getvalue()
 
     def _run_process(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return run_repo_python(*args, errors=None)
+        return run_repo_python(*args)
 
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return self._run_process("-c", textwrap.dedent(source))
