@@ -186,6 +186,51 @@ class RecommendationApplicationIntegrationTests(unittest.TestCase):
                 with self.assertRaisesRegex(RecommendationApplicationError, "missing required"):
                     _build(self.paper_ready_artifact, _analysis(signal_df=frame))
 
+    def test_numeric_strings_fail_closed_at_adapter_boundary(self):
+        cases = (
+            ("Score", "5.0"),
+            ("Score", " 5.0 "),
+            ("Score", "1e2"),
+            ("Close", "1200.0"),
+        )
+        for column, value in cases:
+            with self.subTest(column=column, value=value):
+                frame = pd.DataFrame(
+                    {"Signal": ["BUY"], "Score": [5.0], "Close": [1200.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(SIGNAL_OBSERVED_AT)]),
+                )
+                frame[column] = value
+                with self.assertRaisesRegex(RecommendationApplicationError, "not str"):
+                    _build(self.paper_ready_artifact, _analysis(signal_df=frame))
+
+    def test_numpy_numeric_scalars_remain_supported(self):
+        frame = pd.DataFrame(
+            {
+                "Signal": ["BUY"],
+                "Score": [np.float64(5.0)],
+                "Close": [np.float32(1200.0)],
+            },
+            index=pd.DatetimeIndex([pd.Timestamp(SIGNAL_OBSERVED_AT)]),
+        )
+        evidence = _build(self.paper_ready_artifact, _analysis(signal_df=frame))
+        self.assertEqual(evidence.signal_snapshot.score, 5.0)
+        self.assertEqual(evidence.signal_snapshot.latest_close, 1200.0)
+        self.assertEqual(evidence.action, "ENTER")
+
+    def test_unsorted_signal_datetime_index_fails_closed(self):
+        frame = pd.DataFrame(
+            {
+                "Signal": ["BUY", "BUY"],
+                "Score": [5.0, 5.0],
+                "Close": [1200.0, 1100.0],
+            },
+            index=pd.DatetimeIndex(
+                [pd.Timestamp("2025-04-02T00:00:00Z"), pd.Timestamp("2020-01-01T00:00:00Z")]
+            ),
+        )
+        with self.assertRaisesRegex(RecommendationApplicationError, "monotonic increasing"):
+            _build(self.paper_ready_artifact, _analysis(signal_df=frame))
+
     def test_non_datetime_and_nat_final_indexes_fail_closed(self):
         cases = (
             pd.Index(["2025-04-02"]),
