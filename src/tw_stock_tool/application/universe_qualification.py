@@ -163,7 +163,7 @@ def _source_tree_tool_version() -> str:
         text = pyproject.read_text(encoding="utf-8")
     except OSError as exc:
         raise UniverseQualificationError("Unable to determine tw-stock-tool package version") from exc
-    match = re.search(r'(?ms)^\[project\].*?^version\s*=\s*["\']([^"\']+)["\']', text)
+    match = re.search(r'(?ms)^\[project\].*?^version\s*=\s*["\']([^"\']+)[^"\']*["\']', text)
     if match is None or not match.group(1).strip():
         raise UniverseQualificationError("Unable to determine tw-stock-tool package version")
     return match.group(1)
@@ -591,7 +591,7 @@ class UniverseQualificationRequest:
     @property
     def resolved_stress_tax_rate(self) -> float:
         if self.stress_tax_rate is not None:
-            return float(self.tax_rate * 2 if self.tax_rate > 0 else 1e-9)
+            return float(self.stress_tax_rate)
         return float(self.tax_rate * 2 if self.tax_rate > 0 else 1e-9)
 
 
