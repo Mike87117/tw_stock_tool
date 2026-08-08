@@ -143,6 +143,8 @@ def _same_frozen_json(left: Any, right: Any) -> bool:
             _same_frozen_json(left_item, right_item)
             for left_item, right_item in zip(left, right)
         )
+    if type(left) is float:
+        return left == right and math.copysign(1.0, left) == math.copysign(1.0, right)
     return left == right
 
 
