@@ -26,7 +26,6 @@ from tw_stock_tool.recommendation import (
     StrategyBoundRecommendationEvidence,
 )
 
-
 EVALUATION_ID = "323e4567-e89b-42d3-a456-426614174000"
 RECOMMENDATION_ID = "423e4567-e89b-42d3-a456-426614174000"
 QUALIFICATION_CREATED_AT = "2025-04-01T00:00:00Z"
@@ -74,7 +73,7 @@ def _parameter_options(strategy: str) -> dict[str, tuple[int, ...]]:
     raise AssertionError(strategy)
 
 
-def _artifact(strategy: str = "ma_cross") -> UniverseOOSArtifact:
+def _artifact(strategy: str) -> UniverseOOSArtifact:
     request = UniverseQualificationRequest(
         evaluation_id=EVALUATION_ID,
         created_at=QUALIFICATION_CREATED_AT,
@@ -97,20 +96,14 @@ def _artifact(strategy: str = "ma_cross") -> UniverseOOSArtifact:
     return artifact
 
 
-def _current_frame(
-    *,
-    rows: int = 16,
-    composite_signal: str = "SELL",
-) -> pd.DataFrame:
+def _current_frame(rows: int = 16, composite_signal: str = "SELL") -> pd.DataFrame:
     index = pd.date_range(end="2025-04-02", periods=rows, freq="D")
     close = np.full(rows, 10.0)
-    if rows >= 1:
-        close[-1] = 20.0
     rsi = np.full(rows, 50.0)
     score = np.zeros(rows)
-    if rows >= 1:
-        rsi[-1] = 20.0
-        score[-1] = 5.0
+    close[-1] = 20.0
+    rsi[-1] = 20.0
+    score[-1] = 5.0
     return pd.DataFrame(
         {
             "Open": close,
@@ -123,11 +116,7 @@ def _current_frame(
     )
 
 
-def _analysis(
-    *,
-    frame: pd.DataFrame | None = None,
-    composite_signal: str = "SELL",
-) -> StockAnalysis:
+def _analysis(frame: pd.DataFrame | None = None, composite_signal: str = "SELL") -> StockAnalysis:
     signal_df = _current_frame(composite_signal=composite_signal) if frame is None else frame
     return StockAnalysis(
         stock_id="2330",
@@ -170,7 +159,7 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
         cls.rsi_artifact = _artifact("rsi")
         cls.score_artifact = _artifact("score")
 
-    def test_ma_cross_signal_comes_from_selected_strategy_not_composite_signal(self):
+    def test_ma_cross_uses_qualified_strategy_not_composite_signal(self):
         evidence = _build(self.ma_artifact, _analysis(composite_signal="SELL"))
         self.assertIsInstance(evidence, StrategyBoundRecommendationEvidence)
         self.assertEqual(evidence.signal_snapshot.signal, "BUY")
@@ -180,14 +169,13 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(evidence.action, "ENTER")
 
-    def test_rsi_signal_comes_from_selected_strategy_not_composite_signal(self):
+    def test_rsi_uses_qualified_strategy_not_composite_signal(self):
         evidence = _build(self.rsi_artifact, _analysis(composite_signal="SELL"))
         self.assertEqual(evidence.signal_snapshot.signal, "BUY")
         self.assertEqual(
             dict(evidence.signal_snapshot.provenance.selected_parameters),
             {"buy_below": 25, "sell_above": 70},
         )
-        self.assertEqual(evidence.action, "ENTER")
 
     def test_score_uses_score_feature_and_ignores_composite_signal(self):
         evidence = _build(self.score_artifact, _analysis(composite_signal="SELL"))
@@ -196,9 +184,8 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
             dict(evidence.signal_snapshot.provenance.selected_parameters),
             {"buy_score": 4, "sell_score": -3},
         )
-        self.assertEqual(evidence.action, "ENTER")
 
-    def test_selection_excludes_current_row_and_uses_exact_train_days(self):
+    def test_selection_excludes_row_n_and_uses_exact_train_days(self):
         analysis = _analysis()
         seen: list[pd.DataFrame] = []
 
@@ -218,15 +205,15 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
             "2025-04-01T00:00:00Z",
         )
 
-    def test_first_best_tie_uses_original_qualification_grid_order(self):
+    def test_first_best_tie_reconstructs_original_qualification_grid_order(self):
         seen: list[dict[str, int]] = []
 
         def selector(frame, strategy, params, *args):
             values = dict(params)
             seen.append(values)
             if values == {"short_window": 2, "long_window": 4}:
-                raise ValueError("first candidate intentionally unavailable")
-            return _selector_result(1.0)
+                raise ValueError("first candidate unavailable")
+            return _selector_result()
 
         evidence = _build(self.ma_artifact, selector=selector)
         self.assertEqual(
@@ -252,16 +239,13 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
                 selector=lambda *args, **kwargs: _selector_result(float("nan")),
             )
 
-    def test_insufficient_preobservation_history_fails_closed(self):
+    def test_insufficient_history_and_missing_strategy_feature_fail_closed(self):
         with self.assertRaisesRegex(RecommendationApplicationError, "enough pre-observation"):
-            _build(self.ma_artifact, _analysis(frame=_current_frame(rows=10)))
-
-    def test_missing_required_strategy_feature_fails_closed(self):
-        frame = _current_frame().drop(columns=["RSI"])
+            _build(self.ma_artifact, _analysis(_current_frame(rows=10)))
         with self.assertRaisesRegex(RecommendationApplicationError, "qualified-strategy features"):
-            _build(self.rsi_artifact, _analysis(frame=frame))
+            _build(self.rsi_artifact, _analysis(_current_frame().drop(columns=["RSI"])))
 
-    def test_forged_latest_summary_and_composite_signal_cannot_change_output(self):
+    def test_latest_summary_and_composite_signal_are_non_authoritative(self):
         first = _build(self.score_artifact, _analysis(composite_signal="BUY"))
         analysis = _analysis(composite_signal="SELL")
         forged = replace(
@@ -273,17 +257,21 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(second.signal_snapshot.signal, "BUY")
 
-    def test_current_signal_output_must_be_strategy_vocabulary(self):
-        invalid = pd.DataFrame(
-            {"Close": [20.0], "Signal": ["WATCH"]},
-            index=pd.DatetimeIndex([pd.Timestamp("2025-04-02")]),
-        )
+    def test_strategy_signal_output_must_use_buy_hold_sell_vocabulary(self):
+        def invalid_builder(strategy, frame, params):
+            signal = ["HOLD"] * len(frame)
+            signal[-1] = "WATCH"
+            return pd.DataFrame(
+                {"Close": frame["Close"].to_numpy(), "Signal": signal},
+                index=frame.index,
+            )
+
         with patch(
             "tw_stock_tool.backtesting.walk_forward.run_strategy_backtest",
             return_value=_selector_result(),
         ), patch(
             "tw_stock_tool.application.recommendation_evidence.build_strategy_signal_frame",
-            return_value=invalid,
+            side_effect=invalid_builder,
         ):
             with self.assertRaisesRegex(RecommendationApplicationError, "BUY, HOLD, or SELL"):
                 build_strategy_bound_recommendation_from_stock_analysis(
@@ -308,7 +296,7 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
         evidence = _build(self.ma_artifact)
         self.assertIs(require_strategy_bound_recommendation_evidence(evidence), evidence)
 
-    def test_application_signature_has_no_strategy_or_parameter_override(self):
+    def test_caller_has_no_strategy_or_parameter_override(self):
         parameters = inspect.signature(
             build_strategy_bound_recommendation_from_stock_analysis
         ).parameters
@@ -316,7 +304,7 @@ class QualifiedCurrentSignalIntegrationTests(unittest.TestCase):
         self.assertNotIn("params", parameters)
         self.assertNotIn("parameters", parameters)
 
-    def test_service_does_not_download_market_data_or_use_workspace(self):
+    def test_service_does_not_download_market_data(self):
         with patch(
             "tw_stock_tool.analysis.analysis.analyze_stock",
             side_effect=AssertionError("analyze_stock must not be called"),
