@@ -173,13 +173,9 @@ def deserialize_recommendation_evidence(
             f"unsupported artifact type {root['artifact_type']!r}",
         )
 
-    qualification_raw = _dict(
-        root["qualification"],
-        "$.qualification",
-        tuple(root["qualification"].keys())
-        if type(root["qualification"]) is dict
-        else (),
-    )
+    qualification_raw = root["qualification"]
+    if type(qualification_raw) is not dict:
+        _fail("$.qualification", "expected an exact dictionary")
     try:
         qualification = deserialize_strategy_qualification_result(
             qualification_raw
