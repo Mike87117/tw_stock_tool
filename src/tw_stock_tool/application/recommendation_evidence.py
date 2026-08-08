@@ -68,6 +68,8 @@ def _canonical_timestamp(value: Any, name: str) -> str:
 def _finite_number(value: Any, name: str) -> float:
     if pd.api.types.is_bool(value):
         raise RecommendationApplicationError(f"{name} must be numeric, not bool")
+    if isinstance(value, str):
+        raise RecommendationApplicationError(f"{name} must be numeric, not str")
     try:
         result = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
@@ -144,6 +146,10 @@ def _signal_snapshot(
     if not isinstance(signal_df.index, pd.DatetimeIndex):
         raise RecommendationApplicationError(
             "analysis.signal_df must use a DatetimeIndex"
+        )
+    if not signal_df.index.is_monotonic_increasing:
+        raise RecommendationApplicationError(
+            "analysis.signal_df DatetimeIndex must be monotonic increasing"
         )
 
     observed_at = _canonical_timestamp(signal_df.index[-1], "signal observed_at")
