@@ -55,9 +55,15 @@ def _flat_benchmark(size: int = 70) -> pd.DataFrame:
 
 
 def _qualification_backtest(frame, strategy, params, *args):
+    preferred = {
+        "ma_cross": {"short_window": 2, "long_window": 4},
+        "rsi": {"buy_below": 25, "sell_above": 70},
+        "score": {"buy_score": 4, "sell_score": -3},
+    }[strategy]
+    value = 10.0 if dict(params) == preferred else 8.0
     return {
-        "Total Return %": 10.0,
-        "Sharpe Ratio": 10.0,
+        "Total Return %": value,
+        "Sharpe Ratio": value,
         "Trade Count": 1,
         "Max Drawdown %": 5.0,
     }
@@ -92,7 +98,10 @@ def _artifact(strategy: str) -> UniverseOOSArtifact:
         result = evaluate_universe_qualification(request)
     artifact = build_universe_oos_evidence(result)
     if artifact.qualification.decision.state != "PAPER_READY":
-        raise AssertionError("test fixture must produce PAPER_READY qualification")
+        raise AssertionError(
+            "test fixture must produce PAPER_READY qualification: "
+            f"{artifact.qualification.decision.reason_codes}"
+        )
     return artifact
 
 
