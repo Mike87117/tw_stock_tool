@@ -66,7 +66,7 @@ def _canonical_timestamp(value: Any, name: str) -> str:
 
 
 def _finite_number(value: Any, name: str) -> float:
-    if isinstance(value, (bool, pd.BooleanDtype)) or type(value) is bool:
+    if pd.api.types.is_bool(value):
         raise RecommendationApplicationError(f"{name} must be numeric, not bool")
     try:
         result = float(value)
