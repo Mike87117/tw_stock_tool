@@ -25,8 +25,12 @@ return a correct verdict for an installed distribution with no checkout.
 | Python version | yes | yes |
 | Third-party imports | yes | yes |
 | Writable cache/output directories | yes | yes |
-| `Package version` | version from `importlib.metadata` | version from `pyproject.toml` |
+| `Package version` | version from `importlib.metadata` | installed metadata when available; otherwise version from `pyproject.toml` |
 | `requirements.txt` | not emitted | resolved from the repository root |
+
+`check_package_version()` prefers installed distribution metadata whenever it is
+available. In a source checkout without installed metadata, it falls back to the
+version declared in `pyproject.toml`.
 
 `find_repository_root()` identifies a checkout by requiring **both** layout
 markers (`pyproject.toml` next to `src/tw_stock_tool`) and returns `None`
