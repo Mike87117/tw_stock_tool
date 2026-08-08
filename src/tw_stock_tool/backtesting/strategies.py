@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import pandas as pd
 
 
@@ -80,6 +82,26 @@ def rsi_strategy(
     signal[df["RSI"] < buy_below] = "BUY"
     signal[df["RSI"] > sell_above] = "SELL"
     return _with_signal(df, signal)
+
+
+def build_strategy_signal_frame(
+    strategy: str,
+    df: pd.DataFrame,
+    params: Mapping[str, int],
+) -> pd.DataFrame:
+    """Build BUY/HOLD/SELL signals through the canonical strategy formulas."""
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("strategy signal input must be a pandas DataFrame.")
+    if not isinstance(params, Mapping):
+        raise ValueError("strategy parameters must be a mapping.")
+    values = dict(params)
+    if strategy == "ma_cross":
+        return ma_cross_strategy(df, **values)
+    if strategy == "rsi":
+        return rsi_strategy(df, **values)
+    if strategy == "score":
+        return score_strategy(df, **values)
+    raise ValueError(f"unsupported strategy: {strategy}.")
 
 
 STRATEGIES = {
