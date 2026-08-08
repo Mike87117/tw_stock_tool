@@ -6,6 +6,7 @@ import numpy as np
 
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.backtesting.serialization import (
+    BACKTEST_RESULT_SCHEMA_VERSION,
     serialize_backtest_result,
     deserialize_backtest_result,
     export_backtest_result_json,
@@ -111,7 +112,7 @@ class TestBacktestResultSerializationRoundtrip(unittest.TestCase):
     def test_backtest_result_artifact_dict_roundtrip(self):
         data = serialize_backtest_result(self.backtest_result)
         
-        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["schema_version"], BACKTEST_RESULT_SCHEMA_VERSION)
         self.assertEqual(data["result_type"], "backtest_result")
         self.assertCountEqual(
             list(data.keys()),

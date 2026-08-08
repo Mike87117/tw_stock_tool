@@ -5,6 +5,8 @@ import numpy as np
 
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.backtesting.serialization import (
+    BACKTEST_RESULT_SCHEMA_VERSION,
+    SUPPORTED_BACKTEST_RESULT_SCHEMA_VERSIONS,
     BacktestResultSerializationError,
     serialize_backtest_result,
     deserialize_backtest_result,
@@ -129,10 +131,21 @@ class TestBacktestResultSerialization(unittest.TestCase):
             serialize_backtest_result(self.backtest_result)
 
     def test_unsupported_schema_version_rejected(self):
-        data = serialize_backtest_result(self.backtest_result)
-        data["schema_version"] = 2
-        with self.assertRaisesRegex(BacktestResultSerializationError, "Unsupported schema_version"):
-            deserialize_backtest_result(data)
+        # 2 is the current version since Issue #84 B3, so an unsupported
+        # version now has to be one that was never published.
+        for unsupported in (0, 3, 999, "1", None, True):
+            with self.subTest(schema_version=unsupported):
+                data = serialize_backtest_result(self.backtest_result)
+                data["schema_version"] = unsupported
+                with self.assertRaisesRegex(BacktestResultSerializationError, "Unsupported schema_version"):
+                    deserialize_backtest_result(data)
+
+    def test_supported_schema_versions_are_accepted(self):
+        for supported in SUPPORTED_BACKTEST_RESULT_SCHEMA_VERSIONS:
+            with self.subTest(schema_version=supported):
+                data = serialize_backtest_result(self.backtest_result)
+                data["schema_version"] = supported
+                self.assertEqual(deserialize_backtest_result(data).profit_factor, 0.0)
 
     def test_unsupported_result_type_rejected(self):
         data = serialize_backtest_result(self.backtest_result)
