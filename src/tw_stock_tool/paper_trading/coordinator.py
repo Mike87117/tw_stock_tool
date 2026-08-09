@@ -28,6 +28,9 @@ def run_chronological_multi_symbol_simulated_paper_trading(
     ] | None = None,
     strategy: str | None = None,
     strategy_metadata: Mapping[str, Any] | None = None,
+    _after_timestamp: Callable[
+        [Any, SimulatedPaperTradingRuntimeState, Mapping[str, Any]], None
+    ] | None = None,
 ) -> SimulatedPaperTradingRuntimeState:
     if not isinstance(dataframes, Mapping):
         raise TypeError("dataframes must be a Mapping.")
@@ -83,6 +86,8 @@ def run_chronological_multi_symbol_simulated_paper_trading(
         raise TypeError("guard_decision must be a SimulatedPaperTradingGuardDecision or None.")
     if guard_decision_provider is not None and not callable(guard_decision_provider):
         raise TypeError("guard_decision_provider must be callable or None.")
+    if _after_timestamp is not None and not callable(_after_timestamp):
+        raise TypeError("_after_timestamp must be callable or None.")
 
     timeline_set = set()
     for symbol, df in dataframes.items():
@@ -157,5 +162,15 @@ def run_chronological_multi_symbol_simulated_paper_trading(
 
             # Advance cursor
             cursors[symbol] += 1
+
+        if _after_timestamp is not None:
+            _after_timestamp(
+                t,
+                runtime_state,
+                {
+                    symbol: dataframes[symbol].iloc[cursors[symbol] - 1]["Close"]
+                    for symbol in symbols_at_t
+                },
+            )
 
     return runtime_state
