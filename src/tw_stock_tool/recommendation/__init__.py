@@ -35,6 +35,9 @@ from tw_stock_tool.recommendation.strategy_bound import (
     load_strategy_bound_recommendation_evidence_json,
     serialize_strategy_bound_recommendation_evidence,
 )
+from tw_stock_tool.recommendation.guards import (
+    require_strategy_bound_recommendation_evidence,
+)
 from tw_stock_tool.recommendation.artifacts import (
     RecommendationArtifact,
     RecommendationArtifactSerializationError,
@@ -72,6 +75,7 @@ __all__ = [
     "load_recommendation_artifact_json",
     "load_recommendation_evidence_json",
     "load_strategy_bound_recommendation_evidence_json",
+    "require_strategy_bound_recommendation_evidence",
     "serialize_recommendation_evidence",
     "serialize_strategy_bound_recommendation_evidence",
 ]
