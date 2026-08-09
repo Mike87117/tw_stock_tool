@@ -192,6 +192,35 @@ class ForwardDecisionLedgerTests(unittest.TestCase):
             ledger_id=LEDGER_ID,
             created_at="2025-04-02T00:00:00Z",
         )
+    def _poisoned_ledger(
+        self,
+        *,
+        recommendation_id,
+        observed_at,
+        symbol="2303",
+        selected_parameters=None,
+    ):
+        return replace(
+            self.empty,
+            decisions=(
+                ForwardDecisionRecord(
+                    recommendation_id=recommendation_id,
+                    recommendation_sha256="b" * 64,
+                    observed_at=observed_at,
+                    generated_at=_shift(observed_at, 1),
+                    symbol=symbol,
+                    signal="BUY",
+                    action="ENTER",
+                    qualification_evaluation_id=self.activation.qualification_evaluation_id,
+                    strategy_id=self.activation.strategy_id,
+                    selected_parameters=(
+                        self.source.resolved_configuration.parameter_grid[0]
+                        if selected_parameters is None
+                        else selected_parameters
+                    ),
+                ),
+            ),
+        )
 
     def test_create_empty_ledger_from_real_activation_and_source(self):
         self.assertEqual(self.empty.decisions, ())
@@ -257,6 +286,55 @@ class ForwardDecisionLedgerTests(unittest.TestCase):
             append_forward_decision(
                 self.empty, self.activation, self.source, evidence
             )
+
+    def test_poisoned_history_foreign_symbol_rejects(self):
+        ledger = self._poisoned_ledger(
+            recommendation_id=RECOMMENDATION_IDS[22],
+            observed_at=_shift(self.activation.qualification_cutoff, 1),
+            symbol="9999",
+        )
+        evidence = _evidence(
+            self.source,
+            recommendation_id=RECOMMENDATION_IDS[23],
+            observed_at=_shift(self.activation.qualification_cutoff, 2),
+        )
+        with self.assertRaisesRegex(ForwardDecisionLedgerError, "existing decision symbol"):
+            append_forward_decision(ledger, self.activation, self.source, evidence)
+
+    def test_poisoned_history_at_or_before_cutoff_rejects(self):
+        for offset, recommendation_id in ((0, RECOMMENDATION_IDS[24]), (-1, RECOMMENDATION_IDS[25])):
+            with self.subTest(offset=offset):
+                ledger = self._poisoned_ledger(
+                    recommendation_id=recommendation_id,
+                    observed_at=_shift(self.activation.qualification_cutoff, offset),
+                )
+                evidence = _evidence(
+                    self.source,
+                    recommendation_id=RECOMMENDATION_IDS[26],
+                    observed_at=_shift(self.activation.qualification_cutoff, 1),
+                )
+                with self.assertRaisesRegex(ForwardDecisionLedgerError, "existing decision observed_at"):
+                    append_forward_decision(ledger, self.activation, self.source, evidence)
+
+    def test_poisoned_history_out_of_grid_parameters_rejects(self):
+        grid = self.source.resolved_configuration.parameter_grid
+        invalid_parameters = dict(grid[0])
+        parameter_name = next(iter(invalid_parameters))
+        invalid_parameters[parameter_name] = max(
+            parameters[parameter_name] for parameters in grid
+        ) + 1
+        ledger = self._poisoned_ledger(
+            recommendation_id=RECOMMENDATION_IDS[27],
+            observed_at=_shift(self.activation.qualification_cutoff, 1),
+            selected_parameters=invalid_parameters,
+        )
+        evidence = _evidence(
+            self.source,
+            recommendation_id=RECOMMENDATION_IDS[28],
+            observed_at=_shift(self.activation.qualification_cutoff, 2),
+        )
+        with self.assertRaisesRegex(ForwardDecisionLedgerError, "parameter grid"):
+            append_forward_decision(ledger, self.activation, self.source, evidence)
 
     def test_strategy_mismatch_rejects(self):
         evidence = _evidence(self.rsi_source)
