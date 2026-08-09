@@ -12,6 +12,19 @@ from tw_stock_tool.forward_paper.decision_serialization import (
     load_forward_decision_ledger_json,
     serialize_forward_decision_ledger,
 )
+from tw_stock_tool.forward_paper.execution_models import (
+    ForwardExecutionDecisionEvidence,
+    ForwardExecutionEvidence,
+    ForwardExecutionEvidenceModelError,
+    ForwardExecutionOutcome,
+)
+from tw_stock_tool.forward_paper.execution_serialization import (
+    deserialize_forward_execution_evidence,
+    export_forward_execution_evidence_json,
+    load_forward_execution_evidence_json,
+    serialize_forward_execution_evidence,
+    ForwardExecutionEvidenceSerializationError,
+)
 from tw_stock_tool.forward_paper.models import (
     FORWARD_PAPER_ACTIVATION_ARTIFACT_TYPE,
     FORWARD_PAPER_ACTIVATION_SCHEMA_VERSION,
@@ -34,6 +47,11 @@ __all__ = [
     "FORWARD_DECISION_LEDGER_SCHEMA_VERSION",
     "ForwardDecisionLedger",
     "ForwardDecisionRecord",
+    "ForwardExecutionDecisionEvidence",
+    "ForwardExecutionEvidence",
+    "ForwardExecutionEvidenceModelError",
+    "ForwardExecutionEvidenceSerializationError",
+    "ForwardExecutionOutcome",
     "FORWARD_PAPER_ACTIVATION_ARTIFACT_TYPE",
     "FORWARD_PAPER_ACTIVATION_SCHEMA_VERSION",
     "QUALIFICATION_ARTIFACT_TYPE",
@@ -42,11 +60,15 @@ __all__ = [
     "ForwardPaperModelError",
     "ForwardPaperSerializationError",
     "deserialize_forward_decision_ledger",
+    "deserialize_forward_execution_evidence",
     "deserialize_forward_paper_activation",
     "export_forward_decision_ledger_json",
+    "export_forward_execution_evidence_json",
     "export_forward_paper_activation_json",
     "load_forward_decision_ledger_json",
+    "load_forward_execution_evidence_json",
     "load_forward_paper_activation_json",
     "serialize_forward_decision_ledger",
+    "serialize_forward_execution_evidence",
     "serialize_forward_paper_activation",
 ]
