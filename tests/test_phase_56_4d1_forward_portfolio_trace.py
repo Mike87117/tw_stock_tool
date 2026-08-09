@@ -381,6 +381,9 @@ class ForwardPortfolioTraceTests(unittest.TestCase):
                 self._ledger(evidence),
                 bundle.portfolio_result,
                 forged,
+                expected_portfolio_trace_sha256=(
+                    bundle.portfolio_trace_sha256
+                ),
             )
 
     def test_trace_identity_substitution_rejects(self):
@@ -397,7 +400,106 @@ class ForwardPortfolioTraceTests(unittest.TestCase):
                 self._ledger(evidence),
                 bundle.portfolio_result,
                 forged,
+                expected_portfolio_trace_sha256=(
+                    bundle.portfolio_trace_sha256
+                ),
             )
+
+    def test_nonfinal_cash_equity_forgery_rejects(self):
+        evidence = self._evidence_at(28)
+        bundle = self._bundle(evidence)
+        first = bundle.portfolio_trace.observations[0]
+        forged_first = replace(
+            first,
+            cash=first.cash + 1000.0,
+            total_equity=first.total_equity + 1000.0,
+        )
+        forged = replace(
+            bundle.portfolio_trace,
+            observations=(
+                forged_first,
+                *bundle.portfolio_trace.observations[1:],
+            ),
+        )
+        with self.assertRaises(ForwardPaperExecutionError):
+            validate_forward_portfolio_trace(
+                self.fixture.activation,
+                self.fixture.source,
+                self._ledger(evidence),
+                bundle.portfolio_result,
+                forged,
+                expected_portfolio_trace_sha256=(
+                    bundle.portfolio_trace_sha256
+                ),
+            )
+
+    def test_nonfinal_position_mark_forgery_rejects(self):
+        evidence = self._evidence_at(29)
+        bundle = self._bundle(
+            evidence,
+            frames={"2303": self._frame(offsets=(1, 2, 3))},
+        )
+        middle = bundle.portfolio_trace.observations[1]
+        position = middle.positions[0]
+        forged_position = replace(
+            position,
+            mark_price=position.mark_price + 1.0,
+            market_value=position.market_value + 1.0,
+        )
+        forged_middle = replace(
+            middle,
+            total_market_value=middle.total_market_value + 1.0,
+            total_equity=middle.total_equity + 1.0,
+            positions=(forged_position,),
+        )
+        forged = replace(
+            bundle.portfolio_trace,
+            observations=(
+                bundle.portfolio_trace.observations[0],
+                forged_middle,
+                bundle.portfolio_trace.observations[2],
+            ),
+        )
+        with self.assertRaises(ForwardPaperExecutionError):
+            validate_forward_portfolio_trace(
+                self.fixture.activation,
+                self.fixture.source,
+                self._ledger(evidence),
+                bundle.portfolio_result,
+                forged,
+                expected_portfolio_trace_sha256=(
+                    bundle.portfolio_trace_sha256
+                ),
+            )
+
+    def test_genuine_bundle_trace_digest_is_deterministic_and_valid(self):
+        evidence = self._evidence_at(0)
+        ledger = self._ledger(evidence)
+        frames = {"2303": self._frame(offsets=(1, 2, 3))}
+        first = self._bundle(evidence, ledger=ledger, frames=frames)
+        second = self._bundle(evidence, ledger=ledger, frames=frames)
+        expected = hashlib.sha256(
+            export_forward_portfolio_trace_json(
+                first.portfolio_trace
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(first.portfolio_trace_sha256, expected)
+        self.assertEqual(
+            first.portfolio_trace_sha256, second.portfolio_trace_sha256
+        )
+        self.assertEqual(
+            validate_forward_portfolio_trace(
+                self.fixture.activation,
+                self.fixture.source,
+                ledger,
+                first.portfolio_result,
+                first.portfolio_trace,
+                expected_portfolio_trace_sha256=(
+                    first.portfolio_trace_sha256
+                ),
+            ),
+            first.portfolio_trace,
+        )
 
     def test_forged_terminal_observation_rejects_bundle(self):
         evidence = self._evidence_at(28)
@@ -414,7 +516,9 @@ class ForwardPortfolioTraceTests(unittest.TestCase):
         )
         with self.assertRaises(ForwardPaperExecutionError):
             ForwardPaperExecutionReplayBundle(
-                bundle.portfolio_result, forged_trace
+                bundle.portfolio_result,
+                forged_trace,
+                bundle.portfolio_trace_sha256,
             )
 
     def test_nonfinite_boolean_and_negative_trace_numbers_reject(self):

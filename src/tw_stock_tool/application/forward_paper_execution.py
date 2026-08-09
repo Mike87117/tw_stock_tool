@@ -83,6 +83,41 @@ def _trusted_portfolio_result(
     return loaded, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _trusted_portfolio_trace(
+    trace: ForwardPortfolioTrace,
+) -> tuple[ForwardPortfolioTrace, str]:
+    if type(trace) is not ForwardPortfolioTrace:
+        raise ForwardPaperExecutionError(
+            "portfolio_trace must be an exact ForwardPortfolioTrace"
+        )
+    try:
+        canonical = export_forward_portfolio_trace_json(trace)
+        loaded = load_forward_portfolio_trace_json(canonical)
+        if export_forward_portfolio_trace_json(loaded) != canonical:
+            raise ForwardPaperExecutionError(
+                "portfolio trace canonical round-trip drift"
+            )
+    except ForwardPaperExecutionError:
+        raise
+    except Exception as exc:
+        raise ForwardPaperExecutionError(
+            f"portfolio trace canonical validation failed: {exc}"
+        ) from exc
+    return loaded, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _expected_sha256(name: str, value: object) -> str:
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ForwardPaperExecutionError(
+            f"{name} must be a lowercase SHA-256"
+        )
+    return value
+
+
 def _validate_trace_result_pair(
     result: SimulatedPortfolioTradingResult,
     trace: ForwardPortfolioTrace,
@@ -134,8 +169,17 @@ def _validate_trace_result_pair(
 class ForwardPaperExecutionReplayBundle:
     portfolio_result: SimulatedPortfolioTradingResult
     portfolio_trace: ForwardPortfolioTrace
+    portfolio_trace_sha256: str
 
     def __post_init__(self) -> None:
+        _trusted_trace, actual_sha256 = _trusted_portfolio_trace(
+            self.portfolio_trace
+        )
+        expected_sha256 = _expected_sha256(
+            "portfolio_trace_sha256", self.portfolio_trace_sha256
+        )
+        if actual_sha256 != expected_sha256:
+            raise ForwardPaperExecutionError("portfolio trace SHA mismatch")
         _validate_trace_result_pair(self.portfolio_result, self.portfolio_trace)
 
 
@@ -621,14 +665,18 @@ def _run_forward_paper_execution_replay(
         portfolio_result_sha256=result_sha256,
         observations=tuple(collector.observations),
     )
+    _canonical_trace, trace_sha256 = _trusted_portfolio_trace(trace)
     trusted_trace = validate_forward_portfolio_trace(
         trusted_activation,
         trusted_source,
         trusted_ledger,
         result,
         trace,
+        expected_portfolio_trace_sha256=trace_sha256,
     )
-    return ForwardPaperExecutionReplayBundle(result, trusted_trace)
+    return ForwardPaperExecutionReplayBundle(
+        result, trusted_trace, trace_sha256
+    )
 
 
 def validate_forward_portfolio_trace(
@@ -637,25 +685,21 @@ def validate_forward_portfolio_trace(
     ledger: ForwardDecisionLedger,
     portfolio_result: SimulatedPortfolioTradingResult,
     portfolio_trace: ForwardPortfolioTrace,
+    *,
+    expected_portfolio_trace_sha256: str,
 ) -> ForwardPortfolioTrace:
     trusted_activation, _trusted_source, trusted_ledger, ledger_sha256 = (
         _validated_trust_chain(activation, qualification_artifact, ledger)
     )
-    if type(portfolio_trace) is not ForwardPortfolioTrace:
-        raise ForwardPaperExecutionError(
-            "portfolio_trace must be an exact ForwardPortfolioTrace"
-        )
-    try:
-        canonical = export_forward_portfolio_trace_json(portfolio_trace)
-        trusted_trace = load_forward_portfolio_trace_json(canonical)
-        if export_forward_portfolio_trace_json(trusted_trace) != canonical:
-            raise ForwardPaperExecutionError("portfolio trace canonical round-trip drift")
-    except ForwardPaperExecutionError:
-        raise
-    except Exception as exc:
-        raise ForwardPaperExecutionError(
-            f"portfolio trace canonical validation failed: {exc}"
-        ) from exc
+    trusted_trace, actual_trace_sha256 = _trusted_portfolio_trace(
+        portfolio_trace
+    )
+    expected_trace_sha256 = _expected_sha256(
+        "expected_portfolio_trace_sha256",
+        expected_portfolio_trace_sha256,
+    )
+    if actual_trace_sha256 != expected_trace_sha256:
+        raise ForwardPaperExecutionError("portfolio trace SHA mismatch")
     expected_identity = (
         trusted_activation.activation_id,
         trusted_activation.qualification_evaluation_id,
