@@ -114,6 +114,45 @@ class ForwardExecutionEvidenceTests(unittest.TestCase):
         with self.assertRaises(ForwardExecutionEvidenceError):
             self._build(evidence, forged)
 
+    def test_pending_and_fill_for_same_order_rejects(self):
+        evidence = self._evidence_at(22)
+        from test_phase_56_4c1_forward_paper_execution import ForwardPaperExecutionReplayTests
+
+        fixture = ForwardPaperExecutionReplayTests("test_valid_bundle_executes_through_existing_facade")
+        fixture.setUpClass()
+        ledger = self._ledger(evidence)
+        pending_result = fixture._run(ledger, (evidence,), {"2303": fixture._frame(offsets=(1,))})
+        filled_result = fixture._run(ledger, (evidence,))
+        forged = replace(
+            pending_result,
+            fills=(filled_result.fills[0],),
+            fill_count=1,
+        )
+        with self.assertRaises(ForwardExecutionEvidenceError):
+            self._build(evidence, forged, ledger)
+
+    def test_allowed_risk_event_requires_true_flag(self):
+        evidence = self._evidence_at(23)
+        result = self._result(evidence, max_order_notional=1000.0)
+        forged_risk_event = replace(result.audit_log[1], risk_allowed=False)
+        forged = replace(
+            result,
+            audit_log=(result.audit_log[0], forged_risk_event, *result.audit_log[2:]),
+        )
+        with self.assertRaises(ForwardExecutionEvidenceError):
+            self._build(evidence, forged)
+
+    def test_unguarded_accepted_event_requires_none_risk_flag(self):
+        evidence = self._evidence_at(24)
+        result = self._result(evidence)
+        forged_accepted_event = replace(result.audit_log[1], risk_allowed=True)
+        forged = replace(
+            result,
+            audit_log=(result.audit_log[0], forged_accepted_event, *result.audit_log[2:]),
+        )
+        with self.assertRaises(ForwardExecutionEvidenceError):
+            self._build(evidence, forged)
+
     def test_invalid_open_result_maps_skip(self):
         evidence = self._evidence_at(3)
         from test_phase_56_4c1_forward_paper_execution import ForwardPaperExecutionReplayTests

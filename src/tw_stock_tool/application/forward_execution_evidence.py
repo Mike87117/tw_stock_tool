@@ -183,6 +183,9 @@ def _validate_result_identity(
         _same(_time(item.signal_time, f"pending_orders[{index}].signal_time"), _time(order.signal_time, "order.signal_time"), f"pending_orders[{index}].signal_time")
         pending[item.order_id] = item
 
+    if seen_fill_ids & seen_pending_ids:
+        _fail("pending and filled order IDs must be mutually exclusive")
+
     sequences = tuple(record.sequence for record in result.audit_log)
     if sequences != tuple(range(1, len(result.audit_log) + 1)):
         _fail("audit sequence must be positive contiguous ascending")
@@ -235,8 +238,15 @@ def _validate_result_identity(
                 _fail("accepted lifecycle missing accepted order/event")
             if accepted_event[0].status is not SimulatedTradeStatus.PENDING_NEXT_BAR_OPEN:
                 _fail("accepted lifecycle status mismatch")
-            if risk_events and risk_events[0].status is not SimulatedTradeStatus.RISK_ALLOWED:
-                _fail("accepted lifecycle risk status mismatch")
+            if risk_events:
+                if (
+                    risk_events[0].status is not SimulatedTradeStatus.RISK_ALLOWED
+                    or risk_events[0].risk_allowed is not True
+                    or accepted_event[0].risk_allowed is not True
+                ):
+                    _fail("accepted lifecycle risk state mismatch")
+            elif accepted_event[0].risk_allowed is not None:
+                _fail("unguarded accepted lifecycle risk_allowed must be None")
             if terminal and pending.get(order_id) is not None:
                 _fail("pending order cannot also have terminal fill event")
             if not terminal and pending.get(order_id) is None:
