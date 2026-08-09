@@ -220,13 +220,14 @@ def _validate_result_identity(
                 _fail("rejected lifecycle is incompatible with accepted/pending/fill state")
             if rejected_event[0].status is not SimulatedTradeStatus.REJECTED:
                 _fail("rejected lifecycle status mismatch")
-            if risk_events and risk_events[0].status is not SimulatedTradeStatus.RISK_REJECTED:
+            if not risk_events or risk_events[0].status is not SimulatedTradeStatus.RISK_REJECTED:
                 _fail("rejected lifecycle risk status mismatch")
-            if risk_events and tuple(risk_events[0].risk_rejection_reasons) != tuple(next(item.reasons for item in result.rejections if item.candidate_order.order_id == order_id)):
+            if risk_events[0].risk_allowed is not False or rejected_event[0].risk_allowed is not False:
+                _fail("rejected lifecycle risk_allowed must be false")
+            rejection_reasons = tuple(next(item.reasons for item in result.rejections if item.candidate_order.order_id == order_id))
+            if tuple(risk_events[0].risk_rejection_reasons) != rejection_reasons or tuple(rejected_event[0].risk_rejection_reasons) != rejection_reasons:
                 _fail("risk rejection reasons disagree with rejection")
-            expected_types = (SimulatedTradeEventType.CANDIDATE_CREATED, SimulatedTradeEventType.REJECTED)
-            if risk_events:
-                expected_types = (SimulatedTradeEventType.CANDIDATE_CREATED, SimulatedTradeEventType.RISK_EVALUATED, SimulatedTradeEventType.REJECTED)
+            expected_types = (SimulatedTradeEventType.CANDIDATE_CREATED, SimulatedTradeEventType.RISK_EVALUATED, SimulatedTradeEventType.REJECTED)
             if event_types != expected_types:
                 _fail("rejected lifecycle event ordering is invalid")
         else:
@@ -388,7 +389,7 @@ def build_forward_execution_evidence(
             fill_price = None
             fill_time_value = _time(event.fill_time, "audit.fill_time")
         elif event.event_type is SimulatedTradeEventType.FILL_FAILED:
-            if fill is not None or event.fill_time is None or event.fill_price is not None:
+            if fill is not None or event.fill_time is None or event.fill_price is None:
                 _fail("invalid failed-fill lifecycle")
             outcome = ForwardExecutionOutcome.FILL_FAILED_PORTFOLIO_VALIDATION
             fill_price = None

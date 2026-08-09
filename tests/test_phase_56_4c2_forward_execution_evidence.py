@@ -22,6 +22,7 @@ from tw_stock_tool.application.forward_execution_evidence import (
     build_forward_execution_evidence,
 )
 from tw_stock_tool.application.forward_paper_activation import build_forward_paper_activation
+from tw_stock_tool.application.forward_paper_execution import run_forward_paper_execution_replay
 from tw_stock_tool.forward_paper.execution_models import ForwardExecutionOutcome
 from tw_stock_tool.forward_paper.execution_serialization import (
     ForwardExecutionEvidenceSerializationError,
@@ -101,6 +102,18 @@ class ForwardExecutionEvidenceTests(unittest.TestCase):
         self.assertEqual(artifact.decisions[0].outcome, ForwardExecutionOutcome.REJECTED)
         self.assertEqual(artifact.decisions[0].risk_rejection_reasons, ("order_notional exceeds max_order_notional",))
 
+    def test_rejection_without_risk_evaluation_rejects(self):
+        evidence = self._evidence_at(21)
+        result = self._result(evidence, max_order_notional=0.01)
+        terminal = replace(result.audit_log[-1], sequence=2, record_id="audit-000002")
+        forged = replace(
+            result,
+            audit_log=(result.audit_log[0], terminal),
+            audit_record_count=2,
+        )
+        with self.assertRaises(ForwardExecutionEvidenceError):
+            self._build(evidence, forged)
+
     def test_invalid_open_result_maps_skip(self):
         evidence = self._evidence_at(3)
         from test_phase_56_4c1_forward_paper_execution import ForwardPaperExecutionReplayTests
@@ -111,6 +124,29 @@ class ForwardExecutionEvidenceTests(unittest.TestCase):
         decision = self._build(evidence, result, ledger).decisions[0]
         self.assertEqual(decision.outcome, ForwardExecutionOutcome.FILL_SKIPPED_INVALID_OPEN)
         self.assertIsNone(decision.fill_price)
+
+    def test_genuine_portfolio_validation_failure_maps_failed_fill(self):
+        evidence = self._evidence_at(20)
+        from test_phase_56_4c1_forward_paper_execution import ForwardPaperExecutionReplayTests
+        fixture = ForwardPaperExecutionReplayTests("test_valid_bundle_executes_through_existing_facade")
+        fixture.setUpClass()
+        ledger = self._ledger(evidence)
+        result = run_forward_paper_execution_replay(
+            self.activation,
+            self.source,
+            ledger,
+            {evidence.recommendation_id: evidence},
+            {"2303": fixture._frame(offsets=(1, 2))},
+            initial_cash=1.0,
+            quantity_per_trade=1,
+        )
+        decision = self._build(evidence, result, ledger).decisions[0]
+        self.assertEqual(
+            decision.outcome,
+            ForwardExecutionOutcome.FILL_FAILED_PORTFOLIO_VALIDATION,
+        )
+        self.assertIsNone(decision.fill_price)
+        self.assertEqual(decision.fee, result.audit_log[-1].fee)
 
     def test_actionable_without_candidate_is_explicit(self):
         evidence = self._evidence_at(4, signal="SELL")
