@@ -113,6 +113,15 @@ def _canonicalize_market_frame(
         raise ForwardPaperExecutionError(
             f"forward market frame for {symbol!r} contains a row at or before qualification_cutoff"
         )
+    for index, value in enumerate(frame["Open"]):
+        if isinstance(value, bool) or type(value).__name__ in ("bool", "bool_"):
+            raise ForwardPaperExecutionError(
+                f"forward market frame for {symbol!r} Open[{index}] must be a numeric Real"
+            )
+        if not isinstance(value, Real):
+            raise ForwardPaperExecutionError(
+                f"forward market frame for {symbol!r} Open[{index}] must be a numeric Real"
+            )
     if not any(_finite_positive(value) for value in frame["Open"]):
         raise ForwardPaperExecutionError(
             f"forward market frame for {symbol!r} has no finite positive Open"

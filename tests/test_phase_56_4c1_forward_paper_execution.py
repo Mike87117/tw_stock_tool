@@ -330,6 +330,28 @@ class ForwardPaperExecutionReplayTests(unittest.TestCase):
         )
         self.assertEqual(result.audit_log[-1].status.value, "skipped_invalid_open")
 
+    def test_boolean_open_rejects_before_runtime(self):
+        evidence = self._evidence_at(6)
+        with patch.object(portfolio_engine, "run_simulated_portfolio_trading_result") as runtime:
+            with self.assertRaises(ForwardPaperExecutionError):
+                self._run(
+                    self._ledger(evidence),
+                    (evidence,),
+                    {"2303": self._frame(offsets=(1, 2), opens=[100.0, True])},
+                )
+        runtime.assert_not_called()
+
+    def test_numeric_string_open_rejects_before_runtime(self):
+        evidence = self._evidence_at(7)
+        with patch.object(portfolio_engine, "run_simulated_portfolio_trading_result") as runtime:
+            with self.assertRaises(ForwardPaperExecutionError):
+                self._run(
+                    self._ledger(evidence),
+                    (evidence,),
+                    {"2303": self._frame(offsets=(1, 2), opens=[100.0, "101.5"])},
+                )
+        runtime.assert_not_called()
+
     def test_existing_risk_limit_rejection_remains_visible(self):
         evidence = self._evidence_at(7)
         result = self._run(
