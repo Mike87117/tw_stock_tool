@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
@@ -29,12 +30,27 @@ from tw_stock_tool.forward_paper.decision_serialization import (
     export_forward_decision_ledger_json,
 )
 from tw_stock_tool.forward_paper.models import ForwardPaperActivation
+from tw_stock_tool.forward_paper.portfolio_trace_models import (
+    ForwardPortfolioObservation,
+    ForwardPortfolioPositionMark,
+    ForwardPortfolioTrace,
+    ForwardPortfolioTraceModelError,
+)
+from tw_stock_tool.forward_paper.portfolio_trace_serialization import (
+    export_forward_portfolio_trace_json,
+    load_forward_portfolio_trace_json,
+)
 from tw_stock_tool.qualification import export_strategy_qualification_json
 from tw_stock_tool.recommendation import StrategyBoundRecommendationEvidence
 from tw_stock_tool.paper_trading import portfolio_engine
 from tw_stock_tool.paper_trading.portfolio_results import (
     SimulatedPortfolioTradingResult,
 )
+from tw_stock_tool.paper_trading.portfolio_serialization import (
+    export_simulated_portfolio_trading_result_json,
+    load_simulated_portfolio_trading_result_json,
+)
+from tw_stock_tool.paper_trading.runtime import SimulatedPaperTradingRuntimeState
 
 
 class ForwardPaperExecutionError(ValueError):
@@ -42,6 +58,194 @@ class ForwardPaperExecutionError(ValueError):
 
 
 _TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def _trusted_portfolio_result(
+    result: SimulatedPortfolioTradingResult,
+) -> tuple[SimulatedPortfolioTradingResult, str]:
+    if type(result) is not SimulatedPortfolioTradingResult:
+        raise ForwardPaperExecutionError(
+            "portfolio_result must be an exact SimulatedPortfolioTradingResult"
+        )
+    try:
+        canonical = export_simulated_portfolio_trading_result_json(result)
+        loaded = load_simulated_portfolio_trading_result_json(canonical)
+        if export_simulated_portfolio_trading_result_json(loaded) != canonical:
+            raise ForwardPaperExecutionError(
+                "portfolio result canonical round-trip drift"
+            )
+    except ForwardPaperExecutionError:
+        raise
+    except Exception as exc:
+        raise ForwardPaperExecutionError(
+            f"portfolio result canonical validation failed: {exc}"
+        ) from exc
+    return loaded, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _trusted_portfolio_trace(
+    trace: ForwardPortfolioTrace,
+) -> tuple[ForwardPortfolioTrace, str]:
+    if type(trace) is not ForwardPortfolioTrace:
+        raise ForwardPaperExecutionError(
+            "portfolio_trace must be an exact ForwardPortfolioTrace"
+        )
+    try:
+        canonical = export_forward_portfolio_trace_json(trace)
+        loaded = load_forward_portfolio_trace_json(canonical)
+        if export_forward_portfolio_trace_json(loaded) != canonical:
+            raise ForwardPaperExecutionError(
+                "portfolio trace canonical round-trip drift"
+            )
+    except ForwardPaperExecutionError:
+        raise
+    except Exception as exc:
+        raise ForwardPaperExecutionError(
+            f"portfolio trace canonical validation failed: {exc}"
+        ) from exc
+    return loaded, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _expected_sha256(name: str, value: object) -> str:
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ForwardPaperExecutionError(
+            f"{name} must be a lowercase SHA-256"
+        )
+    return value
+
+
+def _validate_trace_result_pair(
+    result: SimulatedPortfolioTradingResult,
+    trace: ForwardPortfolioTrace,
+) -> None:
+    if type(trace) is not ForwardPortfolioTrace:
+        raise ForwardPaperExecutionError(
+            "portfolio_trace must be an exact ForwardPortfolioTrace"
+        )
+    trusted_result, result_sha256 = _trusted_portfolio_result(result)
+    if trace.portfolio_result_sha256 != result_sha256:
+        raise ForwardPaperExecutionError("portfolio-result SHA mismatch")
+    if trace.initial_equity != trusted_result.initial_cash:
+        raise ForwardPaperExecutionError("trace initial equity mismatch")
+    final = trace.observations[-1]
+    expected_positions = tuple(
+        (item.symbol, item.quantity, item.last_price, item.market_value)
+        for item in trusted_result.positions
+        if item.quantity > 0
+    )
+    actual_positions = tuple(
+        (item.symbol, item.quantity, item.mark_price, item.market_value)
+        for item in final.positions
+    )
+    expected_terminal = (
+        trusted_result.final_cash,
+        trusted_result.total_market_value,
+        trusted_result.total_equity,
+        trusted_result.open_position_count,
+        len(trusted_result.pending_orders),
+        sum(item.reserved_buy_notional for item in trusted_result.pending_orders),
+        expected_positions,
+    )
+    actual_terminal = (
+        final.cash,
+        final.total_market_value,
+        final.total_equity,
+        final.open_position_count,
+        final.pending_order_count,
+        final.reserved_buy_notional,
+        actual_positions,
+    )
+    if actual_terminal != expected_terminal:
+        raise ForwardPaperExecutionError(
+            "final trace observation does not match terminal portfolio result"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ForwardPaperExecutionReplayBundle:
+    portfolio_result: SimulatedPortfolioTradingResult
+    portfolio_trace: ForwardPortfolioTrace
+    portfolio_trace_sha256: str
+
+    def __post_init__(self) -> None:
+        _trusted_trace, actual_sha256 = _trusted_portfolio_trace(
+            self.portfolio_trace
+        )
+        expected_sha256 = _expected_sha256(
+            "portfolio_trace_sha256", self.portfolio_trace_sha256
+        )
+        if actual_sha256 != expected_sha256:
+            raise ForwardPaperExecutionError("portfolio trace SHA mismatch")
+        _validate_trace_result_pair(self.portfolio_result, self.portfolio_trace)
+
+
+class _ForwardPortfolioTraceCollector:
+    def __init__(self) -> None:
+        self._marks: dict[str, float] = {}
+        self.observations: list[ForwardPortfolioObservation] = []
+
+    def __call__(
+        self,
+        timestamp: Any,
+        runtime_state: SimulatedPaperTradingRuntimeState,
+        closes_at_timestamp: Mapping[str, Any],
+    ) -> None:
+        if type(runtime_state) is not SimulatedPaperTradingRuntimeState:
+            raise ForwardPaperExecutionError(
+                "observation runtime must be an exact runtime state"
+            )
+        for symbol in sorted(closes_at_timestamp):
+            close = closes_at_timestamp[symbol]
+            if not _finite_positive(close):
+                raise ForwardPaperExecutionError(
+                    "observation Close must be finite and strictly positive"
+                )
+            self._marks[symbol] = float(close)
+        try:
+            observed_at = _canonical_timestamp(timestamp, "observation timestamp")
+        except RecommendationApplicationError as exc:
+            raise ForwardPaperExecutionError(str(exc)) from exc
+        positions: list[ForwardPortfolioPositionMark] = []
+        for symbol in sorted(runtime_state.portfolio.positions):
+            position = runtime_state.portfolio.positions[symbol]
+            if position.quantity <= 0:
+                continue
+            if symbol not in self._marks:
+                raise ForwardPaperExecutionError(
+                    f"open position {symbol!r} has no observed Close mark"
+                )
+            mark = self._marks[symbol]
+            positions.append(
+                ForwardPortfolioPositionMark(
+                    symbol=symbol,
+                    quantity=position.quantity,
+                    mark_price=mark,
+                    market_value=position.quantity * mark,
+                )
+            )
+        total_market_value = sum(item.market_value for item in positions)
+        cash = float(runtime_state.portfolio.cash)
+        try:
+            self.observations.append(
+                ForwardPortfolioObservation(
+                    observed_at=observed_at,
+                    cash=cash,
+                    total_market_value=total_market_value,
+                    total_equity=cash + total_market_value,
+                    open_position_count=len(positions),
+                    pending_order_count=len(runtime_state.pending_orders),
+                    reserved_buy_notional=runtime_state.total_reserved_buy_notional,
+                    positions=tuple(positions),
+                )
+            )
+        except ForwardPortfolioTraceModelError as exc:
+            raise ForwardPaperExecutionError(
+                f"portfolio observation validation failed: {exc}"
+            ) from exc
 
 
 def _finite_positive(value: Any) -> bool:
@@ -316,7 +520,7 @@ def _validated_replay_configuration(
     )
 
 
-def run_forward_paper_execution_replay(
+def _run_forward_paper_execution_replay(
     activation: ForwardPaperActivation,
     qualification_artifact: UniverseOOSArtifact,
     ledger: ForwardDecisionLedger,
@@ -330,7 +534,8 @@ def run_forward_paper_execution_replay(
     max_position_quantity: int | None = None,
     max_position_notional: float | None = None,
     max_total_exposure: float | None = None,
-) -> SimulatedPortfolioTradingResult:
+    _capture_trace: bool,
+) -> SimulatedPortfolioTradingResult | ForwardPaperExecutionReplayBundle:
     """Replay trusted decisions through one fresh multi-symbol paper runtime."""
     trusted_activation, trusted_source, trusted_ledger, ledger_sha256 = (
         _validated_trust_chain(activation, qualification_artifact, ledger)
@@ -427,7 +632,8 @@ def run_forward_paper_execution_replay(
         "ledger_sha256": ledger_sha256,
     }
     json.dumps(strategy_metadata, ensure_ascii=False, sort_keys=True, allow_nan=False)
-    return portfolio_engine.run_simulated_portfolio_trading_result(
+    collector = _ForwardPortfolioTraceCollector() if _capture_trace else None
+    result = portfolio_engine.run_simulated_portfolio_trading_result(
         prepared_frames,
         initial_cash=initial_cash_float,
         last_prices=last_prices,
@@ -441,10 +647,157 @@ def run_forward_paper_execution_replay(
         max_total_exposure=max_total_exposure_float,
         strategy=trusted_activation.strategy_id,
         strategy_metadata=strategy_metadata,
+        _after_timestamp=collector,
     )
+    if collector is None:
+        return result
+    _trusted_result, result_sha256 = _trusted_portfolio_result(result)
+    trace = ForwardPortfolioTrace(
+        schema_version="1.0",
+        artifact_type="forward_portfolio_trace",
+        activation_id=trusted_activation.activation_id,
+        qualification_evaluation_id=trusted_activation.qualification_evaluation_id,
+        qualification_sha256=trusted_activation.qualification_sha256,
+        ledger_id=trusted_ledger.ledger_id,
+        ledger_sha256=ledger_sha256,
+        strategy_id=trusted_activation.strategy_id,
+        initial_equity=initial_cash_float,
+        portfolio_result_sha256=result_sha256,
+        observations=tuple(collector.observations),
+    )
+    _canonical_trace, trace_sha256 = _trusted_portfolio_trace(trace)
+    trusted_trace = validate_forward_portfolio_trace(
+        trusted_activation,
+        trusted_source,
+        trusted_ledger,
+        result,
+        trace,
+        expected_portfolio_trace_sha256=trace_sha256,
+    )
+    return ForwardPaperExecutionReplayBundle(
+        result, trusted_trace, trace_sha256
+    )
+
+
+def validate_forward_portfolio_trace(
+    activation: ForwardPaperActivation,
+    qualification_artifact: UniverseOOSArtifact,
+    ledger: ForwardDecisionLedger,
+    portfolio_result: SimulatedPortfolioTradingResult,
+    portfolio_trace: ForwardPortfolioTrace,
+    *,
+    expected_portfolio_trace_sha256: str,
+) -> ForwardPortfolioTrace:
+    trusted_activation, _trusted_source, trusted_ledger, ledger_sha256 = (
+        _validated_trust_chain(activation, qualification_artifact, ledger)
+    )
+    trusted_trace, actual_trace_sha256 = _trusted_portfolio_trace(
+        portfolio_trace
+    )
+    expected_trace_sha256 = _expected_sha256(
+        "expected_portfolio_trace_sha256",
+        expected_portfolio_trace_sha256,
+    )
+    if actual_trace_sha256 != expected_trace_sha256:
+        raise ForwardPaperExecutionError("portfolio trace SHA mismatch")
+    expected_identity = (
+        trusted_activation.activation_id,
+        trusted_activation.qualification_evaluation_id,
+        trusted_activation.qualification_sha256,
+        trusted_ledger.ledger_id,
+        ledger_sha256,
+        trusted_activation.strategy_id,
+    )
+    actual_identity = (
+        trusted_trace.activation_id,
+        trusted_trace.qualification_evaluation_id,
+        trusted_trace.qualification_sha256,
+        trusted_trace.ledger_id,
+        trusted_trace.ledger_sha256,
+        trusted_trace.strategy_id,
+    )
+    if actual_identity != expected_identity:
+        raise ForwardPaperExecutionError(
+            "portfolio trace activation/qualification/ledger identity mismatch"
+        )
+    _validate_trace_result_pair(portfolio_result, trusted_trace)
+    return trusted_trace
+
+
+def run_forward_paper_execution_replay(
+    activation: ForwardPaperActivation,
+    qualification_artifact: UniverseOOSArtifact,
+    ledger: ForwardDecisionLedger,
+    recommendation_evidence_by_id: Mapping[str, Any],
+    forward_market_frames: Mapping[str, pd.DataFrame],
+    *,
+    initial_cash: float,
+    quantity_per_trade: int,
+    slippage_per_share: float = 0.0,
+    max_order_notional: float | None = None,
+    max_position_quantity: int | None = None,
+    max_position_notional: float | None = None,
+    max_total_exposure: float | None = None,
+) -> SimulatedPortfolioTradingResult:
+    result = _run_forward_paper_execution_replay(
+        activation,
+        qualification_artifact,
+        ledger,
+        recommendation_evidence_by_id,
+        forward_market_frames,
+        initial_cash=initial_cash,
+        quantity_per_trade=quantity_per_trade,
+        slippage_per_share=slippage_per_share,
+        max_order_notional=max_order_notional,
+        max_position_quantity=max_position_quantity,
+        max_position_notional=max_position_notional,
+        max_total_exposure=max_total_exposure,
+        _capture_trace=False,
+    )
+    if type(result) is not SimulatedPortfolioTradingResult:
+        raise ForwardPaperExecutionError("legacy replay returned an invalid result type")
+    return result
+
+
+def run_forward_paper_execution_replay_with_trace(
+    activation: ForwardPaperActivation,
+    qualification_artifact: UniverseOOSArtifact,
+    ledger: ForwardDecisionLedger,
+    recommendation_evidence_by_id: Mapping[str, Any],
+    forward_market_frames: Mapping[str, pd.DataFrame],
+    *,
+    initial_cash: float,
+    quantity_per_trade: int,
+    slippage_per_share: float = 0.0,
+    max_order_notional: float | None = None,
+    max_position_quantity: int | None = None,
+    max_position_notional: float | None = None,
+    max_total_exposure: float | None = None,
+) -> ForwardPaperExecutionReplayBundle:
+    result = _run_forward_paper_execution_replay(
+        activation,
+        qualification_artifact,
+        ledger,
+        recommendation_evidence_by_id,
+        forward_market_frames,
+        initial_cash=initial_cash,
+        quantity_per_trade=quantity_per_trade,
+        slippage_per_share=slippage_per_share,
+        max_order_notional=max_order_notional,
+        max_position_quantity=max_position_quantity,
+        max_position_notional=max_position_notional,
+        max_total_exposure=max_total_exposure,
+        _capture_trace=True,
+    )
+    if type(result) is not ForwardPaperExecutionReplayBundle:
+        raise ForwardPaperExecutionError("traced replay returned an invalid bundle type")
+    return result
 
 
 __all__ = [
     "ForwardPaperExecutionError",
+    "ForwardPaperExecutionReplayBundle",
     "run_forward_paper_execution_replay",
+    "run_forward_paper_execution_replay_with_trace",
+    "validate_forward_portfolio_trace",
 ]

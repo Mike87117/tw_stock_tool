@@ -180,6 +180,9 @@ def run_simulated_portfolio_trading_result(
     ] | None = None,
     strategy: str | None = None,
     strategy_metadata: Mapping[str, Any] | None = None,
+    _after_timestamp: Callable[
+        [Any, SimulatedPaperTradingRuntimeState, Mapping[str, Any]], None
+    ] | None = None,
 ) -> SimulatedPortfolioTradingResult:
     """Execute multi-symbol historical paper trading and build an aggregate result object."""
     if not isinstance(dataframes, Mapping):
@@ -293,6 +296,7 @@ def run_simulated_portfolio_trading_result(
         guard_decision_provider=effective_guard_decision_provider,
         strategy=strategy,
         strategy_metadata=strategy_metadata,
+        _after_timestamp=_after_timestamp,
     )
 
     return build_simulated_portfolio_trading_result(
