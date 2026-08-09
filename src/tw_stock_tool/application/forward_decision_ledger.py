@@ -96,6 +96,38 @@ def _validated_ledger(value: ForwardDecisionLedger) -> ForwardDecisionLedger:
         raise ForwardDecisionLedgerError("ledger is not in canonical serialized form")
     return trusted
 
+def _validate_ledger_records(
+    ledger: ForwardDecisionLedger,
+    activation: ForwardPaperActivation,
+    qualification_artifact: UniverseOOSArtifact,
+) -> None:
+    if not ledger.decisions:
+        return
+    parameter_grid = {
+        tuple(parameters.items())
+        for parameters in qualification_artifact.resolved_configuration.parameter_grid
+    }
+    for item in ledger.decisions:
+        if item.observed_at <= activation.qualification_cutoff:
+            raise ForwardDecisionLedgerError(
+                "existing decision observed_at must be strictly after qualification_cutoff"
+            )
+        if item.symbol not in activation.qualified_symbols:
+            raise ForwardDecisionLedgerError(
+                "existing decision symbol is outside the qualified universe"
+            )
+        if item.qualification_evaluation_id != activation.qualification_evaluation_id:
+            raise ForwardDecisionLedgerError(
+                "existing decision qualification evaluation ID mismatch"
+            )
+        if item.strategy_id != activation.strategy_id:
+            raise ForwardDecisionLedgerError("existing decision strategy mismatch")
+        if tuple(item.selected_parameters.items()) not in parameter_grid:
+            raise ForwardDecisionLedgerError(
+                "existing decision selected_parameters are outside the qualified parameter grid"
+            )
+
+
 
 def _validated_evidence(
     value: Any,
@@ -175,35 +207,7 @@ def append_forward_decision(
         raise ForwardDecisionLedgerError(
             "ledger activation and qualification identity lock mismatch"
         )
-    if trusted_ledger.decisions:
-        parameter_grid = {
-            tuple(parameters.items())
-            for parameters in qualification_artifact.resolved_configuration.parameter_grid
-        }
-        for item in trusted_ledger.decisions:
-            if item.observed_at <= trusted_activation.qualification_cutoff:
-                raise ForwardDecisionLedgerError(
-                    "existing decision observed_at must be strictly after qualification_cutoff"
-                )
-            if item.symbol not in trusted_activation.qualified_symbols:
-                raise ForwardDecisionLedgerError(
-                    "existing decision symbol is outside the qualified universe"
-                )
-            if (
-                item.qualification_evaluation_id
-                != trusted_activation.qualification_evaluation_id
-            ):
-                raise ForwardDecisionLedgerError(
-                    "existing decision qualification evaluation ID mismatch"
-                )
-            if item.strategy_id != trusted_activation.strategy_id:
-                raise ForwardDecisionLedgerError(
-                    "existing decision strategy mismatch"
-                )
-            if tuple(item.selected_parameters.items()) not in parameter_grid:
-                raise ForwardDecisionLedgerError(
-                    "existing decision selected_parameters are outside the qualified parameter grid"
-                )
+    _validate_ledger_records(trusted_ledger, trusted_activation, qualification_artifact)
 
     trusted_evidence, recommendation_json = _validated_evidence(evidence)
     snapshot = trusted_evidence.signal_snapshot
