@@ -36,12 +36,17 @@ def build_forward_paper_activation(
         )
 
     try:
-        canonical_json = export_universe_oos_evidence_json(qualification_artifact)
-        source = load_universe_oos_evidence_json(canonical_json)
+        input_json = export_universe_oos_evidence_json(qualification_artifact)
+        source = load_universe_oos_evidence_json(input_json)
+        canonical_json = export_universe_oos_evidence_json(source)
     except (TypeError, ValueError, UniverseEvidenceSerializationError) as exc:
         raise ForwardPaperActivationError(
             f"qualification artifact failed canonical validation: {exc}"
         ) from exc
+    if canonical_json != input_json:
+        raise ForwardPaperActivationError(
+            "qualification artifact is not in canonical serialized form"
+        )
 
     qualification = source.qualification
     if qualification.decision.state != "PAPER_READY":

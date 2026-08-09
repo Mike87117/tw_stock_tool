@@ -21,6 +21,7 @@ from tw_stock_tool.application.universe_qualification import (
     build_universe_oos_evidence,
     evaluate_universe_qualification,
     export_universe_oos_evidence_json,
+    load_universe_oos_evidence_json,
 )
 from tw_stock_tool.forward_paper import (
     ForwardPaperActivation,
@@ -90,6 +91,13 @@ def _artifact(
         return build_universe_oos_evidence(evaluate_universe_qualification(request))
 
 
+def _forged_copy(value, **changes):
+    forged = object.__new__(type(value))
+    for item in fields(value):
+        object.__setattr__(forged, item.name, changes.get(item.name, getattr(value, item.name)))
+    return forged
+
+
 def _forge_paper_ready(source: UniverseOOSArtifact) -> UniverseOOSArtifact:
     decision = object.__new__(PromotionDecision)
     object.__setattr__(decision, "state", "PAPER_READY")
@@ -103,6 +111,13 @@ def _forge_paper_ready(source: UniverseOOSArtifact) -> UniverseOOSArtifact:
         value = qualification if item.name == "qualification" else getattr(source, item.name)
         object.__setattr__(forged, item.name, value)
     return forged
+
+
+def _forge_numeric_representation(source: UniverseOOSArtifact) -> UniverseOOSArtifact:
+    metrics = _forged_copy(source.qualification.request.metrics, total_return_pct=10)
+    request = _forged_copy(source.qualification.request, metrics=metrics)
+    qualification = _forged_copy(source.qualification, request=request)
+    return _forged_copy(source, qualification=qualification)
 
 
 class ForwardPaperActivationTests(unittest.TestCase):
@@ -161,6 +176,19 @@ class ForwardPaperActivationTests(unittest.TestCase):
                 forged,
                 activation_id=ACTIVATION_ID,
                 created_at="2025-04-02T00:00:00Z",
+            )
+
+    def test_noncanonical_numeric_representation_drift_rejects(self):
+        forged = _forge_numeric_representation(self.ready)
+        input_json = export_universe_oos_evidence_json(forged)
+        trusted = load_universe_oos_evidence_json(input_json)
+        self.assertNotEqual(
+            input_json,
+            export_universe_oos_evidence_json(trusted),
+        )
+        with self.assertRaisesRegex(ForwardPaperActivationError, "canonical serialized form"):
+            build_forward_paper_activation(
+                forged, activation_id=ACTIVATION_ID, created_at="2025-04-02T00:00:00Z"
             )
 
     def test_cutoff_is_maximum_of_all_window_and_benchmark_ends(self):
