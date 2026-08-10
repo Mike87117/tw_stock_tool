@@ -428,11 +428,15 @@ def _summary(
     )
 
 
-def inspect_forward_paper_workspace_package(
+def _inspect_forward_paper_workspace_package_sources(
     workspace_root: str | Path,
     run_id: str,
-) -> ForwardPaperPackageInspection:
-    """Inspect one package without allocating, writing, replaying, or fetching."""
+) -> tuple[
+    ForwardPaperPackageInspection,
+    dict[str, Any] | None,
+    tuple[Any, ...],
+]:
+    """Inspect once and retain sources only when the complete chain is valid."""
     workspace = Workspace.open_existing(workspace_root)
     catalog = scan_workspace(workspace)
     entry = lookup_workspace_run(catalog, run_id)
@@ -443,7 +447,7 @@ def inspect_forward_paper_workspace_package(
                 Code.WORKSPACE_RUN_INVALID,
                 "Workspace catalog did not classify the run as VALID",
             )],
-        )
+        ), None, ()
 
     manifest = entry.manifest
     assert manifest is not None
@@ -460,11 +464,11 @@ def inspect_forward_paper_workspace_package(
             role="publication_index",
         ))
     if findings:
-        return _inspection(entry, findings)
+        return _inspection(entry, findings), None, ()
 
     index, index_finding = _load_index(entry.run_directory)
     if index_finding is not None:
-        return _inspection(entry, [index_finding])
+        return _inspection(entry, [index_finding]), None, ()
     assert index is not None
 
     if manifest.artifacts != _expected_references(index):
@@ -475,7 +479,7 @@ def inspect_forward_paper_workspace_package(
                 "Run Manifest artifact references do not match the frozen package tuple",
             )],
             index=index,
-        )
+        ), None, ()
 
     loaded: dict[str, Any] = {}
     findings = []
@@ -509,7 +513,7 @@ def inspect_forward_paper_workspace_package(
         else:
             recommendations.append(artifact)
     if findings:
-        return _inspection(entry, findings, index=index)
+        return _inspection(entry, findings, index=index), None, ()
 
     recommendation_tuple = tuple(recommendations)
     findings.extend(
@@ -521,7 +525,7 @@ def inspect_forward_paper_workspace_package(
     )
     findings.extend(_identity_findings(index, loaded))
     if findings:
-        return _inspection(entry, findings, index=index)
+        return _inspection(entry, findings, index=index), None, ()
 
     recommendation_mapping = {
         item.recommendation_id: item for item in recommendation_tuple
@@ -560,7 +564,7 @@ def inspect_forward_paper_workspace_package(
                 f"Complete reviewed trust-chain rebuild failed: {detail}",
             )],
             index=index,
-        )
+        ), None, ()
 
     findings = _config_findings(
         manifest,
@@ -568,13 +572,25 @@ def inspect_forward_paper_workspace_package(
         loaded["activation"],
     )
     if findings:
-        return _inspection(entry, findings, index=index)
+        return _inspection(entry, findings, index=index), None, ()
     return _inspection(
         entry,
         [],
         index=index,
         summary=_summary(index, loaded, recommendation_tuple),
+    ), loaded, recommendation_tuple
+
+
+def inspect_forward_paper_workspace_package(
+    workspace_root: str | Path,
+    run_id: str,
+) -> ForwardPaperPackageInspection:
+    """Inspect one package without allocating, writing, replaying, or fetching."""
+    inspection, _, _ = _inspect_forward_paper_workspace_package_sources(
+        workspace_root,
+        run_id,
     )
+    return inspection
 
 
 __all__ = ["inspect_forward_paper_workspace_package"]
