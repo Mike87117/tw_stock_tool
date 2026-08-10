@@ -428,6 +428,65 @@ def _remove_temp_file(path: Path | None) -> None:
         pass
 
 
+def _publish_text_no_clobber(
+    *,
+    final_path: Path,
+    content: str,
+    operation: str,
+    temporary_prefix: str,
+    error_type: type[WorkspaceError],
+    failure_detail: str,
+) -> None:
+    if final_path.exists() or os.path.lexists(final_path):
+        raise WorkspaceCollisionError(operation, final_path, "managed file already exists")
+    temporary_path: Path | None = None
+    try:
+        file_descriptor, temporary_name = tempfile.mkstemp(
+            prefix=temporary_prefix,
+            suffix=".tmp",
+            dir=final_path.parent,
+        )
+        temporary_path = Path(temporary_name)
+        with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _ensure_no_reparse_components(temporary_path, operation)
+        os.link(temporary_path, final_path)
+        temporary_path.unlink()
+        temporary_path = None
+        _fsync_directory(final_path.parent)
+    except WorkspaceError:
+        raise
+    except (OSError, UnicodeError) as exc:
+        raise error_type(operation, final_path, failure_detail) from exc
+    finally:
+        _remove_temp_file(temporary_path)
+
+
+def write_managed_text(run_directory: RunDirectory, artifact_path: str, content: str) -> Path:
+    """Publish one UTF-8 text artifact once without following links or clobbering."""
+    if not isinstance(run_directory, RunDirectory):
+        raise WorkspaceValidationError("write managed text", None, "run_directory must be a RunDirectory")
+    if type(content) is not str:
+        raise WorkspaceValidationError("write managed text", None, "content must be exact str")
+    relative = validate_artifact_path(artifact_path)
+    if relative == PurePosixPath(CANONICAL_MANIFEST_FILENAME):
+        raise WorkspacePathError("write managed text", artifact_path, "manifest path is reserved")
+    final_path = resolve_artifact_path(run_directory, artifact_path)
+    _ensure_directory(final_path.parent, "write managed text")
+    final_path = resolve_artifact_path(run_directory, artifact_path)
+    _publish_text_no_clobber(
+        final_path=final_path,
+        content=content,
+        operation="write managed text",
+        temporary_prefix=f".{final_path.name}.",
+        error_type=WorkspaceValidationError,
+        failure_detail="atomic managed text publication failed",
+    )
+    return final_path
+
+
 def write_manifest(run_directory: RunDirectory, manifest: RunManifest) -> RunManifest:
     """Publish a canonical manifest once, atomically and without clobbering."""
     from tw_stock_tool.research_run.serialization import (
@@ -472,32 +531,14 @@ def write_manifest(run_directory: RunDirectory, manifest: RunManifest) -> RunMan
     except ResearchRunSerializationError as exc:
         raise WorkspaceManifestError("write manifest", final_path, "manifest cannot be serialized") from exc
 
-    temporary_path: Path | None = None
-    try:
-        file_descriptor, temporary_name = tempfile.mkstemp(
-            prefix=".manifest.",
-            suffix=".tmp",
-            dir=run_directory.path,
-        )
-        temporary_path = Path(temporary_name)
-        with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="") as handle:
-            handle.write(content)
-            handle.flush()
-            os.fsync(handle.fileno())
-        _ensure_no_reparse_components(temporary_path, "write manifest")
-
-        # Hard-link publication adds the final name atomically and fails if it exists;
-        # unlike os.replace, it preserves the no-clobber guarantee on local filesystems.
-        os.link(temporary_path, final_path)
-        temporary_path.unlink()
-        temporary_path = None
-        _fsync_directory(run_directory.path)
-    except WorkspaceError:
-        raise
-    except (OSError, UnicodeError) as exc:
-        raise WorkspaceManifestError("write manifest", final_path, "atomic manifest publication failed") from exc
-    finally:
-        _remove_temp_file(temporary_path)
+    _publish_text_no_clobber(
+        final_path=final_path,
+        content=content,
+        operation="write manifest",
+        temporary_prefix=".manifest.",
+        error_type=WorkspaceManifestError,
+        failure_detail="atomic manifest publication failed",
+    )
 
     try:
         loaded = read_manifest(run_directory)
@@ -519,5 +560,6 @@ __all__ = [
     "resolve_artifact_path",
     "validate_artifact_path",
     "validate_workflow_slug",
+    "write_managed_text",
     "write_manifest",
 ]
