@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, fields, replace
 from datetime import datetime, timedelta
+import hashlib
 import inspect
 import json
 from itertools import permutations
@@ -15,6 +16,12 @@ from tw_stock_tool.application.broker_safety_source import (
     BrokerSafetySourceError,
     build_broker_safety_source_handoff,
     build_forward_eligibility_progression,
+)
+from tw_stock_tool.application.forward_execution_evidence import (
+    build_forward_execution_evidence,
+)
+from tw_stock_tool.application.forward_paper_execution import (
+    run_forward_paper_execution_replay_with_trace,
 )
 from tw_stock_tool.application.forward_paper_inspection import (
     inspect_forward_paper_workspace_package,
@@ -49,13 +56,18 @@ from tw_stock_tool.broker_safety.source_models import (
 )
 from tw_stock_tool.forward_paper.eligibility_models import ForwardEligibilityState
 from tw_stock_tool.forward_paper.inspection import (
-    ForwardPaperPackageFinding,
-    ForwardPaperPackageFindingCode,
     ForwardPaperPackageHealth,
+)
+from tw_stock_tool.forward_paper.publication import (
+    PUBLICATION_INDEX_PATH,
+    export_forward_paper_publication_index_json,
 )
 from tw_stock_tool.recommendation.models import (
     CurrentSignalSnapshot,
     RecommendationEvidence,
+)
+from tw_stock_tool.recommendation.serialization import (
+    export_recommendation_evidence_json,
 )
 
 
@@ -103,7 +115,8 @@ class BrokerSafetySourceTests(unittest.TestCase):
         self.ledger = self.e1.values["ledger"]
         self.recommendation = self.e1.recommendation
         self.progression = build_forward_eligibility_progression(
-            self.inspection, self.ledger
+            self.root,
+            self.published.run_id,
         )
 
     @staticmethod
@@ -163,16 +176,72 @@ class BrokerSafetySourceTests(unittest.TestCase):
             recommendation_anchors=anchors,
         )
 
-    def _state_inspection(self, state: ForwardEligibilityState):
-        return replace(
-            self.inspection,
-            publication_index=replace(
-                self.inspection.publication_index,
-                eligibility_state=state,
-            ),
-            summary=replace(self.inspection.summary, eligibility_state=state),
-        )
 
+    def _publish_nonactive(
+        self,
+        root: Path,
+        state: ForwardEligibilityState,
+    ):
+        d2 = self.e1.d3.d2
+        fixture = d2.fixture
+        recommendation = d2._evidence_at(0, signal="BUY")
+        ledger = fixture._ledger(recommendation)
+        quantity = 2 if state is ForwardEligibilityState.PAUSED else 3
+        bundle = run_forward_paper_execution_replay_with_trace(
+            fixture.activation,
+            fixture.source,
+            ledger,
+            {recommendation.recommendation_id: recommendation},
+            {
+                "2303": fixture._frame(
+                    opens=[100.0, 100.0],
+                    closes=[100.0, 1.0],
+                )
+            },
+            initial_cash=1_000.0,
+            quantity_per_trade=quantity,
+        )
+        reference = self.e1.values["execution_evidence"]
+        execution = build_forward_execution_evidence(
+            fixture.activation,
+            fixture.source,
+            ledger,
+            {recommendation.recommendation_id: recommendation},
+            bundle.portfolio_result,
+            evidence_id=reference.evidence_id,
+            created_at=reference.created_at,
+        )
+        metrics = d2._build((recommendation, ledger, bundle, execution))
+        eligibility = self.e1.d3._build(
+            activation=fixture.activation,
+            qualification_artifact=fixture.source,
+            ledger=ledger,
+            recommendation_evidence_by_id={
+                recommendation.recommendation_id: recommendation
+            },
+            portfolio_result=bundle.portfolio_result,
+            execution_evidence=execution,
+            portfolio_trace=bundle.portfolio_trace,
+            metrics_evidence=metrics,
+            expected_portfolio_trace_sha256=bundle.portfolio_trace_sha256,
+        )
+        self.assertIs(eligibility.state, state)
+        published = self.e1._publish(
+            root,
+            activation=fixture.activation,
+            qualification_artifact=fixture.source,
+            ledger=ledger,
+            recommendation_evidence_by_id={
+                recommendation.recommendation_id: recommendation
+            },
+            portfolio_result=bundle.portfolio_result,
+            execution_evidence=execution,
+            portfolio_trace=bundle.portfolio_trace,
+            metrics_evidence=metrics,
+            eligibility_evidence=eligibility,
+            expected_portfolio_trace_sha256=bundle.portfolio_trace_sha256,
+        )
+        return published, recommendation
     def test_genuine_active_package_builds_canonical_handoff_without_side_effects(self):
         targets = (
             "tw_stock_tool.artifacts.workspace.write_managed_text",
@@ -184,10 +253,14 @@ class BrokerSafetySourceTests(unittest.TestCase):
         mocks = [item.start() for item in patches]
         try:
             handoff = build_broker_safety_source_handoff(
-                self.inspection, self.ledger, self.recommendation
+                self.root,
+                self.published.run_id,
+                self.recommendation.recommendation_id,
             )
             repeated = build_broker_safety_source_handoff(
-                self.inspection, self.ledger, self.recommendation
+                self.root,
+                self.published.run_id,
+                self.recommendation.recommendation_id,
             )
         finally:
             for item in reversed(patches):
@@ -204,33 +277,86 @@ class BrokerSafetySourceTests(unittest.TestCase):
         self.assertTrue(all(mock.call_count == 0 for mock in mocks))
         self.assertEqual(
             tuple(inspect.signature(build_broker_safety_source_handoff).parameters),
-            ("inspection", "ledger", "recommendation"),
+            ("workspace_root", "run_id", "recommendation_id"),
         )
 
-    def test_handoff_rejects_invalid_nonactive_legacy_missing_and_changed_sources(self):
-        finding = ForwardPaperPackageFinding(
-            ForwardPaperPackageFindingCode.TRUST_CHAIN_INVALID,
-            None,
-            None,
-            "invalid trusted chain",
-        )
-        invalid = replace(
-            self.inspection,
-            health=ForwardPaperPackageHealth.INVALID,
-            findings=(finding,),
-            summary=None,
-        )
-        for value in (
-            invalid,
-            self._state_inspection(ForwardEligibilityState.PAUSED),
-            self._state_inspection(ForwardEligibilityState.REVOKED),
+    def test_fresh_e2_path_rejects_nonactive_and_state_substitution(self):
+        for state in (
+            ForwardEligibilityState.PAUSED,
+            ForwardEligibilityState.REVOKED,
         ):
-            with self.subTest(inspection=value):
+            with self.subTest(state=state):
+                root = self.root / state.value.lower()
+                published, recommendation = self._publish_nonactive(root, state)
+                inspection = inspect_forward_paper_workspace_package(
+                    root,
+                    published.run_id,
+                )
+                self.assertIs(inspection.health, ForwardPaperPackageHealth.VALID)
+                self.assertIs(inspection.summary.eligibility_state, state)
+                forged = replace(
+                    inspection,
+                    publication_index=replace(
+                        inspection.publication_index,
+                        eligibility_state=ForwardEligibilityState.ACTIVE,
+                    ),
+                    summary=replace(
+                        inspection.summary,
+                        eligibility_state=ForwardEligibilityState.ACTIVE,
+                    ),
+                )
                 with self.assertRaises(BrokerSafetySourceError):
                     build_broker_safety_source_handoff(
-                        value, self.ledger, self.recommendation
+                        root,
+                        published.run_id,
+                        recommendation.recommendation_id,
+                    )
+                with self.assertRaises(BrokerSafetySourceError):
+                    build_broker_safety_source_handoff(
+                        forged,
+                        self.ledger,
+                        self.recommendation,
                     )
 
+                substituted_anchors = tuple(
+                    replace(anchor, sha256="f" * 64)
+                    if anchor.role == "eligibility_evidence"
+                    else anchor
+                    for anchor in published.publication_index.artifact_anchors
+                )
+                substituted_index = replace(
+                    published.publication_index,
+                    artifact_anchors=substituted_anchors,
+                    eligibility_state=ForwardEligibilityState.ACTIVE,
+                    eligibility_sha256="f" * 64,
+                )
+                index_path = (
+                    published.run_directory.path / PUBLICATION_INDEX_PATH
+                )
+                index_path.write_bytes(
+                    export_forward_paper_publication_index_json(
+                        substituted_index
+                    ).encode("utf-8")
+                )
+                with self.assertRaises(BrokerSafetySourceError):
+                    build_broker_safety_source_handoff(
+                        root,
+                        published.run_id,
+                        recommendation.recommendation_id,
+                    )
+
+    def test_authoritative_path_rejects_missing_legacy_and_changed_sources(self):
+        for recommendation_id in (str(uuid4()), self.recommendation):
+            with self.subTest(recommendation_id=recommendation_id):
+                with self.assertRaises(BrokerSafetySourceError):
+                    build_broker_safety_source_handoff(
+                        self.root,
+                        self.published.run_id,
+                        recommendation_id,
+                    )
+
+        legacy_root = self.root / "legacy"
+        legacy_published = self.e1._publish(legacy_root)
         snapshot = self.recommendation.signal_snapshot
         legacy = RecommendationEvidence(
             schema_version="1.0",
@@ -256,35 +382,58 @@ class BrokerSafetySourceTests(unittest.TestCase):
             action=self.recommendation.action,
             qualification=self.recommendation.qualification,
         )
-        changed_time = (
-            datetime.strptime(
-                self.recommendation.generated_at, "%Y-%m-%dT%H:%M:%SZ"
-            )
-            + timedelta(seconds=1)
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
-        cases = (
-            legacy,
-            replace(self.recommendation, recommendation_id=str(uuid4())),
-            replace(self.recommendation, generated_at=changed_time),
+        legacy_text = export_recommendation_evidence_json(legacy)
+        anchor = legacy_published.publication_index.recommendation_anchors[0]
+        (legacy_published.run_directory.path / anchor.path).write_bytes(
+            legacy_text.encode("utf-8")
         )
-        for recommendation in cases:
-            with self.subTest(recommendation=recommendation):
-                with self.assertRaises(BrokerSafetySourceError):
-                    build_broker_safety_source_handoff(
-                        self.inspection, self.ledger, recommendation
-                    )
-        substituted = replace(self.ledger, ledger_id=str(uuid4()))
+        legacy_anchor = replace(
+            anchor,
+            recommendation_sha256=hashlib.sha256(
+                legacy_text.encode("utf-8")
+            ).hexdigest(),
+        )
+        legacy_index = replace(
+            legacy_published.publication_index,
+            recommendation_anchors=(legacy_anchor,),
+        )
+        (
+            legacy_published.run_directory.path / PUBLICATION_INDEX_PATH
+        ).write_bytes(
+            export_forward_paper_publication_index_json(legacy_index).encode(
+                "utf-8"
+            )
+        )
         with self.assertRaises(BrokerSafetySourceError):
             build_broker_safety_source_handoff(
-                self.inspection, substituted, self.recommendation
+                legacy_root,
+                legacy_published.run_id,
+                legacy.recommendation_id,
             )
 
+        ledger_anchor = next(
+            item
+            for item in self.published.publication_index.artifact_anchors
+            if item.role == "decision_ledger"
+        )
+        ledger_path = self.published.run_directory.path / ledger_anchor.path
+        ledger_path.write_bytes(ledger_path.read_bytes() + b" ")
+        with self.assertRaises(BrokerSafetySourceError):
+            build_broker_safety_source_handoff(
+                self.root,
+                self.published.run_id,
+                self.recommendation.recommendation_id,
+            )
     def test_source_digests_are_deterministic_and_exact_type_sensitive(self):
         first = build_broker_safety_source_handoff(
-            self.inspection, self.ledger, self.recommendation
+            self.root,
+            self.published.run_id,
+            self.recommendation.recommendation_id,
         )
         second = build_broker_safety_source_handoff(
-            self.inspection, self.ledger, self.recommendation
+            self.root,
+            self.published.run_id,
+            self.recommendation.recommendation_id,
         )
         self.assertEqual(
             first.qualified_symbols_sha256, second.qualified_symbols_sha256
@@ -302,7 +451,9 @@ class BrokerSafetySourceTests(unittest.TestCase):
 
     def test_strict_serialization_round_trips_all_boundary_models(self):
         handoff = build_broker_safety_source_handoff(
-            self.inspection, self.ledger, self.recommendation
+            self.root,
+            self.published.run_id,
+            self.recommendation.recommendation_id,
         )
         mark = ForwardEligibilityHighWaterMark.from_progression(self.progression)
         pairs = (
@@ -538,7 +689,8 @@ class BrokerSafetySourceTests(unittest.TestCase):
             "import requests",
             "import yfinance",
             "paper_trading",
-            "Workspace",
+            "write_managed_text",
+            "write_manifest",
         )
         for path in source_files:
             text = Path(path).read_text(encoding="utf-8")

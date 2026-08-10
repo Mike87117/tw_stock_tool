@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import Any
 
+from tw_stock_tool.application.forward_paper_inspection import (
+    _inspect_forward_paper_workspace_package_sources,
+)
+from tw_stock_tool.artifacts import WorkspaceError
 from tw_stock_tool.broker_safety.source_models import (
     HANDOFF_ARTIFACT_TYPE,
     PROGRESSION_ARTIFACT_TYPE,
@@ -106,6 +111,55 @@ def _trusted_ledger(
     return digest, serialize_forward_decision_ledger(ledger)
 
 
+def _trusted_workspace_sources(
+    workspace_root: str | Path,
+    run_id: str,
+) -> tuple[
+    ForwardPaperPackageInspection,
+    ForwardDecisionLedger,
+    dict[str, StrategyBoundRecommendationEvidence],
+]:
+    try:
+        inspection, loaded, recommendations = (
+            _inspect_forward_paper_workspace_package_sources(
+                workspace_root,
+                run_id,
+            )
+        )
+    except (OSError, TypeError, ValueError, WorkspaceError) as exc:
+        raise BrokerSafetySourceError(
+            f"E2 package inspection failed: {exc}"
+        ) from exc
+    index, summary = _trusted_inspection(inspection)
+    if loaded is None:
+        raise BrokerSafetySourceError(
+            "VALID E2 inspection did not retain trusted package sources"
+        )
+    ledger = loaded.get("decision_ledger")
+    if type(ledger) is not ForwardDecisionLedger:
+        raise BrokerSafetySourceError(
+            "VALID E2 inspection did not retain an exact decision ledger"
+        )
+    trusted_recommendations: dict[str, StrategyBoundRecommendationEvidence] = {}
+    for recommendation in recommendations:
+        if (
+            type(recommendation) is not StrategyBoundRecommendationEvidence
+            or recommendation.recommendation_id in trusted_recommendations
+        ):
+            raise BrokerSafetySourceError(
+                "VALID E2 inspection retained invalid recommendation sources"
+            )
+        trusted_recommendations[recommendation.recommendation_id] = recommendation
+    if tuple(trusted_recommendations) != tuple(
+        anchor.recommendation_id for anchor in index.recommendation_anchors
+    ):
+        raise BrokerSafetySourceError(
+            "trusted recommendation sources do not match Publication Index order"
+        )
+    _trusted_ledger(index, summary, ledger)
+    return inspection, ledger, trusted_recommendations
+
+
 def _lineage(index: ForwardPaperPublicationIndex) -> ForwardEligibilityLineageKey:
     return ForwardEligibilityLineageKey(
         activation_id=index.activation_id,
@@ -115,11 +169,11 @@ def _lineage(index: ForwardPaperPublicationIndex) -> ForwardEligibilityLineageKe
     )
 
 
-def build_forward_eligibility_progression(
+def _build_forward_eligibility_progression(
     inspection: ForwardPaperPackageInspection,
     ledger: ForwardDecisionLedger,
 ) -> ForwardEligibilityProgression:
-    """Derive one canonical progression from an E2-trusted package and ledger."""
+    """Derive one canonical progression from sources retained by fresh E2 inspection."""
     index, summary = _trusted_inspection(inspection)
     ledger_sha256, serialized = _trusted_ledger(index, summary, ledger)
     anchors = tuple(
@@ -176,20 +230,36 @@ def build_forward_eligibility_progression(
         raise BrokerSafetySourceError(str(exc)) from exc
 
 
+def build_forward_eligibility_progression(
+    workspace_root: str | Path,
+    run_id: str,
+) -> ForwardEligibilityProgression:
+    """Freshly inspect one persisted package and derive its progression."""
+    inspection, ledger, _ = _trusted_workspace_sources(workspace_root, run_id)
+    return _build_forward_eligibility_progression(inspection, ledger)
+
+
 def build_broker_safety_source_handoff(
-    inspection: ForwardPaperPackageInspection,
-    ledger: ForwardDecisionLedger,
-    recommendation: StrategyBoundRecommendationEvidence,
+    workspace_root: str | Path,
+    run_id: str,
+    recommendation_id: str,
 ) -> BrokerSafetySourceHandoff:
-    """Build an ACTIVE handoff from exact canonical E2 source objects."""
-    progression = build_forward_eligibility_progression(inspection, ledger)
+    """Freshly inspect one persisted package and build an ACTIVE handoff."""
+    inspection, ledger, recommendations = _trusted_workspace_sources(
+        workspace_root,
+        run_id,
+    )
+    progression = _build_forward_eligibility_progression(inspection, ledger)
     if progression.eligibility_state is not ForwardEligibilityState.ACTIVE:
         raise BrokerSafetySourceError(
             "broker-safety source handoff requires the current package to be ACTIVE"
         )
-    if type(recommendation) is not StrategyBoundRecommendationEvidence:
+    if type(recommendation_id) is not str:
+        raise BrokerSafetySourceError("recommendation_id must be an exact string")
+    recommendation = recommendations.get(recommendation_id)
+    if recommendation is None:
         raise BrokerSafetySourceError(
-            "recommendation must be exact schema-1.1 StrategyBoundRecommendationEvidence"
+            "recommendation_id is absent from the freshly inspected package"
         )
     index = inspection.publication_index
     summary = inspection.summary
