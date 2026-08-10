@@ -527,6 +527,8 @@ None。
 
 Only after forward paper evidence is reviewed：
 
+Authoritative safety contracts and dependency-ordered backlog are frozen in the [Phase 56.5 Broker Safety Architecture Plan](phase-56-5-broker-safety-plan.md).
+
 - Account reconciliation。
 - Order idempotency。
 - Partial fills。
