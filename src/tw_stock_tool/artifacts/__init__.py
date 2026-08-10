@@ -32,6 +32,7 @@ from tw_stock_tool.artifacts.workspace import (
     validate_artifact_path,
     validate_run_id,
     validate_workflow_slug,
+    write_managed_text,
     write_manifest,
 )
 
@@ -63,5 +64,6 @@ __all__ = [
     "validate_artifact_path",
     "validate_run_id",
     "validate_workflow_slug",
+    "write_managed_text",
     "write_manifest",
 ]

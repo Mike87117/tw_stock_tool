@@ -87,6 +87,22 @@ from tw_stock_tool.forward_paper.models import (
     ForwardPaperActivation,
     ForwardPaperModelError,
 )
+from tw_stock_tool.forward_paper.publication import (
+    PUBLICATION_ARTIFACT_SPECS,
+    PUBLICATION_ARTIFACT_TYPE,
+    PUBLICATION_INDEX_PATH,
+    PUBLICATION_SCHEMA_VERSION,
+    RECOMMENDATION_DIRECTORY,
+    ForwardPaperPublicationError,
+    ForwardPaperPublicationIndex,
+    ForwardPublishedArtifactAnchor,
+    ForwardRecommendationAnchor,
+    deserialize_forward_paper_publication_index,
+    export_forward_paper_publication_index_json,
+    load_forward_paper_publication_index_json,
+    serialize_forward_paper_publication_index,
+)
+
 from tw_stock_tool.forward_paper.serialization import (
     ForwardPaperSerializationError,
     deserialize_forward_paper_activation,
@@ -97,7 +113,19 @@ from tw_stock_tool.forward_paper.serialization import (
 
 
 __all__ = [
-    "FORWARD_DECISION_LEDGER_ARTIFACT_TYPE",
+    "PUBLICATION_ARTIFACT_SPECS",
+    "PUBLICATION_ARTIFACT_TYPE",
+    "PUBLICATION_INDEX_PATH",
+    "PUBLICATION_SCHEMA_VERSION",
+    "RECOMMENDATION_DIRECTORY",
+    "ForwardPaperPublicationError",
+    "ForwardPaperPublicationIndex",
+    "ForwardPublishedArtifactAnchor",
+    "ForwardRecommendationAnchor",
+    "deserialize_forward_paper_publication_index",
+    "export_forward_paper_publication_index_json",
+    "load_forward_paper_publication_index_json",
+    "serialize_forward_paper_publication_index",    "FORWARD_DECISION_LEDGER_ARTIFACT_TYPE",
     "FORWARD_DECISION_LEDGER_SCHEMA_VERSION",
     "FORWARD_ELIGIBILITY_POLICY_ID",
     "FORWARD_ELIGIBILITY_POLICY_VERSION",
