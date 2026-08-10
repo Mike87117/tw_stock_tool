@@ -83,7 +83,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
             short_selling_support=SupportState.UNSUPPORTED,
             borrow_availability_support=SupportState.UNSUPPORTED,
             fee_estimate_support=SupportState.SUPPORTED,
-            observed_at="2025-01-02T00:00:00Z",
+            observed_at="2025-01-02T00:00:10Z",
             source_version="fixture-v1",
         )
         values.update(changes)
@@ -462,6 +462,11 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
             (account, self.expectation(expected_open_orders=()), FindingCode.UNKNOWN_BROKER_OPEN_ORDER),
             (self.account(open_orders=()), expectation, FindingCode.UNRESOLVED_LOCAL_ORDER),
             (
+                self.account(open_orders=(self.order(broker_order_id="broker-2"),)),
+                expectation,
+                FindingCode.CLIENT_ORDER_ID_CONFLICT,
+            ),
+            (
                 account,
                 self.expectation(
                     expected_open_orders=(
@@ -574,6 +579,19 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         )
         self.assertIn(FindingCode.SNAPSHOT_STALE, at_boundary)
         self.assertIn(FindingCode.RECONCILIATION_STALE, at_boundary)
+        self.assertIn(FindingCode.SESSION_UNKNOWN, at_boundary)
+        stale_subjects = {
+            item.subject_type.value
+            for item in evaluate_broker_preflight(
+                account,
+                self.session(),
+                policy,
+                reconciliation,
+                evaluated_at="2025-01-02T00:00:30Z",
+            )
+            if item.code is FindingCode.SNAPSHOT_STALE
+        }
+        self.assertEqual(stale_subjects, {"ACCOUNT", "CAPABILITY"})
         before_boundary = evaluate_broker_preflight(
             account,
             self.session(),
@@ -608,8 +626,8 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         equal_policy = self.policy(
             maximum_order_notional=D("10"),
             maximum_post_fill_account_exposure=D("1060"),
-            maximum_per_symbol_exposure=D("1010"),
-            maximum_per_symbol_quantity=D("11"),
+            maximum_per_symbol_exposure=D("1060"),
+            maximum_per_symbol_quantity=D("14"),
             maximum_simultaneous_open_orders=2,
             maximum_daily_submitted_notional=D("260"),
             maximum_daily_loss=D("10"),
@@ -620,8 +638,8 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         overages = (
             ("maximum_order_notional", D("9.99"), FindingCode.ORDER_NOTIONAL_LIMIT),
             ("maximum_post_fill_account_exposure", D("1059.99"), FindingCode.ACCOUNT_EXPOSURE_LIMIT),
-            ("maximum_per_symbol_exposure", D("1009.99"), FindingCode.SYMBOL_EXPOSURE_LIMIT),
-            ("maximum_per_symbol_quantity", D("10.99"), FindingCode.SYMBOL_QUANTITY_LIMIT),
+            ("maximum_per_symbol_exposure", D("1059.99"), FindingCode.SYMBOL_EXPOSURE_LIMIT),
+            ("maximum_per_symbol_quantity", D("13.99"), FindingCode.SYMBOL_QUANTITY_LIMIT),
             ("maximum_simultaneous_open_orders", 1, FindingCode.OPEN_ORDER_LIMIT),
             ("maximum_daily_submitted_notional", D("259.99"), FindingCode.DAILY_NOTIONAL_LIMIT),
             ("maximum_daily_loss", D("9.99"), FindingCode.DAILY_LOSS_LIMIT),
@@ -688,6 +706,14 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
             )
         )
         self.assertIn(FindingCode.DAILY_LOSS_UNRELIABLE, unreliable_loss)
+        unresolved = self.codes(
+            evaluate_broker_limits(
+                account,
+                self.policy(),
+                self.request(unresolved_submission_count=1),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, unresolved)
         fractional = self.codes(
             evaluate_broker_limits(
                 account,

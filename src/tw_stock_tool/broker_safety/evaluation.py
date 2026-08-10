@@ -83,8 +83,13 @@ def _ordered(findings: list[BrokerSafetyFinding]) -> tuple[BrokerSafetyFinding, 
 
 
 def _economic_conflict(expected, observed) -> bool:
+    expected_broker_order_id = getattr(expected, "broker_order_id", None)
     return (
-        expected.economic_intent_id != observed.economic_intent_id
+        (
+            expected_broker_order_id is not None
+            and expected_broker_order_id != observed.broker_order_id
+        )
+        or expected.economic_intent_id != observed.economic_intent_id
         or expected.canonical_symbol != observed.canonical_symbol
         or expected.side is not observed.side
         or expected.original_quantity != observed.original_quantity
@@ -363,6 +368,21 @@ def evaluate_broker_preflight(
                 message="account snapshot is stale at the frozen TTL boundary",
             )
         )
+    capability_age = (
+        evaluated
+        - _timestamp("capabilities.observed_at", account.capabilities.observed_at)
+    ).total_seconds()
+    if capability_age < 0 or capability_age >= policy.snapshot_ttl_seconds:
+        findings.append(
+            _finding(
+                FindingCode.SNAPSHOT_STALE,
+                FindingSubjectType.CAPABILITY,
+                account.capabilities.capability_snapshot_id,
+                observed=str(int(capability_age)),
+                expected=f"<{policy.snapshot_ttl_seconds}",
+                message="capability snapshot is stale at the frozen TTL boundary",
+            )
+        )
     reconciliation_age = (
         evaluated - _timestamp("reconciliation.completed_at", reconciliation.completed_at)
     ).total_seconds()
@@ -417,15 +437,16 @@ def evaluate_broker_preflight(
                 message="session does not permit submission",
             )
         )
-    if _timestamp("session.as_of", session.as_of) > evaluated:
+    session_age = (evaluated - _timestamp("session.as_of", session.as_of)).total_seconds()
+    if session_age < 0 or session_age >= policy.snapshot_ttl_seconds:
         findings.append(
             _finding(
                 FindingCode.SESSION_UNKNOWN,
                 FindingSubjectType.SESSION,
                 session.session_snapshot_id,
-                observed=session.as_of,
-                expected=evaluated_at,
-                message="session observation is from the future",
+                observed=str(int(session_age)),
+                expected=f"0..<{policy.snapshot_ttl_seconds}",
+                message="session observation is stale or from the future",
             )
         )
     return _ordered(findings)
@@ -507,8 +528,10 @@ def evaluate_broker_limits(
         (item for item in account.positions if item.canonical_symbol == request.canonical_symbol),
         None,
     )
-    long_quantity = Decimal("0") if position is None else max(position.quantity, Decimal("0"))
-    if request.side is OrderSide.SELL and request.quantity > long_quantity:
+    available_long_quantity = (
+        Decimal("0") if position is None else position.available_quantity
+    )
+    if request.side is OrderSide.SELL and request.quantity > available_long_quantity:
         for capability in (CapabilityName.SHORT_SELLING, CapabilityName.BORROW_AVAILABILITY):
             item = _capability_finding(account, capability)
             if item is not None:
@@ -591,7 +614,7 @@ def evaluate_broker_limits(
             if position is None or position.market_value is None
             else abs(position.market_value)
         )
-        projected_symbol = symbol_exposure + order_notional
+        projected_symbol = symbol_exposure + reserved + order_notional
         if projected_symbol > policy.maximum_per_symbol_exposure:
             findings.append(
                 _finding(
@@ -605,7 +628,15 @@ def evaluate_broker_limits(
             )
 
     current_quantity = Decimal("0") if position is None else abs(position.quantity)
-    projected_quantity = current_quantity + request.quantity
+    broker_open_quantity = sum(
+        (
+            item.remaining_quantity
+            for item in account.open_orders
+            if item.canonical_symbol == request.canonical_symbol
+        ),
+        Decimal("0"),
+    )
+    projected_quantity = current_quantity + broker_open_quantity + request.quantity
     if projected_quantity > policy.maximum_per_symbol_quantity:
         findings.append(
             _finding(
@@ -615,6 +646,18 @@ def evaluate_broker_limits(
                 observed=projected_quantity,
                 expected=policy.maximum_per_symbol_quantity,
                 message="conservative per-symbol quantity exceeds policy limit",
+            )
+        )
+
+    if request.unresolved_submission_count:
+        findings.append(
+            _finding(
+                FindingCode.INSUFFICIENT_LIMIT_INPUT,
+                FindingSubjectType.LIMIT,
+                request.canonical_symbol,
+                observed=request.unresolved_submission_count,
+                expected=0,
+                message="unresolved submission symbol and quantity exposure is unknown",
             )
         )
 
