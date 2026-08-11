@@ -226,6 +226,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
                     "2330",
                     OrderSide.BUY,
                     D("5"),
+                    D("30"),
                 ),
             ),
             expected_nonterminal_submissions=(),
@@ -260,7 +261,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
             current_daily_loss=D("10"),
             daily_loss_reliability=FieldReliability.RELIABLE,
             broker_open_order_reserved_notional=D("30"),
-            unknown_submission_reserved_notional=D("20"),
+            unknown_submission_reserved_notional=D("0"),
             unresolved_submission_count=0,
             estimated_fees=D("0"),
             estimated_taxes=D("0"),
@@ -470,7 +471,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
                 account,
                 self.expectation(
                     expected_open_orders=(
-                        ExpectedOpenOrder("broker-1", "client-1", "other-intent", "2330", OrderSide.BUY, D("5")),
+                        ExpectedOpenOrder("broker-1", "client-1", "other-intent", "2330", OrderSide.BUY, D("5"), D("30")),
                     )
                 ),
                 FindingCode.CLIENT_ORDER_ID_CONFLICT,
@@ -625,29 +626,28 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         account = self.account()
         equal_policy = self.policy(
             maximum_order_notional=D("10"),
-            maximum_post_fill_account_exposure=D("1060"),
-            maximum_per_symbol_exposure=D("1060"),
+            maximum_post_fill_account_exposure=D("1040"),
+            maximum_per_symbol_exposure=D("1040"),
             maximum_per_symbol_quantity=D("14"),
             maximum_simultaneous_open_orders=2,
-            maximum_daily_submitted_notional=D("260"),
+            maximum_daily_submitted_notional=D("240"),
             maximum_daily_loss=D("10"),
             initial_allocation_ceiling=D("10"),
         )
-        equal_request = self.request(is_initial_allocation=True)
-        self.assertEqual(evaluate_broker_limits(account, equal_policy, equal_request), ())
+        equal_request = self.request()
+        self.assertEqual(evaluate_broker_limits(account, self.expectation(), equal_policy, equal_request), ())
         overages = (
             ("maximum_order_notional", D("9.99"), FindingCode.ORDER_NOTIONAL_LIMIT),
-            ("maximum_post_fill_account_exposure", D("1059.99"), FindingCode.ACCOUNT_EXPOSURE_LIMIT),
-            ("maximum_per_symbol_exposure", D("1059.99"), FindingCode.SYMBOL_EXPOSURE_LIMIT),
+            ("maximum_post_fill_account_exposure", D("1039.99"), FindingCode.ACCOUNT_EXPOSURE_LIMIT),
+            ("maximum_per_symbol_exposure", D("1039.99"), FindingCode.SYMBOL_EXPOSURE_LIMIT),
             ("maximum_per_symbol_quantity", D("13.99"), FindingCode.SYMBOL_QUANTITY_LIMIT),
             ("maximum_simultaneous_open_orders", 1, FindingCode.OPEN_ORDER_LIMIT),
-            ("maximum_daily_submitted_notional", D("259.99"), FindingCode.DAILY_NOTIONAL_LIMIT),
+            ("maximum_daily_submitted_notional", D("239.99"), FindingCode.DAILY_NOTIONAL_LIMIT),
             ("maximum_daily_loss", D("9.99"), FindingCode.DAILY_LOSS_LIMIT),
-            ("initial_allocation_ceiling", D("9.99"), FindingCode.INITIAL_ALLOCATION_LIMIT),
         )
         for field, value, code in overages:
             with self.subTest(field=field):
-                findings = evaluate_broker_limits(account, replace(equal_policy, **{field: value}), equal_request)
+                findings = evaluate_broker_limits(account, self.expectation(), replace(equal_policy, **{field: value}), equal_request)
                 self.assertIn(code, self.codes(findings))
 
     def test_limits_include_fees_pending_unknowns_and_never_assume_sell_reduces_risk(self):
@@ -656,6 +656,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         codes = self.codes(
             evaluate_broker_limits(
                 account,
+                self.expectation(),
                 self.policy(maximum_order_notional=D("12")),
                 with_charges,
             )
@@ -664,7 +665,8 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         daily_codes = self.codes(
             evaluate_broker_limits(
                 account,
-                self.policy(maximum_daily_submitted_notional=D("259")),
+                self.expectation(),
+                self.policy(maximum_daily_submitted_notional=D("239")),
                 self.request(),
             )
         )
@@ -672,6 +674,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         sell_codes = self.codes(
             evaluate_broker_limits(
                 account,
+                self.expectation(),
                 self.policy(maximum_per_symbol_exposure=D("1005")),
                 self.request(side=OrderSide.SELL),
             )
@@ -683,6 +686,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         missing_charges = self.codes(
             evaluate_broker_limits(
                 account,
+                self.expectation(),
                 self.policy(),
                 self.request(estimated_fees=None, estimated_taxes=None),
             )
@@ -694,29 +698,49 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         )
         unreliable_codes = self.codes(
             evaluate_broker_limits(
-                self.account(positions=(unreliable_position,)), self.policy(), self.request()
+                self.account(positions=(unreliable_position,)), self.expectation(), self.policy(), self.request()
             )
         )
         self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, unreliable_codes)
+        unreliable_expectation = self.expectation(
+            daily_loss=None,
+            daily_loss_reliability=FieldReliability.UNAVAILABLE,
+        )
         unreliable_loss = self.codes(
             evaluate_broker_limits(
                 account,
+                unreliable_expectation,
                 self.policy(),
                 self.request(current_daily_loss=None, daily_loss_reliability=FieldReliability.UNAVAILABLE),
             )
         )
         self.assertIn(FindingCode.DAILY_LOSS_UNRELIABLE, unreliable_loss)
+        unresolved_expectation = self.expectation(
+            expected_nonterminal_submissions=(
+                ExpectedSubmission(
+                    "local-2",
+                    "client-2",
+                    "intent-2",
+                    "2330",
+                    OrderSide.BUY,
+                    D("1"),
+                    D("20"),
+                ),
+            ),
+        )
         unresolved = self.codes(
             evaluate_broker_limits(
                 account,
+                unresolved_expectation,
                 self.policy(),
-                self.request(unresolved_submission_count=1),
+                self.request(unknown_submission_reserved_notional=D("20"), unresolved_submission_count=1),
             )
         )
         self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, unresolved)
         fractional = self.codes(
             evaluate_broker_limits(
                 account,
+                self.expectation(),
                 self.policy(),
                 self.request(quantity=D("0.5"), projected_order_notional=D("5")),
             )
@@ -725,6 +749,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         short = self.codes(
             evaluate_broker_limits(
                 account,
+                self.expectation(),
                 self.policy(),
                 self.request(side=OrderSide.SELL, quantity=D("11"), projected_order_notional=D("110")),
             )
@@ -733,6 +758,7 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         incompatible = self.codes(
             evaluate_broker_limits(
                 account,
+                self.expectation(),
                 self.policy(),
                 self.request(currency="USD", order_type=OrderType.STOP),
             )
@@ -740,6 +766,201 @@ class BrokerSafetyA2A3Tests(unittest.TestCase):
         self.assertIn(FindingCode.CURRENCY_MISMATCH, incompatible)
         self.assertIn(FindingCode.ORDER_TYPE_NOT_ALLOWED, incompatible)
         self.assertIn(FindingCode.CAPABILITY_UNSUPPORTED, incompatible)
+
+    def test_reconciliation_blocks_ambiguous_and_terminal_order_statuses(self):
+        cases = (
+            (BrokerOrderStatus.UNKNOWN, D("2"), D("3")),
+            (BrokerOrderStatus.CANCELED, D("2"), D("3")),
+            (BrokerOrderStatus.REJECTED, D("0"), D("5")),
+            (BrokerOrderStatus.EXPIRED, D("2"), D("3")),
+            (BrokerOrderStatus.FILLED, D("5"), D("0")),
+        )
+        for status, filled, remaining in cases:
+            with self.subTest(status=status):
+                account = self.account(
+                    open_orders=(
+                        self.order(
+                            status=status,
+                            cumulative_filled_quantity=filled,
+                            remaining_quantity=remaining,
+                        ),
+                    )
+                )
+                result = self.reconciliation(account, self.expectation())
+                self.assertFalse(result.is_reconciled)
+                self.assertIn(FindingCode.BROKER_ORDER_STATUS_MISMATCH, self.codes(result.findings))
+
+        invalid_status_accounting = (
+            {"status": BrokerOrderStatus.OPEN},
+            {
+                "status": BrokerOrderStatus.PARTIALLY_FILLED,
+                "cumulative_filled_quantity": D("0"),
+                "remaining_quantity": D("5"),
+            },
+            {"status": BrokerOrderStatus.FILLED},
+            {"status": BrokerOrderStatus.REJECTED},
+        )
+        for changes in invalid_status_accounting:
+            with self.subTest(changes=changes), self.assertRaises(BrokerSafetyModelError):
+                self.order(**changes)
+
+    def test_session_date_is_bound_to_observation_and_evaluation_timezone(self):
+        with self.assertRaises(BrokerSafetyModelError):
+            self.session(session_date="2025-01-01")
+
+        account = self.account()
+        findings = evaluate_broker_preflight(
+            account,
+            self.session(as_of="2025-01-02T15:59:59Z"),
+            self.policy(snapshot_ttl_seconds=100000, reconciliation_ttl_seconds=100000),
+            self.reconciliation(account, self.expectation()),
+            evaluated_at="2025-01-02T16:00:00Z",
+        )
+        self.assertIn(FindingCode.SESSION_NOT_PERMITTED, self.codes(findings))
+
+    def test_limit_state_is_bound_to_account_and_local_expectation(self):
+        account = self.account()
+
+        with self.assertRaises(BrokerSafetyModelError):
+            ExpectedOpenOrder(
+                "broker-1",
+                "client-1",
+                "intent-1",
+                "2330",
+                OrderSide.BUY,
+                D("5"),
+                D("0"),
+            )
+        with self.assertRaises(BrokerSafetyModelError):
+            ExpectedSubmission(
+                "local-1",
+                "client-1",
+                "intent-1",
+                "2330",
+                OrderSide.BUY,
+                D("5"),
+                D("0"),
+            )
+        daily_expectation = self.expectation(daily_submitted_notional=D("60"))
+        daily_codes = self.codes(
+            evaluate_broker_limits(
+                account,
+                daily_expectation,
+                self.policy(maximum_daily_submitted_notional=D("99")),
+                self.request(current_daily_submitted_notional=D("0")),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, daily_codes)
+        self.assertIn(FindingCode.DAILY_NOTIONAL_LIMIT, daily_codes)
+
+        loss_expectation = self.expectation(daily_loss=D("501"))
+        loss_codes = self.codes(
+            evaluate_broker_limits(
+                account,
+                loss_expectation,
+                self.policy(),
+                self.request(current_daily_loss=D("0")),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, loss_codes)
+        self.assertIn(FindingCode.DAILY_LOSS_LIMIT, loss_codes)
+
+        unreliable_expectation = self.expectation(
+            daily_loss=None,
+            daily_loss_reliability=FieldReliability.UNAVAILABLE,
+        )
+        unreliable_codes = self.codes(
+            evaluate_broker_limits(
+                account,
+                unreliable_expectation,
+                self.policy(),
+                self.request(current_daily_loss=D("0")),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, unreliable_codes)
+        self.assertIn(FindingCode.DAILY_LOSS_UNRELIABLE, unreliable_codes)
+
+        reserved_codes = self.codes(
+            evaluate_broker_limits(
+                account,
+                self.expectation(),
+                self.policy(maximum_post_fill_account_exposure=D("1020")),
+                self.request(broker_open_order_reserved_notional=D("0")),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, reserved_codes)
+        self.assertIn(FindingCode.ACCOUNT_EXPOSURE_LIMIT, reserved_codes)
+
+        unresolved_expectation = self.expectation(
+            expected_nonterminal_submissions=(
+                ExpectedSubmission(
+                    "local-2",
+                    "client-2",
+                    "intent-2",
+                    "2330",
+                    OrderSide.BUY,
+                    D("1"),
+                    D("20"),
+                ),
+            ),
+        )
+        unresolved_codes = self.codes(
+            evaluate_broker_limits(
+                account,
+                unresolved_expectation,
+                self.policy(maximum_simultaneous_open_orders=2),
+                self.request(),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, unresolved_codes)
+        self.assertIn(FindingCode.OPEN_ORDER_LIMIT, unresolved_codes)
+
+        initial_account = self.account(positions=(), open_orders=())
+        initial_expectation = self.expectation(
+            expected_positions=(),
+            expected_open_orders=(),
+        )
+        initial_codes = self.codes(
+            evaluate_broker_limits(
+                initial_account,
+                initial_expectation,
+                self.policy(initial_allocation_ceiling=D("9.99")),
+                self.request(
+                    broker_open_order_reserved_notional=D("0"),
+                    is_initial_allocation=False,
+                ),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, initial_codes)
+        self.assertIn(FindingCode.INITIAL_ALLOCATION_LIMIT, initial_codes)
+
+        unbound_codes = self.codes(
+            evaluate_broker_limits(
+                account,
+                self.expectation(expected_open_orders=()),
+                self.policy(),
+                self.request(broker_open_order_reserved_notional=D("0")),
+            )
+        )
+        self.assertIn(FindingCode.INSUFFICIENT_LIMIT_INPUT, unbound_codes)
+
+    def test_fee_capability_ambiguity_blocks_even_with_numeric_estimates(self):
+        cases = (
+            (SupportState.UNKNOWN, FindingCode.CAPABILITY_UNKNOWN),
+            (SupportState.UNSUPPORTED, FindingCode.CAPABILITY_UNSUPPORTED),
+        )
+        for state, expected_code in cases:
+            with self.subTest(state=state):
+                account = self.account(
+                    capabilities=self.capabilities(fee_estimate_support=state)
+                )
+                findings = evaluate_broker_limits(
+                    account,
+                    self.expectation(),
+                    self.policy(required_capabilities=()),
+                    self.request(estimated_fees=D("0"), estimated_taxes=D("0")),
+                )
+                self.assertIn(expected_code, self.codes(findings))
 
     def test_limit_request_rejects_implicit_or_inexact_input(self):
         invalid = (

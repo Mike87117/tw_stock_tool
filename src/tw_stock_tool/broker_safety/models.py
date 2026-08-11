@@ -156,6 +156,7 @@ class FindingCode(StrEnum):
     UNKNOWN_BROKER_OPEN_ORDER = "UNKNOWN_BROKER_OPEN_ORDER"
     UNRESOLVED_LOCAL_ORDER = "UNRESOLVED_LOCAL_ORDER"
     UNRESOLVED_SUBMISSION = "UNRESOLVED_SUBMISSION"
+    BROKER_ORDER_STATUS_MISMATCH = "BROKER_ORDER_STATUS_MISMATCH"
     CLIENT_ORDER_ID_CONFLICT = "CLIENT_ORDER_ID_CONFLICT"
     RECONCILIATION_STALE = "RECONCILIATION_STALE"
     RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
@@ -458,6 +459,17 @@ class BrokerOpenOrderSnapshot:
         if filled > original or remaining != original - filled:
             raise BrokerSafetyModelError("open-order quantities violate exact accounting")
         _exact_enum("status", self.status, BrokerOrderStatus)
+        if self.status in (BrokerOrderStatus.PENDING_SUBMIT, BrokerOrderStatus.OPEN):
+            if filled != 0:
+                raise BrokerSafetyModelError("pending/open order cannot report a fill")
+        elif self.status is BrokerOrderStatus.PARTIALLY_FILLED:
+            if filled == 0 or remaining == 0:
+                raise BrokerSafetyModelError("partially-filled order requires an actual partial fill")
+        elif self.status is BrokerOrderStatus.FILLED:
+            if filled != original or remaining != 0:
+                raise BrokerSafetyModelError("filled order requires full exact accounting")
+        elif self.status is BrokerOrderStatus.REJECTED and filled != 0:
+            raise BrokerSafetyModelError("rejected order cannot report a fill")
         submitted = _timestamp("submitted_at", self.submitted_at)
         updated = _timestamp("last_broker_update", self.last_broker_update)
         if updated < submitted:
@@ -558,10 +570,13 @@ class TradingSessionSnapshot:
         _clean("market", self.market, upper=True)
         timezone_id = _clean("timezone_id", self.timezone_id)
         try:
-            ZoneInfo(timezone_id)
+            timezone = ZoneInfo(timezone_id)
         except ZoneInfoNotFoundError as exc:
             raise BrokerSafetyModelError("timezone_id must identify an installed timezone") from exc
         _date("session_date", self.session_date)
+        as_of = _timestamp("as_of", self.as_of)
+        if as_of.replace(tzinfo=ZoneInfo("UTC")).astimezone(timezone).date().isoformat() != self.session_date:
+            raise BrokerSafetyModelError("session_date must equal the local date of as_of")
         _exact_enum("state", self.state, TradingSessionState)
         _exact_enum("submission_permissions", self.submission_permissions, PermissionState)
         _exact_enum("cancel_permissions", self.cancel_permissions, PermissionState)
@@ -575,7 +590,6 @@ class TradingSessionSnapshot:
             raise BrokerSafetyModelError("holiday/special closure requires CLOSED state")
         _clean("source_id", self.source_id)
         _clean("source_version", self.source_version)
-        _timestamp("as_of", self.as_of)
 
     @property
     def submit_allowed(self) -> bool:
@@ -718,6 +732,7 @@ class ExpectedOpenOrder:
     canonical_symbol: str
     side: OrderSide
     original_quantity: Decimal
+    reserved_notional: Decimal
 
     def __post_init__(self) -> None:
         _optional_clean("broker_order_id", self.broker_order_id)
@@ -728,6 +743,7 @@ class ExpectedOpenOrder:
         _clean("canonical_symbol", self.canonical_symbol, upper=True)
         _exact_enum("side", self.side, OrderSide)
         _decimal("original_quantity", self.original_quantity, positive=True)
+        _decimal("reserved_notional", self.reserved_notional, positive=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -747,7 +763,7 @@ class ExpectedSubmission:
         _clean("canonical_symbol", self.canonical_symbol, upper=True)
         _exact_enum("side", self.side, OrderSide)
         _decimal("original_quantity", self.original_quantity, positive=True)
-        _decimal("reserved_notional", self.reserved_notional, nonnegative=True)
+        _decimal("reserved_notional", self.reserved_notional, positive=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -789,6 +805,12 @@ class BrokerLocalExpectation:
         )
         if open_keys != tuple(sorted(open_keys)) or len(set(open_keys)) != len(open_keys):
             raise BrokerSafetyModelError("expected open orders must be unique and ordered")
+        broker_order_ids = tuple(
+            item.broker_order_id for item in self.expected_open_orders
+            if item.broker_order_id is not None
+        )
+        if len(broker_order_ids) != len(set(broker_order_ids)):
+            raise BrokerSafetyModelError("expected broker order IDs must map once")
         submission_ids = tuple(
             item.local_submission_id for item in self.expected_nonterminal_submissions
         )

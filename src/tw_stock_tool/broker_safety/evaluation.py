@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from tw_stock_tool.broker_safety.models import (
     RECONCILIATION_ARTIFACT_TYPE,
@@ -10,6 +11,7 @@ from tw_stock_tool.broker_safety.models import (
     BrokerAccountSnapshot,
     BrokerLimitRequest,
     BrokerLocalExpectation,
+    BrokerOrderStatus,
     BrokerReconciliationResult,
     BrokerSafetyFinding,
     BrokerSafetyModelError,
@@ -84,15 +86,41 @@ def _ordered(findings: list[BrokerSafetyFinding]) -> tuple[BrokerSafetyFinding, 
 
 def _economic_conflict(expected, observed) -> bool:
     expected_broker_order_id = getattr(expected, "broker_order_id", None)
+    expected_client_order_id = getattr(expected, "client_order_id", None)
     return (
         (
             expected_broker_order_id is not None
             and expected_broker_order_id != observed.broker_order_id
         )
+        or (
+            expected_client_order_id is not None
+            and expected_client_order_id != observed.client_order_id
+        )
         or expected.economic_intent_id != observed.economic_intent_id
         or expected.canonical_symbol != observed.canonical_symbol
         or expected.side is not observed.side
         or expected.original_quantity != observed.original_quantity
+    )
+
+
+def _order_status_finding(
+    observed,
+    subject_type: FindingSubjectType,
+    subject_id: str,
+) -> BrokerSafetyFinding | None:
+    if observed.status in (
+        BrokerOrderStatus.PENDING_SUBMIT,
+        BrokerOrderStatus.OPEN,
+        BrokerOrderStatus.PARTIALLY_FILLED,
+    ):
+        return None
+    return _finding(
+        FindingCode.BROKER_ORDER_STATUS_MISMATCH,
+        subject_type,
+        subject_id,
+        observed=observed.status,
+        expected="PENDING_SUBMIT,OPEN,PARTIALLY_FILLED",
+        message="local nonterminal order maps to ambiguous or terminal broker status",
     )
 
 
@@ -186,6 +214,9 @@ def reconcile_broker_account(
                     message="client order ID maps to conflicting economic facts",
                 )
             )
+        status_finding = _order_status_finding(observed, FindingSubjectType.OPEN_ORDER, subject_id)
+        if status_finding is not None:
+            findings.append(status_finding)
 
     for expected in expectation.expected_nonterminal_submissions:
         observed = by_client_id.get(expected.client_order_id)
@@ -212,6 +243,13 @@ def reconcile_broker_account(
                     message="submission client order ID maps to conflicting economic facts",
                 )
             )
+        status_finding = _order_status_finding(
+            observed,
+            FindingSubjectType.SUBMISSION,
+            expected.local_submission_id,
+        )
+        if status_finding is not None:
+            findings.append(status_finding)
 
     for order in snapshot.open_orders:
         if order.broker_order_id not in matched_broker_ids:
@@ -437,6 +475,23 @@ def evaluate_broker_preflight(
                 message="session does not permit submission",
             )
         )
+    evaluated_session_date = (
+        evaluated.replace(tzinfo=ZoneInfo("UTC"))
+        .astimezone(ZoneInfo(session.timezone_id))
+        .date()
+        .isoformat()
+    )
+    if evaluated_session_date != session.session_date:
+        findings.append(
+            _finding(
+                FindingCode.SESSION_NOT_PERMITTED,
+                FindingSubjectType.SESSION,
+                session.session_snapshot_id,
+                observed=evaluated_session_date,
+                expected=session.session_date,
+                message="evaluation local date differs from observed session date",
+            )
+        )
     session_age = (evaluated - _timestamp("session.as_of", session.as_of)).total_seconds()
     if session_age < 0 or session_age >= policy.snapshot_ttl_seconds:
         findings.append(
@@ -473,18 +528,160 @@ def _capability_finding(
 
 def evaluate_broker_limits(
     account: BrokerAccountSnapshot,
+    expectation: BrokerLocalExpectation,
     policy: BrokerSafetyPolicy,
     request: BrokerLimitRequest,
 ) -> tuple[BrokerSafetyFinding, ...]:
     """Evaluate projected limits conservatively without creating an order intent."""
     if type(account) is not BrokerAccountSnapshot:
         raise BrokerSafetyModelError("account must be exact BrokerAccountSnapshot")
+    if type(expectation) is not BrokerLocalExpectation:
+        raise BrokerSafetyModelError("expectation must be exact BrokerLocalExpectation")
     if type(policy) is not BrokerSafetyPolicy:
         raise BrokerSafetyModelError("policy must be exact BrokerSafetyPolicy")
     if type(request) is not BrokerLimitRequest:
         raise BrokerSafetyModelError("request must be exact BrokerLimitRequest")
     findings: list[BrokerSafetyFinding] = []
 
+    identities = (
+        ("account_reference", account.account_reference, expectation.account_reference),
+        ("broker_id", account.broker_id, expectation.broker_id),
+        ("environment", account.environment, expectation.environment),
+    )
+    for name, observed, expected in identities:
+        if observed != expected:
+            findings.append(
+                _finding(
+                    FindingCode.IDENTITY_MISMATCH,
+                    FindingSubjectType.LIMIT,
+                    account.account_reference,
+                    observed=observed,
+                    expected=expected,
+                    message=f"limit expectation {name} differs from account observation",
+                )
+            )
+
+    expected_by_broker_id = {
+        item.broker_order_id: ("open-order", item)
+        for item in expectation.expected_open_orders
+        if item.broker_order_id is not None
+    }
+    expected_by_client_id = {
+        item.client_order_id: ("open-order", item)
+        for item in expectation.expected_open_orders
+        if item.client_order_id is not None
+    }
+    expected_by_client_id.update(
+        {
+            item.client_order_id: ("submission", item)
+            for item in expectation.expected_nonterminal_submissions
+        }
+    )
+    matched_open_orders = set()
+    matched_submissions = set()
+    broker_reserved_notional = Decimal("0")
+    broker_reserved_by_symbol: dict[str, Decimal] = {}
+    reservation_complete = True
+    for observed in account.open_orders:
+        client_match = (
+            expected_by_client_id.get(observed.client_order_id)
+            if observed.client_order_id is not None
+            else None
+        )
+        broker_match = expected_by_broker_id.get(observed.broker_order_id)
+        bound = client_match or broker_match
+        if (
+            bound is None
+            or (client_match is not None and broker_match is not None and client_match != broker_match)
+            or _economic_conflict(bound[1], observed)
+        ):
+            reservation_complete = False
+            findings.append(
+                _finding(
+                    FindingCode.INSUFFICIENT_LIMIT_INPUT,
+                    FindingSubjectType.OPEN_ORDER,
+                    observed.broker_order_id,
+                    observed=observed.client_order_id,
+                    expected="one exact local reservation",
+                    message="broker open order lacks one matching immutable reservation",
+                )
+            )
+            continue
+        kind, expected = bound
+        broker_reserved_notional += expected.reserved_notional
+        broker_reserved_by_symbol[expected.canonical_symbol] = (
+            broker_reserved_by_symbol.get(expected.canonical_symbol, Decimal("0"))
+            + expected.reserved_notional
+        )
+        if kind == "open-order":
+            matched_open_orders.add(expected)
+        else:
+            matched_submissions.add(expected)
+
+    unmatched_open_orders = tuple(
+        item for item in expectation.expected_open_orders if item not in matched_open_orders
+    )
+    unmatched_submissions = tuple(
+        item
+        for item in expectation.expected_nonterminal_submissions
+        if item not in matched_submissions
+    )
+    unmatched_open_reserved_notional = sum(
+        (item.reserved_notional for item in unmatched_open_orders),
+        Decimal("0"),
+    )
+    unknown_submission_reserved_notional = sum(
+        (item.reserved_notional for item in unmatched_submissions),
+        Decimal("0"),
+    )
+    reserved_notional = (
+        broker_reserved_notional
+        + unmatched_open_reserved_notional
+        + unknown_submission_reserved_notional
+    )
+    symbol_reserved_notional = (
+        broker_reserved_by_symbol.get(request.canonical_symbol, Decimal("0"))
+        + sum(
+            (
+                item.reserved_notional
+                for item in (*unmatched_open_orders, *unmatched_submissions)
+                if item.canonical_symbol == request.canonical_symbol
+            ),
+            Decimal("0"),
+        )
+    )
+    unresolved_submission_count = len(unmatched_submissions)
+    expected_position = next(
+        (
+            item
+            for item in expectation.expected_positions
+            if item.canonical_symbol == request.canonical_symbol
+        ),
+        None,
+    )
+    is_initial_allocation = expected_position is None or expected_position.quantity == 0
+    trusted_request_state = (
+        ("current_daily_submitted_notional", expectation.daily_submitted_notional),
+        ("current_daily_loss", expectation.daily_loss),
+        ("daily_loss_reliability", expectation.daily_loss_reliability),
+        ("broker_open_order_reserved_notional", broker_reserved_notional),
+        ("unknown_submission_reserved_notional", unknown_submission_reserved_notional),
+        ("unresolved_submission_count", unresolved_submission_count),
+        ("is_initial_allocation", is_initial_allocation),
+    )
+    for name, trusted in trusted_request_state:
+        supplied = getattr(request, name)
+        if supplied != trusted:
+            findings.append(
+                _finding(
+                    FindingCode.INSUFFICIENT_LIMIT_INPUT,
+                    FindingSubjectType.LIMIT,
+                    request.canonical_symbol,
+                    observed=supplied,
+                    expected=trusted,
+                    message=f"{name} differs from trusted account/local state",
+                )
+            )
     if request.currency != account.currency or request.currency != policy.currency:
         findings.append(
             _finding(
@@ -537,14 +734,14 @@ def evaluate_broker_limits(
             if item is not None:
                 findings.append(item)
 
+    fee_capability = _capability_finding(account, CapabilityName.FEE_ESTIMATE)
+    if fee_capability is not None:
+        findings.append(fee_capability)
     for name, estimate in (
         ("fees", request.estimated_fees),
         ("taxes", request.estimated_taxes),
     ):
         if estimate is None:
-            item = _capability_finding(account, CapabilityName.FEE_ESTIMATE)
-            if item is not None:
-                findings.append(item)
             findings.append(
                 _finding(
                     FindingCode.INSUFFICIENT_LIMIT_INPUT,
@@ -577,10 +774,6 @@ def evaluate_broker_limits(
         and item.market_value is not None
         for item in account.positions
     )
-    reserved = (
-        request.broker_open_order_reserved_notional
-        + request.unknown_submission_reserved_notional
-    )
     if not exposure_known:
         findings.append(
             _finding(
@@ -592,12 +785,12 @@ def evaluate_broker_limits(
                 message="account exposure cannot be proven from position values",
             )
         )
-    else:
+    elif reservation_complete:
         current_exposure = sum(
             (abs(item.market_value) for item in account.positions if item.market_value is not None),
             Decimal("0"),
         )
-        projected_account = current_exposure + reserved + order_notional
+        projected_account = current_exposure + reserved_notional + order_notional
         if projected_account > policy.maximum_post_fill_account_exposure:
             findings.append(
                 _finding(
@@ -614,7 +807,7 @@ def evaluate_broker_limits(
             if position is None or position.market_value is None
             else abs(position.market_value)
         )
-        projected_symbol = symbol_exposure + reserved + order_notional
+        projected_symbol = symbol_exposure + symbol_reserved_notional + order_notional
         if projected_symbol > policy.maximum_per_symbol_exposure:
             findings.append(
                 _finding(
@@ -636,7 +829,17 @@ def evaluate_broker_limits(
         ),
         Decimal("0"),
     )
-    projected_quantity = current_quantity + broker_open_quantity + request.quantity
+    unresolved_open_quantity = sum(
+        (
+            item.original_quantity
+            for item in (*unmatched_open_orders, *unmatched_submissions)
+            if item.canonical_symbol == request.canonical_symbol
+        ),
+        Decimal("0"),
+    )
+    projected_quantity = (
+        current_quantity + broker_open_quantity + unresolved_open_quantity + request.quantity
+    )
     if projected_quantity > policy.maximum_per_symbol_quantity:
         findings.append(
             _finding(
@@ -649,20 +852,23 @@ def evaluate_broker_limits(
             )
         )
 
-    if request.unresolved_submission_count:
+    if unmatched_open_orders or unmatched_submissions:
         findings.append(
             _finding(
                 FindingCode.INSUFFICIENT_LIMIT_INPUT,
                 FindingSubjectType.LIMIT,
                 request.canonical_symbol,
-                observed=request.unresolved_submission_count,
+                observed=len(unmatched_open_orders) + len(unmatched_submissions),
                 expected=0,
-                message="unresolved submission symbol and quantity exposure is unknown",
+                message="unresolved local orders or submissions remain at the limit boundary",
             )
         )
 
     projected_open_orders = (
-        len(account.open_orders) + request.unresolved_submission_count + 1
+        len(account.open_orders)
+        + len(unmatched_open_orders)
+        + unresolved_submission_count
+        + 1
     )
     if projected_open_orders > policy.maximum_simultaneous_open_orders:
         findings.append(
@@ -677,12 +883,9 @@ def evaluate_broker_limits(
         )
 
     projected_daily = (
-        request.current_daily_submitted_notional
-        + request.broker_open_order_reserved_notional
-        + request.unknown_submission_reserved_notional
-        + order_notional
+        expectation.daily_submitted_notional + reserved_notional + order_notional
     )
-    if projected_daily > policy.maximum_daily_submitted_notional:
+    if reservation_complete and projected_daily > policy.maximum_daily_submitted_notional:
         findings.append(
             _finding(
                 FindingCode.DAILY_NOTIONAL_LIMIT,
@@ -696,32 +899,32 @@ def evaluate_broker_limits(
 
     if policy.maximum_daily_loss > 0:
         if (
-            request.daily_loss_reliability is not FieldReliability.RELIABLE
-            or request.current_daily_loss is None
+            expectation.daily_loss_reliability is not FieldReliability.RELIABLE
+            or expectation.daily_loss is None
         ):
             findings.append(
                 _finding(
                     FindingCode.DAILY_LOSS_UNRELIABLE,
                     FindingSubjectType.LIMIT,
                     account.account_reference,
-                    observed=request.daily_loss_reliability,
+                    observed=expectation.daily_loss_reliability,
                     expected=FieldReliability.RELIABLE,
                     message="daily loss is required and must be reliable",
                 )
             )
-        elif request.current_daily_loss > policy.maximum_daily_loss:
+        elif expectation.daily_loss > policy.maximum_daily_loss:
             findings.append(
                 _finding(
                     FindingCode.DAILY_LOSS_LIMIT,
                     FindingSubjectType.LIMIT,
                     account.account_reference,
-                    observed=request.current_daily_loss,
+                    observed=expectation.daily_loss,
                     expected=policy.maximum_daily_loss,
                     message="daily loss exceeds policy limit",
                 )
             )
 
-    if request.is_initial_allocation and order_notional > policy.initial_allocation_ceiling:
+    if is_initial_allocation and order_notional > policy.initial_allocation_ceiling:
         findings.append(
             _finding(
                 FindingCode.INITIAL_ALLOCATION_LIMIT,
