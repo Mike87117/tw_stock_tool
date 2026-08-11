@@ -1,4 +1,4 @@
-"""Strict deterministic JSON for Phase 56.5A2-A3 broker-safety artifacts."""
+"""Strict deterministic JSON for Phase 56.5A2-A4 broker-safety artifacts."""
 
 from __future__ import annotations
 
@@ -9,6 +9,20 @@ import json
 import types
 from typing import Any, NoReturn, Union, get_args, get_origin, get_type_hints
 
+from tw_stock_tool.broker_safety.execution_models import (
+    AUTHORIZATION_ARTIFACT_TYPE,
+    AUTHORIZATION_USE_ARTIFACT_TYPE,
+    EXECUTION_ARTIFACT_TYPE,
+    KILL_SWITCH_ARTIFACT_TYPE,
+    ORDER_INTENT_ARTIFACT_TYPE,
+    SUBMISSION_ARTIFACT_TYPE,
+    BrokerAuthorizationUseRecord,
+    BrokerExecutionAuthorization,
+    BrokerExecutionRecord,
+    BrokerKillSwitchSnapshot,
+    BrokerOrderIntent,
+    BrokerSubmissionRecord,
+)
 from tw_stock_tool.broker_safety.models import (
     ACCOUNT_ARTIFACT_TYPE,
     CAPABILITIES_ARTIFACT_TYPE,
@@ -46,6 +60,12 @@ _ARTIFACTS = {
     EXPECTATION_ARTIFACT_TYPE: BrokerLocalExpectation,
     RECONCILIATION_ARTIFACT_TYPE: BrokerReconciliationResult,
     LIMIT_REQUEST_ARTIFACT_TYPE: BrokerLimitRequest,
+    KILL_SWITCH_ARTIFACT_TYPE: BrokerKillSwitchSnapshot,
+    AUTHORIZATION_ARTIFACT_TYPE: BrokerExecutionAuthorization,
+    AUTHORIZATION_USE_ARTIFACT_TYPE: BrokerAuthorizationUseRecord,
+    ORDER_INTENT_ARTIFACT_TYPE: BrokerOrderIntent,
+    SUBMISSION_ARTIFACT_TYPE: BrokerSubmissionRecord,
+    EXECUTION_ARTIFACT_TYPE: BrokerExecutionRecord,
 }
 _TOP_LEVEL_TYPES = tuple(_ARTIFACTS.values())
 
