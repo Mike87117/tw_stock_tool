@@ -312,8 +312,7 @@ class BrokerOrderIntentKeyPayload:
     canonical_symbol: str
     side: OrderSide
     quantity_mode: QuantityMode
-    quantity: Decimal
-    notional: Decimal
+    quantity_or_notional: Decimal
     order_type: OrderType
     limit_price_if_any: Decimal | None
     time_in_force: TimeInForce
@@ -336,16 +335,15 @@ class BrokerOrderIntentKeyPayload:
         _clean("canonical_symbol", self.canonical_symbol, upper=True)
         _exact_enum("side", self.side, OrderSide)
         _exact_enum("quantity_mode", self.quantity_mode, QuantityMode)
-        _decimal("quantity", self.quantity, positive=True)
-        _decimal("notional", self.notional, positive=True)
+        _decimal("quantity_or_notional", self.quantity_or_notional, positive=True)
         _exact_enum("order_type", self.order_type, OrderType)
         if self.limit_price_if_any is not None:
             _decimal("limit_price_if_any", self.limit_price_if_any, positive=True)
-        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
+        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT):
+            raise BrokerA4ModelError("STOP and STOP_LIMIT require a future trigger-price contract")
+        if self.order_type is OrderType.LIMIT:
             if self.limit_price_if_any is None:
-                raise BrokerA4ModelError("LIMIT and STOP_LIMIT keys require an exact price")
-            if self.notional != self.quantity * self.limit_price_if_any:
-                raise BrokerA4ModelError("priced intent notional must equal quantity times limit price")
+                raise BrokerA4ModelError("LIMIT keys require an exact price")
         elif self.limit_price_if_any is not None:
             raise BrokerA4ModelError("non-limit keys cannot carry a limit price")
         elif self.quantity_mode is QuantityMode.NOTIONAL:
@@ -372,8 +370,7 @@ def derive_broker_order_intent_key_v1(payload: BrokerOrderIntentKeyPayload) -> s
         "publication_id": payload.publication_id,
         "publication_index_sha256": payload.publication_index_sha256,
         "quantity_mode": payload.quantity_mode.value,
-        "quantity": _decimal_text(payload.quantity),
-        "notional": _decimal_text(payload.notional),
+        "quantity_or_notional": _decimal_text(payload.quantity_or_notional),
         "recommendation_id": payload.recommendation_id,
         "recommendation_sha256": payload.recommendation_sha256,
         "schema_version": payload.schema_version,
@@ -428,7 +425,6 @@ class BrokerOrderIntent:
     environment: BrokerEnvironment
     session_date: str
     canonical_symbol: str
-    broker_symbol: str
     side: OrderSide
     quantity_mode: QuantityMode
     quantity: Decimal
@@ -464,7 +460,6 @@ class BrokerOrderIntent:
         _exact_enum("environment", self.environment, BrokerEnvironment)
         _date("session_date", self.session_date)
         _clean("canonical_symbol", self.canonical_symbol, upper=True)
-        _clean("broker_symbol", self.broker_symbol)
         _exact_enum("side", self.side, OrderSide)
         _exact_enum("quantity_mode", self.quantity_mode, QuantityMode)
         _decimal("quantity", self.quantity, positive=True)
@@ -473,9 +468,11 @@ class BrokerOrderIntent:
         _exact_enum("time_in_force", self.time_in_force, TimeInForce)
         if self.limit_price is not None:
             _decimal("limit_price", self.limit_price, positive=True)
-        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
+        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT):
+            raise BrokerA4ModelError("STOP and STOP_LIMIT require a future trigger-price contract")
+        if self.order_type is OrderType.LIMIT:
             if self.limit_price is None:
-                raise BrokerA4ModelError("LIMIT and STOP_LIMIT intents require limit_price")
+                raise BrokerA4ModelError("LIMIT intents require limit_price")
             if self.notional != self.quantity * self.limit_price:
                 raise BrokerA4ModelError("priced intent notional must equal quantity times limit price")
         elif self.limit_price is not None:
@@ -498,8 +495,11 @@ class BrokerOrderIntent:
             canonical_symbol=self.canonical_symbol,
             side=self.side,
             quantity_mode=self.quantity_mode,
-            quantity=self.quantity,
-            notional=self.notional,
+            quantity_or_notional=(
+                self.quantity
+                if self.quantity_mode is QuantityMode.QUANTITY
+                else self.notional
+            ),
             order_type=self.order_type,
             limit_price_if_any=self.limit_price,
             time_in_force=self.time_in_force,

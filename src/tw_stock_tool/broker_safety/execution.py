@@ -205,7 +205,7 @@ def evaluate_broker_order_intent(intent, authorization, source, current_head, ki
         _mismatch(findings, FindingSubjectType.INTENT, intent.economic_intent_id, name, observed, expected)
     if intent.canonical_symbol not in authorization.allowed_symbols or intent.side is not authorization.allowed_side or intent.order_type not in authorization.allowed_order_types or intent.time_in_force not in authorization.allowed_time_in_force:
         findings.append(_finding(FindingCode.INTENT_BOUNDS_EXCEEDED, FindingSubjectType.INTENT, intent.economic_intent_id, "economic-facts", "authorization-bounds", "intent exceeds authorization"))
-    if intent.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
+    if intent.order_type is OrderType.LIMIT:
         notional = intent.quantity * intent.limit_price
         if intent.notional != notional:
             findings.append(_finding(FindingCode.INTENT_BOUNDS_EXCEEDED, FindingSubjectType.INTENT, intent.economic_intent_id, intent.notional, notional, "priced intent notional differs from exact executable principal"))
@@ -225,7 +225,7 @@ def evaluate_broker_order_intent(intent, authorization, source, current_head, ki
 
 def build_broker_order_intent(
     authorization, source, current_head, kill_switch, *, economic_intent_id, canonical_symbol,
-    broker_symbol, side, quantity_mode, quantity, notional, order_type,
+    side, quantity_mode, quantity, notional, order_type,
     time_in_force, limit_price, currency, created_at, intent_revision,
     broker_client_order_id_max_length=None,
 ):
@@ -234,7 +234,7 @@ def build_broker_order_intent(
         source.publication_id, source.publication_index_sha256,
         current_head.progression_fingerprint, source.ledger_id, source.recommendation_id,
         source.recommendation_sha256, canonical_symbol, side, quantity_mode,
-        quantity, notional,
+        quantity if quantity_mode is QuantityMode.QUANTITY else notional,
         order_type, limit_price, time_in_force, authorization.session_date, intent_revision,
     )
     key = derive_broker_order_intent_key_v1(payload)
@@ -246,7 +246,7 @@ def build_broker_order_intent(
         source.progression_fingerprint, source.ledger_id, source.recommendation_id,
         source.recommendation_sha256, authorization.account_reference,
         authorization.broker_id, authorization.environment, authorization.session_date,
-        canonical_symbol, broker_symbol, side, quantity_mode, quantity, notional,
+        canonical_symbol, side, quantity_mode, quantity, notional,
         order_type, time_in_force, limit_price, currency, created_at, intent_revision,
     )
     findings = evaluate_broker_order_intent(intent, authorization, source, current_head, kill_switch, evaluated_at=created_at)

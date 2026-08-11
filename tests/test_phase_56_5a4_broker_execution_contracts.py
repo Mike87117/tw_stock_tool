@@ -101,7 +101,7 @@ class Phase565A4Tests(unittest.TestCase):
 
     def make_intent(self, **changes):
         values = dict(
-            economic_intent_id=IDS[9], canonical_symbol="2330", broker_symbol="2330.TW",
+            economic_intent_id=IDS[9], canonical_symbol="2330",
             side=OrderSide.BUY, quantity_mode=QuantityMode.QUANTITY, quantity=D("1"),
             notional=D("10"), order_type=OrderType.LIMIT, time_in_force=TimeInForce.DAY,
             limit_price=D("10"), currency="TWD", created_at="2025-01-02T00:00:31Z",
@@ -201,11 +201,18 @@ class Phase565A4Tests(unittest.TestCase):
             self.source.publication_index_sha256, self.head.progression_fingerprint,
             self.source.ledger_id, self.source.recommendation_id,
             self.source.recommendation_sha256, "2330", OrderSide.BUY,
-            QuantityMode.QUANTITY, D("1.0"), D("10.00"),
-            OrderType.LIMIT, D("10.00"),
+            QuantityMode.QUANTITY, D("1.0"), OrderType.LIMIT, D("10.00"),
             TimeInForce.DAY, "2025-01-02", 0,
         )
         key = derive_broker_order_intent_key_v1(payload)
+        self.assertEqual(
+            key,
+            "broker_order_intent_key_v1:7f6827c93590590a7fe77b5f02d36d4d29e23a8808105cb7219b4949f55d1cc6",
+        )
+        self.assertEqual(
+            canonical_broker_client_order_id(key),
+            "twst1-7f6827c93590590a7fe77b5f02d36d4d29e23a8808105cb7219b4949f55d1cc6",
+        )
         self.assertEqual(key, self.intent.idempotency_key)
         self.assertEqual(len(key), len("broker_order_intent_key_v1:") + 64)
         self.assertEqual(canonical_broker_client_order_id(key), self.intent.canonical_client_order_id)
@@ -216,10 +223,9 @@ class Phase565A4Tests(unittest.TestCase):
         with self.assertRaises(BrokerPersistentEncodingRequiredError) as caught:
             canonical_broker_client_order_id(key, broker_max_length=69)
         self.assertIn("PERSISTENT_ENCODING_REQUIRED", str(caught.exception))
-        for name in ("quantity", "notional"):
-            for value in (1, 1.0, True):
-                with self.assertRaises(Exception):
-                    replace(payload, **{name: value})
+        for value in (1, 1.0, True):
+            with self.assertRaises(Exception):
+                replace(payload, quantity_or_notional=value)
 
     def test_intent_enforces_key_authorization_and_economic_bounds(self):
         with self.assertRaises(BrokerA4ModelError):
@@ -239,26 +245,24 @@ class Phase565A4Tests(unittest.TestCase):
         with self.assertRaises(BrokerA4ModelError):
             self.make_intent()
 
-    def test_notional_mode_identity_binds_every_execution_quantity(self):
+    def test_notional_mode_quantity_is_derived_from_keyed_facts(self):
+        intent = self.make_intent(quantity_mode=QuantityMode.NOTIONAL)
         payload = BrokerOrderIntentKeyPayload(
             A4_SCHEMA_VERSION, self.authorization.account_reference,
             self.authorization.environment, self.source.publication_id,
             self.source.publication_index_sha256, self.head.progression_fingerprint,
             self.source.ledger_id, self.source.recommendation_id,
             self.source.recommendation_sha256, "2330", OrderSide.BUY,
-            QuantityMode.NOTIONAL, D("1"), D("10"), OrderType.LIMIT, D("10"),
+            QuantityMode.NOTIONAL, D("10"), OrderType.LIMIT, D("10"),
             TimeInForce.DAY, "2025-01-02", 0,
         )
-        changed = replace(payload, quantity=D("2"), notional=D("20"))
-        original_key = derive_broker_order_intent_key_v1(payload)
-        changed_key = derive_broker_order_intent_key_v1(changed)
-        self.assertNotEqual(original_key, changed_key)
-        self.assertNotEqual(
-            canonical_broker_client_order_id(original_key),
-            canonical_broker_client_order_id(changed_key),
-        )
+        self.assertEqual(intent.idempotency_key, derive_broker_order_intent_key_v1(payload))
         with self.assertRaises(BrokerA4ModelError):
-            replace(payload, quantity=D("2"))
+            replace(intent, quantity=D("2"))
+        with self.assertRaises(BrokerA4ModelError):
+            replace(intent, quantity=D("2"), notional=D("20"))
+        with self.assertRaisesRegex(BrokerA4ModelError, "conversion contract"):
+            replace(payload, order_type=OrderType.MARKET, limit_price_if_any=None)
 
     def test_market_quantity_requires_exact_reviewed_conservative_notional(self):
         market_policy = replace(
@@ -285,7 +289,7 @@ class Phase565A4Tests(unittest.TestCase):
         )
         values = dict(
             economic_intent_id=IDS[13], canonical_symbol="2330",
-            broker_symbol="2330.TW", side=OrderSide.BUY,
+            side=OrderSide.BUY,
             quantity_mode=QuantityMode.QUANTITY, quantity=D("1"),
             order_type=OrderType.MARKET, time_in_force=TimeInForce.DAY,
             limit_price=None, currency="TWD", created_at="2025-01-02T00:00:31Z",
@@ -302,6 +306,47 @@ class Phase565A4Tests(unittest.TestCase):
             notional=market_authorization.maximum_notional, **values,
         )
         self.assertEqual(market_intent.notional, market_authorization.maximum_notional)
+        safety_only_change = replace(market_intent, notional=D("11"))
+        self.assertEqual(safety_only_change.idempotency_key, market_intent.idempotency_key)
+        self.assertEqual(
+            safety_only_change.canonical_client_order_id,
+            market_intent.canonical_client_order_id,
+        )
+        payload = BrokerOrderIntentKeyPayload(
+            A4_SCHEMA_VERSION, market_authorization.account_reference,
+            market_authorization.environment, self.source.publication_id,
+            self.source.publication_index_sha256, self.head.progression_fingerprint,
+            self.source.ledger_id, self.source.recommendation_id,
+            self.source.recommendation_sha256, "2330", OrderSide.BUY,
+            QuantityMode.QUANTITY, D("1"), OrderType.MARKET, None,
+            TimeInForce.DAY, "2025-01-02", 0,
+        )
+        changed_quantity_key = derive_broker_order_intent_key_v1(
+            replace(payload, quantity_or_notional=D("2"))
+        )
+        self.assertEqual(market_intent.idempotency_key, derive_broker_order_intent_key_v1(payload))
+        self.assertNotEqual(market_intent.idempotency_key, changed_quantity_key)
+        self.assertNotEqual(
+            market_intent.canonical_client_order_id,
+            canonical_broker_client_order_id(changed_quantity_key),
+        )
+
+    def test_provider_symbol_mapping_is_deferred_and_cannot_redirect_intent(self):
+        self.assertNotIn("broker_symbol", {item.name for item in fields(type(self.intent))})
+        self.assertFalse(hasattr(self.intent, "broker_symbol"))
+        with self.assertRaises(TypeError):
+            self.make_intent(broker_symbol="AAPL")
+        self.assertNotIn("broker_symbol", export_broker_safety_artifact_json(self.intent))
+
+    def test_stop_family_fails_closed_until_trigger_price_is_modeled(self):
+        for order_type, limit_price in (
+            (OrderType.STOP, None),
+            (OrderType.STOP_LIMIT, D("10")),
+        ):
+            with self.subTest(order_type=order_type), self.assertRaisesRegex(
+                BrokerA4ModelError, "trigger-price contract",
+            ):
+                self.make_intent(order_type=order_type, limit_price=limit_price)
 
     def test_submission_authorization_gate_recomputes_and_binds_authority(self):
         prepared = prepare_broker_submission(
