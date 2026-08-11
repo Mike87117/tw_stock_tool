@@ -12,7 +12,8 @@ from tw_stock_tool.broker_safety import (
     A4_SCHEMA_VERSION, AUTHORIZATION_USE_PERSISTENCE_NOTICE,
     BrokerA4ModelError, BrokerAuthorizationUseRecord, BrokerExecutionRecord,
     BrokerKillSwitchSnapshot, BrokerOrderIntentKeyPayload,
-    BrokerPersistentEncodingRequiredError, BrokerSubmissionEvidence,
+    BrokerPersistentEncodingRequiredError, BrokerSafetyModelError,
+    BrokerSubmissionEvidence,
     BrokerSubmissionState, KillSwitchState, QuantityMode, AuthorizationUseState,
     OrderSide, OrderType, TimeInForce, FindingCode,
     apply_broker_execution, build_broker_execution_authorization,
@@ -109,6 +110,41 @@ class Phase565A4Tests(unittest.TestCase):
         values.update(changes)
         return build_broker_order_intent(self.authorization, self.source, self.head, self.kill, **values)
 
+    def gate_facts(self, **changes):
+        values = dict(
+            authorization=self.authorization, source=self.source, current_head=self.head,
+            account=self.account, reconciliation=self.reconciliation,
+            expectation=self.expectation, policy=self.policy, session=self.session,
+            kill_switch=self.kill, request=self.request,
+        )
+        values.update(changes)
+        return values
+
+    def consumed_use(self):
+        reserved = reserve_broker_authorization_use(
+            self.authorization, self.intent, authorization_use_id=IDS[10],
+            reserved_at="2025-01-02T00:00:32Z",
+        )
+        return transition_broker_authorization_use(
+            reserved, AuthorizationUseState.CONSUMED,
+            authorization_id=self.authorization.authorization_id,
+            economic_intent_id=self.intent.economic_intent_id,
+            idempotency_key=self.intent.idempotency_key,
+            occurred_at="2025-01-02T00:00:33Z",
+        )
+
+    def changed_head(self):
+        facts = {
+            item.name: getattr(self.head, item.name)
+            for item in fields(self.head)
+            if item.name not in ("schema_version", "artifact_type", "progression_fingerprint")
+        }
+        facts["ledger_sha256"] = "f" * 64
+        return replace(
+            self.head, ledger_sha256=facts["ledger_sha256"],
+            progression_fingerprint=progression_fingerprint(**facts),
+        )
+
     def test_models_are_frozen_and_kill_switch_dimensions_are_independent(self):
         with self.assertRaises(FrozenInstanceError):
             self.kill.reason = "changed"
@@ -165,7 +201,8 @@ class Phase565A4Tests(unittest.TestCase):
             self.source.publication_index_sha256, self.head.progression_fingerprint,
             self.source.ledger_id, self.source.recommendation_id,
             self.source.recommendation_sha256, "2330", OrderSide.BUY,
-            QuantityMode.QUANTITY, D("1.0"), OrderType.LIMIT, D("10.00"),
+            QuantityMode.QUANTITY, D("1.0"), D("10.00"),
+            OrderType.LIMIT, D("10.00"),
             TimeInForce.DAY, "2025-01-02", 0,
         )
         key = derive_broker_order_intent_key_v1(payload)
@@ -179,9 +216,10 @@ class Phase565A4Tests(unittest.TestCase):
         with self.assertRaises(BrokerPersistentEncodingRequiredError) as caught:
             canonical_broker_client_order_id(key, broker_max_length=69)
         self.assertIn("PERSISTENT_ENCODING_REQUIRED", str(caught.exception))
-        for value in (1, 1.0, True):
-            with self.assertRaises(Exception):
-                replace(payload, quantity_or_notional=value)
+        for name in ("quantity", "notional"):
+            for value in (1, 1.0, True):
+                with self.assertRaises(Exception):
+                    replace(payload, **{name: value})
 
     def test_intent_enforces_key_authorization_and_economic_bounds(self):
         with self.assertRaises(BrokerA4ModelError):
@@ -191,11 +229,160 @@ class Phase565A4Tests(unittest.TestCase):
         with self.assertRaises(BrokerA4ModelError):
             self.make_intent(quantity=D("2"))
         with self.assertRaises(BrokerA4ModelError):
+            self.make_intent(limit_price=D("100"), notional=D("1"))
+        with self.assertRaises(BrokerA4ModelError):
+            self.make_intent(limit_price=D("100"), notional=D("100"))
+        with self.assertRaises(BrokerA4ModelError):
             self.make_intent(currency="USD")
         self.assertNotEqual(self.intent.idempotency_key, self.make_intent(intent_revision=1).idempotency_key)
         self.kill = replace(self.kill, stop_new_orders_state=KillSwitchState.ACTIVE)
         with self.assertRaises(BrokerA4ModelError):
             self.make_intent()
+
+    def test_notional_mode_identity_binds_every_execution_quantity(self):
+        payload = BrokerOrderIntentKeyPayload(
+            A4_SCHEMA_VERSION, self.authorization.account_reference,
+            self.authorization.environment, self.source.publication_id,
+            self.source.publication_index_sha256, self.head.progression_fingerprint,
+            self.source.ledger_id, self.source.recommendation_id,
+            self.source.recommendation_sha256, "2330", OrderSide.BUY,
+            QuantityMode.NOTIONAL, D("1"), D("10"), OrderType.LIMIT, D("10"),
+            TimeInForce.DAY, "2025-01-02", 0,
+        )
+        changed = replace(payload, quantity=D("2"), notional=D("20"))
+        original_key = derive_broker_order_intent_key_v1(payload)
+        changed_key = derive_broker_order_intent_key_v1(changed)
+        self.assertNotEqual(original_key, changed_key)
+        self.assertNotEqual(
+            canonical_broker_client_order_id(original_key),
+            canonical_broker_client_order_id(changed_key),
+        )
+        with self.assertRaises(BrokerA4ModelError):
+            replace(payload, quantity=D("2"))
+
+    def test_market_quantity_requires_exact_reviewed_conservative_notional(self):
+        market_policy = replace(
+            self.policy,
+            allowed_order_types=(OrderType.LIMIT, OrderType.MARKET),
+        )
+        market_request = self.base.request(order_type=OrderType.MARKET)
+        market_preflight = evaluate_broker_preflight(
+            self.account, self.session, market_policy, self.reconciliation,
+            evaluated_at="2025-01-02T00:00:30Z",
+        )
+        market_limits = evaluate_broker_limits(
+            self.account, self.expectation, market_policy, market_request,
+        )
+        market_authorization = build_broker_execution_authorization(
+            self.source, self.head, self.account, self.reconciliation,
+            self.expectation, market_policy, self.session, self.kill, market_request,
+            authorization_id=IDS[12], time_in_force=TimeInForce.DAY,
+            approved_at="2025-01-02T00:00:30Z",
+            not_before="2025-01-02T00:00:30Z",
+            expires_at="2025-01-02T00:00:59Z",
+            approver_identity_ref="operator-ref",
+            preflight_findings=market_preflight, limit_findings=market_limits,
+        )
+        values = dict(
+            economic_intent_id=IDS[13], canonical_symbol="2330",
+            broker_symbol="2330.TW", side=OrderSide.BUY,
+            quantity_mode=QuantityMode.QUANTITY, quantity=D("1"),
+            order_type=OrderType.MARKET, time_in_force=TimeInForce.DAY,
+            limit_price=None, currency="TWD", created_at="2025-01-02T00:00:31Z",
+            intent_revision=0, broker_client_order_id_max_length=80,
+        )
+        for understated in (None, D("9")):
+            with self.subTest(notional=understated), self.assertRaises(BrokerSafetyModelError):
+                build_broker_order_intent(
+                    market_authorization, self.source, self.head, self.kill,
+                    notional=understated, **values,
+                )
+        market_intent = build_broker_order_intent(
+            market_authorization, self.source, self.head, self.kill,
+            notional=market_authorization.maximum_notional, **values,
+        )
+        self.assertEqual(market_intent.notional, market_authorization.maximum_notional)
+
+    def test_submission_authorization_gate_recomputes_and_binds_authority(self):
+        prepared = prepare_broker_submission(
+            self.intent, attempt_id=IDS[11], recorded_at="2025-01-02T00:00:32Z",
+        )
+        with self.assertRaises(BrokerA4ModelError):
+            transition_broker_submission(
+                prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                recorded_at="2025-01-02T00:00:33Z",
+            )
+        with self.assertRaises(TypeError):
+            transition_broker_submission(
+                prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                recorded_at="2025-01-02T00:00:33Z", gate_findings=(),
+            )
+        not_yet_valid = replace(self.authorization, not_before="2025-01-02T00:00:40Z")
+        identity_mismatch = replace(self.authorization, authorization_id=IDS[12])
+        for authorization, recorded_at in (
+            (not_yet_valid, "2025-01-02T00:00:33Z"),
+            (identity_mismatch, "2025-01-02T00:00:33Z"),
+            (self.authorization, self.authorization.expires_at),
+        ):
+            with self.subTest(authorization=authorization, recorded_at=recorded_at), self.assertRaises(BrokerA4ModelError):
+                transition_broker_submission(
+                    prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                    recorded_at=recorded_at,
+                    **self.gate_facts(authorization=authorization),
+                )
+        with self.assertRaises(BrokerA4ModelError):
+            transition_broker_submission(
+                prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                recorded_at="2025-01-02T00:00:33Z",
+                **self.gate_facts(current_head=self.changed_head()),
+            )
+        for state in (KillSwitchState.UNKNOWN, KillSwitchState.ACTIVE):
+            with self.subTest(stop_new_orders_state=state), self.assertRaises(BrokerA4ModelError):
+                transition_broker_submission(
+                    prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                    recorded_at="2025-01-02T00:00:33Z",
+                    **self.gate_facts(kill_switch=replace(self.kill, stop_new_orders_state=state)),
+                )
+
+        authorized = transition_broker_submission(
+            prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+            recorded_at="2025-01-02T00:00:33Z", **self.gate_facts(),
+        )
+        reserved = reserve_broker_authorization_use(
+            self.authorization, self.intent, authorization_use_id=IDS[10],
+            reserved_at="2025-01-02T00:00:32Z",
+        )
+        consumed = self.consumed_use()
+        changed_key = self.make_intent(intent_revision=1).idempotency_key
+        mismatched_uses = (
+            reserved,
+            replace(consumed, authorization_id=IDS[12]),
+            replace(consumed, economic_intent_id=IDS[12]),
+            replace(consumed, idempotency_key=changed_key),
+        )
+        for authorization_use in mismatched_uses:
+            with self.subTest(authorization_use=authorization_use), self.assertRaises(BrokerA4ModelError):
+                transition_broker_submission(
+                    authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST,
+                    recorded_at="2025-01-02T00:00:34Z",
+                    pre_submit_persistence_version="opaque-v1",
+                    authorization_use=authorization_use, **self.gate_facts(),
+                )
+        with self.assertRaises(BrokerA4ModelError):
+            transition_broker_submission(
+                authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST,
+                recorded_at="2025-01-02T00:00:34Z",
+                pre_submit_persistence_version="opaque-v1",
+                authorization_use=consumed,
+                **self.gate_facts(kill_switch=replace(self.kill, stop_new_orders_state=KillSwitchState.ACTIVE)),
+            )
+        submitting = transition_broker_submission(
+            authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST,
+            recorded_at="2025-01-02T00:00:34Z",
+            pre_submit_persistence_version="opaque-v1",
+            authorization_use=consumed, **self.gate_facts(),
+        )
+        self.assertEqual(submitting.state, BrokerSubmissionState.SUBMITTING)
 
     def test_authorization_use_is_one_way_identity_bound_and_explicitly_not_durable(self):
         use = reserve_broker_authorization_use(self.authorization, self.intent, authorization_use_id=IDS[10], reserved_at="2025-01-02T00:00:32Z")
@@ -212,12 +399,21 @@ class Phase565A4Tests(unittest.TestCase):
             transition_broker_authorization_use(consumed, AuthorizationUseState.ABANDONED, authorization_id=self.authorization.authorization_id, economic_intent_id=self.intent.economic_intent_id, idempotency_key=self.intent.idempotency_key, occurred_at="2025-01-02T00:00:34Z")
         with self.assertRaises(BrokerA4ModelError):
             transition_broker_authorization_use(use, AuthorizationUseState.CONSUMED, authorization_id=IDS[11], economic_intent_id=self.intent.economic_intent_id, idempotency_key=self.intent.idempotency_key, occurred_at="2025-01-02T00:00:33Z")
+        self.assertIn("do not prove durable", AUTHORIZATION_USE_PERSISTENCE_NOTICE)
         self.assertIn("Phase 56.5C", AUTHORIZATION_USE_PERSISTENCE_NOTICE)
 
     def submission(self):
         prepared = prepare_broker_submission(self.intent, attempt_id=IDS[11], recorded_at="2025-01-02T00:00:32Z")
-        authorized = transition_broker_submission(prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE, recorded_at="2025-01-02T00:00:33Z")
-        submitting = transition_broker_submission(authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST, recorded_at="2025-01-02T00:00:34Z", pre_submit_persistence_version="persist-v1")
+        authorized = transition_broker_submission(
+            prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+            recorded_at="2025-01-02T00:00:33Z", **self.gate_facts(),
+        )
+        submitting = transition_broker_submission(
+            authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST,
+            recorded_at="2025-01-02T00:00:34Z",
+            pre_submit_persistence_version="persist-v1",
+            authorization_use=self.consumed_use(), **self.gate_facts(),
+        )
         return transition_broker_submission(submitting, self.intent, BrokerSubmissionEvidence.BROKER_ACK, recorded_at="2025-01-02T00:00:35Z", broker_order_id="broker-order-1")
 
     def execution(self, **changes):
@@ -245,8 +441,16 @@ class Phase565A4Tests(unittest.TestCase):
         with self.assertRaises(BrokerA4ModelError):
             transition_broker_submission(filled, self.intent, BrokerSubmissionEvidence.CANCEL_REQUEST, recorded_at="2025-01-02T00:00:40Z")
         prepared = prepare_broker_submission(self.intent, attempt_id=IDS[12], recorded_at="2025-01-02T00:00:32Z")
-        authorized = transition_broker_submission(prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE, recorded_at="2025-01-02T00:00:33Z")
-        submitting = transition_broker_submission(authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST, recorded_at="2025-01-02T00:00:34Z", pre_submit_persistence_version="persist-v2")
+        authorized = transition_broker_submission(
+            prepared, self.intent, BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+            recorded_at="2025-01-02T00:00:33Z", **self.gate_facts(),
+        )
+        submitting = transition_broker_submission(
+            authorized, self.intent, BrokerSubmissionEvidence.SUBMIT_REQUEST,
+            recorded_at="2025-01-02T00:00:34Z",
+            pre_submit_persistence_version="persist-v2",
+            authorization_use=self.consumed_use(), **self.gate_facts(),
+        )
         unknown = transition_broker_submission(submitting, self.intent, BrokerSubmissionEvidence.AMBIGUOUS_OUTCOME, recorded_at="2025-01-02T00:00:35Z")
         self.assertEqual(unknown.state, BrokerSubmissionState.UNKNOWN_SUBMISSION_STATE)
         recon = transition_broker_submission(acknowledged, self.intent, BrokerSubmissionEvidence.BROKER_ACK, recorded_at="2025-01-02T00:00:36Z")

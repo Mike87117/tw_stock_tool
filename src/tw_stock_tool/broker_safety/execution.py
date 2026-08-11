@@ -16,9 +16,9 @@ from tw_stock_tool.broker_safety.execution_models import (
 )
 from tw_stock_tool.broker_safety.models import (
     BrokerAccountSnapshot, BrokerLimitRequest, BrokerLocalExpectation,
-    BrokerReconciliationResult, BrokerSafetyFinding, BrokerSafetyModelError,
+    BrokerReconciliationResult, BrokerSafetyFinding,
     BrokerSafetyPolicy, FindingCode, FindingSeverity, FindingSubjectType,
-    TimeInForce, TradingSessionSnapshot, _timestamp,
+    OrderType, TimeInForce, TradingSessionSnapshot, _timestamp,
 )
 from tw_stock_tool.broker_safety.source_models import BrokerSafetySourceHandoff, ForwardEligibilityProgression
 
@@ -37,7 +37,7 @@ def _ordered(items):
 
 def _require(name, value, expected):
     if type(value) is not expected:
-        raise BrokerSafetyModelError(f"{name} must be exact {expected.__name__}")
+        raise BrokerA4ModelError(f"{name} must be exact {expected.__name__}")
 
 
 def _mismatch(findings, subject_type, subject_id, name, observed, expected):
@@ -66,7 +66,7 @@ def evaluate_broker_execution_authorization(
     _validate(source, current_head, account, reconciliation, expectation, policy, session, kill_switch, request)
     for name, items in (("preflight_findings", preflight_findings), ("limit_findings", limit_findings)):
         if type(items) is not tuple or any(type(item) is not BrokerSafetyFinding for item in items):
-            raise BrokerSafetyModelError(f"{name} must be an exact finding tuple")
+            raise BrokerA4ModelError(f"{name} must be an exact finding tuple")
     evaluated = _timestamp("evaluated_at", evaluated_at)
     actual_preflight = evaluate_broker_preflight(account, session, policy, reconciliation, evaluated_at=evaluated_at)
     actual_limits = evaluate_broker_limits(account, expectation, policy, request)
@@ -205,7 +205,14 @@ def evaluate_broker_order_intent(intent, authorization, source, current_head, ki
         _mismatch(findings, FindingSubjectType.INTENT, intent.economic_intent_id, name, observed, expected)
     if intent.canonical_symbol not in authorization.allowed_symbols or intent.side is not authorization.allowed_side or intent.order_type not in authorization.allowed_order_types or intent.time_in_force not in authorization.allowed_time_in_force:
         findings.append(_finding(FindingCode.INTENT_BOUNDS_EXCEEDED, FindingSubjectType.INTENT, intent.economic_intent_id, "economic-facts", "authorization-bounds", "intent exceeds authorization"))
-    notional = intent.notional if intent.notional is not None else intent.quantity * (intent.limit_price or Decimal(0))
+    if intent.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
+        notional = intent.quantity * intent.limit_price
+        if intent.notional != notional:
+            findings.append(_finding(FindingCode.INTENT_BOUNDS_EXCEEDED, FindingSubjectType.INTENT, intent.economic_intent_id, intent.notional, notional, "priced intent notional differs from exact executable principal"))
+    else:
+        notional = intent.notional
+        if intent.quantity_mode is QuantityMode.NOTIONAL or notional != authorization.maximum_notional:
+            findings.append(_finding(FindingCode.INTENT_BOUNDS_EXCEEDED, FindingSubjectType.INTENT, intent.economic_intent_id, notional, authorization.maximum_notional, "unpriced intent lacks the exact reviewed conservative notional"))
     if intent.quantity > authorization.maximum_quantity or notional > authorization.maximum_notional:
         findings.append(_finding(FindingCode.INTENT_BOUNDS_EXCEEDED, FindingSubjectType.INTENT, intent.economic_intent_id, f"{intent.quantity}/{notional}", f"<={authorization.maximum_quantity}/<={authorization.maximum_notional}", "intent exceeds quantity or notional"))
     evaluated = _timestamp("evaluated_at", evaluated_at)
@@ -227,7 +234,7 @@ def build_broker_order_intent(
         source.publication_id, source.publication_index_sha256,
         current_head.progression_fingerprint, source.ledger_id, source.recommendation_id,
         source.recommendation_sha256, canonical_symbol, side, quantity_mode,
-        quantity if quantity_mode is QuantityMode.QUANTITY else notional,
+        quantity, notional,
         order_type, limit_price, time_in_force, authorization.session_date, intent_revision,
     )
     key = derive_broker_order_intent_key_v1(payload)
@@ -278,10 +285,36 @@ def prepare_broker_submission(intent, *, attempt_id, recorded_at):
     )
 
 
+def _evaluate_authoritative_submission_gate(
+    intent, authorization, source, current_head, account, reconciliation,
+    expectation, policy, session, kill_switch, request, *, evaluated_at,
+):
+    _require("intent", intent, BrokerOrderIntent)
+    _require("authorization", authorization, BrokerExecutionAuthorization)
+    _validate(source, current_head, account, reconciliation, expectation, policy, session, kill_switch, request)
+    preflight = evaluate_broker_preflight(account, session, policy, reconciliation, evaluated_at=evaluated_at)
+    limits = evaluate_broker_limits(account, expectation, policy, request)
+    return _ordered((
+        *evaluate_broker_execution_authorization(
+            authorization, source, current_head, account, reconciliation,
+            expectation, policy, session, kill_switch, request,
+            preflight_findings=preflight, limit_findings=limits,
+            evaluated_at=evaluated_at,
+        ),
+        *evaluate_broker_order_intent(
+            intent, authorization, source, current_head, kill_switch,
+            evaluated_at=evaluated_at,
+        ),
+    ))
+
+
 def transition_broker_submission(
     record, intent, evidence, *, recorded_at, broker_order_id=None,
     pre_submit_persistence_version=None, sanitized_outcome=None,
-    last_reconciliation_id=None, gate_findings=(),
+    last_reconciliation_id=None, authorization=None, source=None,
+    current_head=None, account=None, reconciliation=None, expectation=None,
+    policy=None, session=None, kill_switch=None, request=None,
+    authorization_use=None,
 ):
     _require("record", record, BrokerSubmissionRecord)
     _require("intent", intent, BrokerOrderIntent)
@@ -291,8 +324,6 @@ def transition_broker_submission(
         raise BrokerA4ModelError("submission identity substitution")
     if _timestamp("recorded_at", recorded_at) < _timestamp("prior recorded_at", record.recorded_at):
         raise BrokerA4ModelError("submission time must be monotonic")
-    if type(gate_findings) is not tuple or any(type(item) is not BrokerSafetyFinding for item in gate_findings):
-        raise BrokerA4ModelError("gate_findings must be an exact finding tuple")
     terminal = (BrokerSubmissionState.FILLED, BrokerSubmissionState.CANCELLED,
                 BrokerSubmissionState.REJECTED, BrokerSubmissionState.EXPIRED,
                 BrokerSubmissionState.UNKNOWN_SUBMISSION_STATE,
@@ -302,12 +333,41 @@ def transition_broker_submission(
     pair = (record.state, evidence)
     updates = {"recorded_at": recorded_at}
     if pair == (BrokerSubmissionState.PREPARED, BrokerSubmissionEvidence.AUTHORIZATION_GATE):
-        if any(item.blocking for item in gate_findings):
+        if _evaluate_authoritative_submission_gate(
+            intent, authorization, source, current_head, account, reconciliation,
+            expectation, policy, session, kill_switch, request,
+            evaluated_at=recorded_at,
+        ):
             raise BrokerA4ModelError("authorization gate is blocking")
         target = BrokerSubmissionState.AUTHORIZED
     elif pair == (BrokerSubmissionState.AUTHORIZED, BrokerSubmissionEvidence.SUBMIT_REQUEST):
+        if _evaluate_authoritative_submission_gate(
+            intent, authorization, source, current_head, account, reconciliation,
+            expectation, policy, session, kill_switch, request,
+            evaluated_at=recorded_at,
+        ):
+            raise BrokerA4ModelError("pre-submit authorization gate is blocking")
+        _require("authorization_use", authorization_use, BrokerAuthorizationUseRecord)
+        if authorization_use.state is not AuthorizationUseState.CONSUMED:
+            raise BrokerA4ModelError("SUBMITTING requires a consumed authorization use")
+        if (
+            authorization_use.authorization_id,
+            authorization_use.account_reference,
+            authorization_use.environment,
+            authorization_use.economic_intent_id,
+            authorization_use.idempotency_key,
+        ) != (
+            authorization.authorization_id,
+            authorization.account_reference,
+            authorization.environment,
+            intent.economic_intent_id,
+            intent.idempotency_key,
+        ):
+            raise BrokerA4ModelError("authorization-use identity substitution")
+        if _timestamp("consumed_at", authorization_use.consumed_at) > _timestamp("recorded_at", recorded_at):
+            raise BrokerA4ModelError("authorization use cannot follow submission")
         if pre_submit_persistence_version is None:
-            raise BrokerA4ModelError("SUBMITTING requires pre-submit persistence evidence")
+            raise BrokerA4ModelError("SUBMITTING requires an opaque persistence version reference")
         target = BrokerSubmissionState.SUBMITTING
         updates.update(pre_submit_persistence_version=pre_submit_persistence_version, request_timestamp=recorded_at)
     elif pair == (BrokerSubmissionState.SUBMITTING, BrokerSubmissionEvidence.BROKER_ACK):

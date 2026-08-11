@@ -38,8 +38,8 @@ INTENT_KEY_PREFIX = "broker_order_intent_key_v1:"
 CLIENT_ORDER_ID_PREFIX = "twst1-"
 CANONICAL_CLIENT_ORDER_ID_LENGTH = len(CLIENT_ORDER_ID_PREFIX) + 64
 AUTHORIZATION_USE_PERSISTENCE_NOTICE = (
-    "One-time cross-process authorization use requires the account-scoped durable "
-    "uniqueness constraint planned for Phase 56.5C."
+    "Pure authorization-use and submission transitions do not prove durable or "
+    "cross-process uniqueness; the account-scoped constraint remains Phase 56.5C."
 )
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -312,7 +312,8 @@ class BrokerOrderIntentKeyPayload:
     canonical_symbol: str
     side: OrderSide
     quantity_mode: QuantityMode
-    quantity_or_notional: Decimal
+    quantity: Decimal
+    notional: Decimal
     order_type: OrderType
     limit_price_if_any: Decimal | None
     time_in_force: TimeInForce
@@ -335,15 +336,20 @@ class BrokerOrderIntentKeyPayload:
         _clean("canonical_symbol", self.canonical_symbol, upper=True)
         _exact_enum("side", self.side, OrderSide)
         _exact_enum("quantity_mode", self.quantity_mode, QuantityMode)
-        _decimal("quantity_or_notional", self.quantity_or_notional, positive=True)
+        _decimal("quantity", self.quantity, positive=True)
+        _decimal("notional", self.notional, positive=True)
         _exact_enum("order_type", self.order_type, OrderType)
         if self.limit_price_if_any is not None:
             _decimal("limit_price_if_any", self.limit_price_if_any, positive=True)
         if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
             if self.limit_price_if_any is None:
                 raise BrokerA4ModelError("LIMIT and STOP_LIMIT keys require an exact price")
+            if self.notional != self.quantity * self.limit_price_if_any:
+                raise BrokerA4ModelError("priced intent notional must equal quantity times limit price")
         elif self.limit_price_if_any is not None:
             raise BrokerA4ModelError("non-limit keys cannot carry a limit price")
+        elif self.quantity_mode is QuantityMode.NOTIONAL:
+            raise BrokerA4ModelError("unpriced NOTIONAL intent requires a future reviewed conversion contract")
         _exact_enum("time_in_force", self.time_in_force, TimeInForce)
         _date("execution_session_date", self.execution_session_date)
         _count("intent_revision", self.intent_revision)
@@ -366,7 +372,8 @@ def derive_broker_order_intent_key_v1(payload: BrokerOrderIntentKeyPayload) -> s
         "publication_id": payload.publication_id,
         "publication_index_sha256": payload.publication_index_sha256,
         "quantity_mode": payload.quantity_mode.value,
-        "quantity_or_notional": _decimal_text(payload.quantity_or_notional),
+        "quantity": _decimal_text(payload.quantity),
+        "notional": _decimal_text(payload.notional),
         "recommendation_id": payload.recommendation_id,
         "recommendation_sha256": payload.recommendation_sha256,
         "schema_version": payload.schema_version,
@@ -425,7 +432,7 @@ class BrokerOrderIntent:
     side: OrderSide
     quantity_mode: QuantityMode
     quantity: Decimal
-    notional: Decimal | None
+    notional: Decimal
     order_type: OrderType
     time_in_force: TimeInForce
     limit_price: Decimal | None
@@ -461,10 +468,7 @@ class BrokerOrderIntent:
         _exact_enum("side", self.side, OrderSide)
         _exact_enum("quantity_mode", self.quantity_mode, QuantityMode)
         _decimal("quantity", self.quantity, positive=True)
-        if self.notional is not None:
-            _decimal("notional", self.notional, positive=True)
-        if self.quantity_mode is QuantityMode.NOTIONAL and self.notional is None:
-            raise BrokerA4ModelError("NOTIONAL intent requires exact notional")
+        _decimal("notional", self.notional, positive=True)
         _exact_enum("order_type", self.order_type, OrderType)
         _exact_enum("time_in_force", self.time_in_force, TimeInForce)
         if self.limit_price is not None:
@@ -472,8 +476,12 @@ class BrokerOrderIntent:
         if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
             if self.limit_price is None:
                 raise BrokerA4ModelError("LIMIT and STOP_LIMIT intents require limit_price")
+            if self.notional != self.quantity * self.limit_price:
+                raise BrokerA4ModelError("priced intent notional must equal quantity times limit price")
         elif self.limit_price is not None:
             raise BrokerA4ModelError("non-limit intent cannot carry limit_price")
+        elif self.quantity_mode is QuantityMode.NOTIONAL:
+            raise BrokerA4ModelError("unpriced NOTIONAL intent requires a future reviewed conversion contract")
         _clean("currency", self.currency, upper=True)
         _timestamp("created_at", self.created_at)
         _count("intent_revision", self.intent_revision)
@@ -490,7 +498,8 @@ class BrokerOrderIntent:
             canonical_symbol=self.canonical_symbol,
             side=self.side,
             quantity_mode=self.quantity_mode,
-            quantity_or_notional=self.quantity if self.quantity_mode is QuantityMode.QUANTITY else self.notional,
+            quantity=self.quantity,
+            notional=self.notional,
             order_type=self.order_type,
             limit_price_if_any=self.limit_price,
             time_in_force=self.time_in_force,
