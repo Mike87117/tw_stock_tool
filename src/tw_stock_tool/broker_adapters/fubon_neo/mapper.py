@@ -52,6 +52,18 @@ _CURRENT_STATUSES = {0, 4, 8, 10}
 _PENDING_STATUSES = {0, 4, 8}
 _NONTERMINAL_EVIDENCE_STATUSES = {14, 15, 19, 20, 24, 29, 34, 39}
 _TERMINAL_STATUSES = {30, 40, 50, 90}
+_DOCUMENTED_FUNCTION_TYPES = {0, 10, 15, 20, 30, 50, 90}
+_UNAMBIGUOUS_STATUS_FUNCTION = {
+    14: 15,
+    15: 15,
+    19: 15,
+    20: 20,
+    24: 20,
+    29: 20,
+    30: 30,
+    34: 30,
+    39: 30,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,6 +446,30 @@ def _order_context(
     return symbol, order_no, side
 
 
+def _noncurrent_order_evidence(
+    record: Mapping[str, object],
+    config: FubonNeoTestConfig,
+    *,
+    retrieved_at: str,
+) -> tuple[str, str, OrderSide]:
+    identity = _order_context(record, config, retrieved_at=retrieved_at)
+    _canonical_timestamp(record.get("date"), record.get("last_time"))
+    function_type = record.get("function_type")
+    if function_type is not None:
+        if type(function_type) is not int or function_type not in _DOCUMENTED_FUNCTION_TYPES:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
+                "provider function type is unknown",
+            )
+        expected = _UNAMBIGUOUS_STATUS_FUNCTION.get(record["status"])
+        if expected is not None and function_type != expected:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
+                "provider status and function type contradict",
+            )
+    return identity
+
+
 def _map_open_order(
     record: Mapping[str, object],
     config: FubonNeoTestConfig,
@@ -563,7 +599,7 @@ def map_open_orders(
             active[mapped.broker_order_id] = mapped
             continue
 
-        symbol, order_no, side = _order_context(
+        symbol, order_no, side = _noncurrent_order_evidence(
             record,
             config,
             retrieved_at=retrieved_at,

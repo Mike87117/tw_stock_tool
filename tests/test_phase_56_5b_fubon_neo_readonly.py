@@ -428,7 +428,10 @@ class FubonNeoReadonlyTests(unittest.TestCase):
     def test_terminal_order_rows_are_not_open_exposure(self):
         for status in (30, 40, 50, 90):
             fixture = deepcopy(self.recorded)
-            fixture["order_results"]["data"][0]["status"] = status
+            fixture["order_results"]["data"][0].update(
+                status=status,
+                function_type=None,
+            )
             result, _ = self.read(fixture)
             with self.subTest(status=status):
                 self.assertEqual(result.open_orders, ())
@@ -436,7 +439,10 @@ class FubonNeoReadonlyTests(unittest.TestCase):
     def test_failed_change_and_history_rows_never_independently_prove_terminal(self):
         for status in (14, 15, 19, 20, 24, 29, 34, 39):
             fixture = deepcopy(self.recorded)
-            fixture["order_results"]["data"][0]["status"] = status
+            fixture["order_results"]["data"][0].update(
+                status=status,
+                function_type=None,
+            )
             with self.subTest(status=status):
                 self.error(fixture, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
 
@@ -444,7 +450,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         for status in (14, 15, 19, 20, 24, 29, 34, 39):
             fixture = deepcopy(self.recorded)
             evidence = deepcopy(fixture["order_results"]["data"][0])
-            evidence["status"] = status
+            evidence.update(status=status, function_type=None)
             fixture["order_results"]["data"].append(evidence)
             with self.subTest(status=status):
                 orders = self.read(fixture)[0].open_orders
@@ -454,7 +460,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         for field, value in (("stock_no", "0050"), ("buy_sell", "Sell")):
             fixture = deepcopy(self.recorded)
             evidence = deepcopy(fixture["order_results"]["data"][0])
-            evidence["status"] = 19
+            evidence.update(status=19, function_type=None)
             evidence[field] = value
             fixture["order_results"]["data"].append(evidence)
             with self.subTest(conflict=field):
@@ -462,7 +468,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
 
         reversed_rows = deepcopy(self.recorded)
         failed_cancel = deepcopy(reversed_rows["order_results"]["data"][0])
-        failed_cancel["status"] = 39
+        failed_cancel.update(status=39, function_type=None)
         reversed_rows["order_results"]["data"] = [
             failed_cancel,
             reversed_rows["order_results"]["data"][0],
@@ -476,9 +482,9 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         base = deepcopy(self.recorded["order_results"]["data"][0])
         for field, value in (("stock_no", "0050"), ("buy_sell", "Sell")):
             failed = deepcopy(base)
-            failed["status"] = 39
+            failed.update(status=39, function_type=None)
             terminal = deepcopy(base)
-            terminal["status"] = 50
+            terminal.update(status=50, function_type=None)
             terminal[field] = value
             for rows in ([failed, terminal], [terminal, failed]):
                 fixture = deepcopy(self.recorded)
@@ -490,9 +496,9 @@ class FubonNeoReadonlyTests(unittest.TestCase):
                     )
 
             first_terminal = deepcopy(base)
-            first_terminal["status"] = 30
+            first_terminal.update(status=30, function_type=None)
             contradictory_terminal = deepcopy(base)
-            contradictory_terminal["status"] = 50
+            contradictory_terminal.update(status=50, function_type=None)
             contradictory_terminal[field] = value
             for rows in (
                 [first_terminal, contradictory_terminal],
@@ -510,9 +516,12 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         base = deepcopy(self.recorded["order_results"]["data"][0])
         for status in (14, 39):
             evidence = deepcopy(base)
-            evidence["status"] = status
+            evidence.update(
+                status=status,
+                function_type={14: 15, 39: 30}[status],
+            )
             terminal = deepcopy(base)
-            terminal["status"] = 50
+            terminal.update(status=50, function_type=50)
             results = []
             for rows in ([evidence, terminal], [terminal, evidence]):
                 fixture = deepcopy(self.recorded)
@@ -520,6 +529,92 @@ class FubonNeoReadonlyTests(unittest.TestCase):
                 results.append(self.read(fixture)[0].open_orders)
             with self.subTest(status=status):
                 self.assertEqual(results, [(), ()])
+
+    def test_noncurrent_evidence_requires_complete_valid_time(self):
+        missing_terminal = deepcopy(self.recorded)
+        missing_record = missing_terminal["order_results"]["data"][0]
+        missing_record.update(status=30, function_type=None)
+        del missing_record["last_time"]
+        self.error(
+            missing_terminal,
+            FubonNeoErrorCode.PROVIDER_RESPONSE_MALFORMED,
+        )
+
+        for name, status, last_time in (
+            ("terminal-none", 30, None),
+            ("terminal-malformed", 30, "09:30"),
+            ("terminal-non-real", 30, "25:00:00"),
+            ("failed-malformed", 39, "not-a-time"),
+            ("history-malformed", 14, "09:30"),
+        ):
+            fixture = deepcopy(self.recorded)
+            fixture["order_results"]["data"][0].update(
+                status=status,
+                function_type=None,
+                last_time=last_time,
+            )
+            with self.subTest(case=name):
+                self.error(
+                    fixture,
+                    FubonNeoErrorCode.PROVIDER_RESPONSE_MALFORMED,
+                )
+
+    def test_noncurrent_evidence_rejects_unknown_and_contradictory_function_types(
+        self,
+    ):
+        for function_type in (999, True, 30.0, "30"):
+            fixture = deepcopy(self.recorded)
+            fixture["order_results"]["data"][0].update(
+                status=30,
+                function_type=function_type,
+            )
+            with self.subTest(function_type=function_type):
+                self.error(
+                    fixture,
+                    FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
+                )
+
+        for status, function_type in (
+            (14, 30),
+            (19, 30),
+            (24, 15),
+            (30, 15),
+            (34, 20),
+            (39, 15),
+        ):
+            fixture = deepcopy(self.recorded)
+            fixture["order_results"]["data"][0].update(
+                status=status,
+                function_type=function_type,
+            )
+            with self.subTest(status=status, function_type=function_type):
+                self.error(
+                    fixture,
+                    FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
+                )
+
+    def test_malformed_terminal_cannot_resolve_failed_cancel_in_any_row_order(self):
+        base = deepcopy(self.recorded["order_results"]["data"][0])
+        failed_cancel = deepcopy(base)
+        failed_cancel.update(status=39, function_type=30)
+        for last_time in (None, "25:00:00"):
+            malformed_terminal = deepcopy(base)
+            malformed_terminal.update(
+                status=30,
+                function_type=30,
+                last_time=last_time,
+            )
+            for rows in (
+                [failed_cancel, malformed_terminal],
+                [malformed_terminal, failed_cancel],
+            ):
+                fixture = deepcopy(self.recorded)
+                fixture["order_results"]["data"] = deepcopy(rows)
+                with self.subTest(last_time=last_time, rows=rows):
+                    self.error(
+                        fixture,
+                        FubonNeoErrorCode.PROVIDER_RESPONSE_MALFORMED,
+                    )
 
     def test_backend_and_transmitting_statuses_remain_pending(self):
         for status in (0, 4, 8):
@@ -549,7 +644,10 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         self.error(conflict, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
 
         active_terminal = deepcopy(repeated)
-        active_terminal["order_results"]["data"][1]["status"] = 50
+        active_terminal["order_results"]["data"][1].update(
+            status=50,
+            function_type=None,
+        )
         self.error(active_terminal, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
 
     def test_malformed_order_number_and_quantity_accounting_reject(self):
