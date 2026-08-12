@@ -521,8 +521,24 @@ def map_open_orders(
     if type(data) is not list:
         raise _malformed("order input must be a provider list")
     active: dict[str, BrokerOpenOrderSnapshot] = {}
-    terminal_ids: set[str] = set()
+    terminal_evidence: dict[str, tuple[str, OrderSide]] = {}
     nonterminal_evidence: dict[str, tuple[str, OrderSide]] = {}
+
+    def remember_identity(
+        evidence: dict[str, tuple[str, OrderSide]],
+        *,
+        order_no: str,
+        identity: tuple[str, OrderSide],
+        category: str,
+    ) -> None:
+        prior = evidence.get(order_no)
+        if prior is not None and prior != identity:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                f"{category} order evidence has conflicting stable identity",
+            )
+        evidence[order_no] = identity
+
     for item in data:
         record = _record(item)
         status = record.get("status")
@@ -545,36 +561,59 @@ def map_open_orders(
                     "duplicate broker order number has conflicting current facts",
                 )
             active[mapped.broker_order_id] = mapped
+            continue
+
+        symbol, order_no, side = _order_context(
+            record,
+            config,
+            retrieved_at=retrieved_at,
+        )
+        if status in _TERMINAL_STATUSES:
+            remember_identity(
+                terminal_evidence,
+                order_no=order_no,
+                identity=(symbol, side),
+                category="terminal",
+            )
         else:
-            symbol, order_no, side = _order_context(record, config, retrieved_at=retrieved_at)
-            if status in _TERMINAL_STATUSES:
-                terminal_ids.add(order_no)
-            else:
-                correlation = (symbol, side)
-                prior = nonterminal_evidence.get(order_no)
-                if prior is not None and prior != correlation:
-                    raise FubonNeoReadError(
-                        FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
-                        "nonterminal order evidence has conflicting stable identity",
-                    )
-                nonterminal_evidence[order_no] = correlation
+            remember_identity(
+                nonterminal_evidence,
+                order_no=order_no,
+                identity=(symbol, side),
+                category="nonterminal",
+            )
+
+    active_evidence = {order_no: (order.broker_symbol, order.side) for order_no, order in active.items()}
+    evidence_sets = (
+        ("terminal", terminal_evidence),
+        ("nonterminal", nonterminal_evidence),
+    )
+    for category, evidence in evidence_sets:
+        for order_no, identity in evidence.items():
+            current_identity = active_evidence.get(order_no)
+            if current_identity is not None and current_identity != identity:
+                raise FubonNeoReadError(
+                    FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                    f"current and {category} evidence have conflicting stable identity",
+                )
+    for order_no in set(terminal_evidence) & set(nonterminal_evidence):
+        if terminal_evidence[order_no] != nonterminal_evidence[order_no]:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                "terminal and nonterminal evidence have conflicting stable identity",
+            )
+
     active_ids = set(active)
+    terminal_ids = set(terminal_evidence)
     if terminal_ids & active_ids:
         raise FubonNeoReadError(
             FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
             "broker order number has both terminal and active records",
         )
-    for order_no, correlation in nonterminal_evidence.items():
-        current = active.get(order_no)
-        if current is not None and (current.broker_symbol, current.side) != correlation:
-            raise FubonNeoReadError(
-                FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
-                "current and nonterminal evidence have conflicting stable identity",
-            )
     if set(nonterminal_evidence) - active_ids - terminal_ids:
         raise FubonNeoReadError(
             FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
-            "nonterminal order evidence has no authoritative current row",
+            "nonterminal order evidence has no authoritative current or terminal row",
         )
     return tuple(sorted(active.values(), key=lambda item: item.broker_order_id))
 

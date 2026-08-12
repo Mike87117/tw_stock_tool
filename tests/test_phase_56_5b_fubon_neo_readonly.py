@@ -13,21 +13,24 @@ from unittest.mock import patch
 
 from tw_stock_tool.broker_adapters.fubon_neo import (
     FUBON_NEO_BROKER_ID,
-    FUBON_NEO_INSTRUMENT_CATALOG_SOURCE,
+    FUBON_NEO_CATALOG_EVIDENCE_SHA256,
+    FUBON_NEO_CATALOG_MEMBERSHIP_SHA256,
+    FUBON_NEO_CATALOG_SOURCE_VERSION,
     FUBON_NEO_CURRENCY,
     FUBON_NEO_MARKET,
     FUBON_NEO_SDK_VERSION,
-    FUBON_NEO_TEST_CONNECTION_IDENTITY,
     FUBON_NEO_SOURCE_VERSION,
+    FUBON_NEO_TEST_CONNECTION_IDENTITY,
     FUBON_NEO_TEST_ENDPOINT,
     FubonNeoErrorCode,
     FubonNeoIncompleteAccountRead,
     FubonNeoInstrumentCatalog,
-    FubonNeoReadError,
     FubonNeoReadConnectionIdentity,
+    FubonNeoReadError,
     FubonNeoReadonlyAdapter,
     FubonNeoReadonlyPort,
     FubonNeoTestConfig,
+    build_reviewed_instrument_catalog,
     exact_decimal,
     require_fubon_neo_sdk,
 )
@@ -104,16 +107,12 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         values.update(changes)
         return FubonNeoTestConfig(**values)
 
-    def catalog(self, **changes) -> FubonNeoInstrumentCatalog:
-        fixture = self.recorded["instrument_catalog"]
-        values = dict(
-            source=fixture["source"],
-            source_version=fixture["source_version"],
-            taiex_symbols=tuple(fixture["TAIEX"]),
-            taisdaq_symbols=tuple(fixture["TAISDAQ"]),
-        )
-        values.update(changes)
-        return FubonNeoInstrumentCatalog(**values)
+    def catalog(
+        self,
+        evidence: dict[str, object] | None = None,
+    ) -> FubonNeoInstrumentCatalog:
+        retained = self.recorded["instrument_catalog_evidence"]
+        return build_reviewed_instrument_catalog(deepcopy(retained if evidence is None else evidence))
 
     def adapter(self, port, *, catalog=None, config=None) -> FubonNeoReadonlyAdapter:
         return FubonNeoReadonlyAdapter(
@@ -313,22 +312,60 @@ class FubonNeoReadonlyTests(unittest.TestCase):
     def test_positions_require_authoritative_versioned_market_classification(self):
         for surface in ("inventories", "unrealized_pnl"):
             self.assertNotIn("market", self.recorded[surface]["data"][0])
-        self.assertEqual(self.catalog().source, FUBON_NEO_INSTRUMENT_CATALOG_SOURCE)
-        self.assertEqual(self.catalog().source_version, "sanitized-recorded-2025-01-02-v1")
+        catalog = self.catalog()
+        self.assertEqual(catalog.source_version, FUBON_NEO_CATALOG_SOURCE_VERSION)
+        self.assertEqual(catalog.evidence_sha256, FUBON_NEO_CATALOG_EVIDENCE_SHA256)
+        self.assertEqual(
+            catalog.membership_sha256,
+            FUBON_NEO_CATALOG_MEMBERSHIP_SHA256,
+        )
+        self.assertEqual(catalog.taiex_symbols, ("0050", "2330"))
+        self.assertEqual(catalog.taisdaq_symbols, ())
 
-        port = RecordedReadonlyPort(self.recorded)
         with self.assertRaises(FubonNeoReadError) as caught:
-            self.adapter(
-                port,
-                catalog=self.catalog(taiex_symbols=("0050",)),
-            ).read_account_observations(
-                capability_snapshot_id=CAPABILITY_ID,
-                retrieved_at=RETRIEVED_AT,
+            FubonNeoInstrumentCatalog(
+                source_version=FUBON_NEO_CATALOG_SOURCE_VERSION,
+                evidence_sha256=FUBON_NEO_CATALOG_EVIDENCE_SHA256,
+                membership_sha256=FUBON_NEO_CATALOG_MEMBERSHIP_SHA256,
+                taiex_symbols=("0050", "2330", "9999"),
+                taisdaq_symbols=(),
+                _authority=object(),
             )
         self.assertIs(
             caught.exception.code,
             FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
         )
+
+        for name, mutate in (
+            (
+                "arbitrary-symbol",
+                lambda evidence: evidence["twse"].append({"Code": "9999", "Name": "INJECTED"}),
+            ),
+            (
+                "missing-reviewed-symbol",
+                lambda evidence: evidence["twse"].pop(),
+            ),
+            (
+                "caller-source",
+                lambda evidence: evidence.update({"source_version": "CALLER_ASSERTED"}),
+            ),
+        ):
+            evidence = deepcopy(self.recorded["instrument_catalog_evidence"])
+            mutate(evidence)
+            port = RecordedReadonlyPort(self.recorded)
+            with (
+                self.subTest(case=name),
+                self.assertRaises(FubonNeoReadError) as caught,
+            ):
+                self.adapter(
+                    port,
+                    catalog=build_reviewed_instrument_catalog(evidence),
+                )
+            self.assertIs(
+                caught.exception.code,
+                FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+            )
+            self.assertEqual(port.calls, [])
 
         for surface in ("inventories", "unrealized_pnl"):
             fixture = deepcopy(self.recorded)
@@ -344,12 +381,6 @@ class FubonNeoReadonlyTests(unittest.TestCase):
             FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
         )
         self.assertEqual(no_catalog_port.calls, [])
-        with self.assertRaises(FubonNeoReadError) as caught:
-            self.catalog(source="CALLER_ASSERTED")
-        self.assertIs(
-            caught.exception.code,
-            FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
-        )
 
     def test_non_cash_odd_lot_and_unsupported_market_positions_fail_closed(self):
         cases = []
@@ -440,6 +471,55 @@ class FubonNeoReadonlyTests(unittest.TestCase):
             self.read(reversed_rows)[0].open_orders[0].remaining_quantity,
             D("6"),
         )
+
+    def test_terminal_identity_conflicts_fail_closed_in_every_row_order(self):
+        base = deepcopy(self.recorded["order_results"]["data"][0])
+        for field, value in (("stock_no", "0050"), ("buy_sell", "Sell")):
+            failed = deepcopy(base)
+            failed["status"] = 39
+            terminal = deepcopy(base)
+            terminal["status"] = 50
+            terminal[field] = value
+            for rows in ([failed, terminal], [terminal, failed]):
+                fixture = deepcopy(self.recorded)
+                fixture["order_results"]["data"] = deepcopy(rows)
+                with self.subTest(boundary="failed-terminal", field=field, rows=rows):
+                    self.error(
+                        fixture,
+                        FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                    )
+
+            first_terminal = deepcopy(base)
+            first_terminal["status"] = 30
+            contradictory_terminal = deepcopy(base)
+            contradictory_terminal["status"] = 50
+            contradictory_terminal[field] = value
+            for rows in (
+                [first_terminal, contradictory_terminal],
+                [contradictory_terminal, first_terminal],
+            ):
+                fixture = deepcopy(self.recorded)
+                fixture["order_results"]["data"] = deepcopy(rows)
+                with self.subTest(boundary="terminal-terminal", field=field, rows=rows):
+                    self.error(
+                        fixture,
+                        FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                    )
+
+    def test_matching_failed_history_and_terminal_rows_resolve_order_invariantly(self):
+        base = deepcopy(self.recorded["order_results"]["data"][0])
+        for status in (14, 39):
+            evidence = deepcopy(base)
+            evidence["status"] = status
+            terminal = deepcopy(base)
+            terminal["status"] = 50
+            results = []
+            for rows in ([evidence, terminal], [terminal, evidence]):
+                fixture = deepcopy(self.recorded)
+                fixture["order_results"]["data"] = deepcopy(rows)
+                results.append(self.read(fixture)[0].open_orders)
+            with self.subTest(status=status):
+                self.assertEqual(results, [(), ()])
 
     def test_backend_and_transmitting_statuses_remain_pending(self):
         for status in (0, 4, 8):
