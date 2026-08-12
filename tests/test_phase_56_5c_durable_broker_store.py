@@ -19,7 +19,6 @@ from tw_stock_tool.broker_safety import (
     BrokerAccountScope,
     BrokerEnvironment,
     BrokerExecutionRecord,
-    BrokerSafetyStoreError,
     BrokerSubmissionEvidence,
     ClaimDisposition,
     ExternalAuditAnchorReceipt,
@@ -561,6 +560,48 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 1,
             )
 
+    def test_atomic_pre_submit_high_water_is_trusted_on_restore(self):
+        self.store.commit_pre_submit(
+            self.scope,
+            self.fx.head,
+            self.fx.authorization,
+            self.fx.intent,
+            self.reserved(),
+            self.authorized_submission(),
+            persistence_version="persist-v1",
+            occurred_at="2025-01-02T00:00:34Z",
+            gate_facts=self.pre_submit_gate_facts(),
+            **{key: value for key, value in self.write().items() if key != "now"},
+        )
+        backup = self.root / "pre-submit-high-water.sqlite3"
+        manifest_path = self.root / "pre-submit-high-water.json"
+        manifest = self.store.backup(
+            backup,
+            manifest_path,
+            backup_timestamp="2025-01-02T00:00:40Z",
+        )
+        facts = manifest.scope_audit_checkpoints[0]
+        restored = SQLiteBrokerSafetyStore.restore_backup(
+            backup,
+            manifest_path,
+            self.root / "pre-submit-restored.sqlite3",
+            active=True,
+            checkpoint=TrustedRecoveryCheckpoint(
+                self.store.store_id,
+                facts.scope_key,
+                facts.last_audit_sequence,
+                facts.last_audit_root,
+                facts.high_water_summary_sha256,
+            ),
+            restored_at="2025-01-02T00:00:41Z",
+        )
+        self.assertIsNotNone(
+            restored.load_high_water(
+                self.scope,
+                self.fx.head.lineage_key,
+            )
+        )
+
     def test_two_process_pre_submit_same_and_different_attempt_races(self):
         for variants, expected in (
             (
@@ -648,36 +689,58 @@ class DurableBrokerStoreTests(unittest.TestCase):
             plan.blocking_reasons,
         )
 
-    def test_direct_submission_persistence_rejects_a4_bypass_states(self):
+    def test_direct_submission_persistence_surface_is_absent(self):
+        self.assertFalse(hasattr(SQLiteBrokerSafetyStore, "persist_submission"))
         self.persist_dependencies()
         prepared = prepare_broker_submission(
             self.fx.intent,
             attempt_id=a4_tests.IDS[12],
             recorded_at="2025-01-02T00:00:32Z",
         )
-        self.assertEqual(
-            self.store.persist_submission(self.scope, prepared, **self.write()),
-            1,
-        )
-        with self.assertRaises(BrokerSafetyStoreError):
-            self.store.persist_submission(
-                self.scope,
-                self.authorized_submission(),
-                **self.write(),
-            )
-        with self.assertRaises(BrokerSafetyStoreError):
+        with self.assertRaises(PersistenceConflictError):
             self.store.transition_submission(
                 self.scope,
                 intent_id=prepared.intent_id,
                 attempt_id=prepared.attempt_id,
                 expected_version=1,
-                evidence=BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                evidence=BrokerSubmissionEvidence.AMBIGUOUS_OUTCOME,
                 recorded_at="2025-01-02T00:00:33Z",
                 owner_id=self.lease.owner_id,
                 fencing_token=self.lease.fencing_token,
                 actor_reference="operator-ref",
-                transition_facts=self.gate_facts(),
             )
+        prepared_text = export_broker_safety_artifact_json(prepared)
+        prepared_digest = sha256(prepared_text.encode()).hexdigest()
+        with sqlite3.connect(self.database) as connection:
+            scope_key = connection.execute("SELECT scope_key FROM account_scopes").fetchone()[0]
+            connection.execute(
+                "INSERT INTO submissions_current VALUES(?, ?, ?, ?, 1, ?, ?)",
+                (
+                    scope_key,
+                    prepared.intent_id,
+                    prepared.attempt_id,
+                    prepared.state.value,
+                    prepared_text,
+                    prepared_digest,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO submission_history VALUES(?, ?, ?, 1, ?, ?, ?, ?)",
+                (
+                    scope_key,
+                    prepared.intent_id,
+                    prepared.attempt_id,
+                    prepared.state.value,
+                    "INITIAL_PREPARED",
+                    prepared_text,
+                    prepared_digest,
+                ),
+            )
+        corrupted = SQLiteBrokerSafetyStore(self.database).recovery_plan(self.scope)
+        self.assertIn(
+            "STORE_OR_AUDIT_CORRUPTION",
+            corrupted.blocking_reasons,
+        )
 
     def test_same_owner_expiry_advances_fence_and_renewal_is_monotonic(self):
         renewed = self.store.renew_lease(
@@ -716,6 +779,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 self.store.store_id,
                 "scope-key",
                 0,
+                "0" * 64,
                 "0" * 64,
             )
         with self.assertRaises(Exception):
@@ -857,12 +921,6 @@ class DurableBrokerStoreTests(unittest.TestCase):
         plan = self.store.recovery_plan(self.scope)
         self.assertEqual(plan.nonterminal_submission_count, 0)
         self.assertFalse(plan.blocks_new_authorization)
-        with self.assertRaises(BrokerSafetyStoreError):
-            self.store.persist_submission(
-                self.scope,
-                filled,
-                **self.write(),
-            )
 
         fake_filled = replace(
             filled,
@@ -956,6 +1014,26 @@ class DurableBrokerStoreTests(unittest.TestCase):
         self.assertEqual(canonical_audit_anchor_bundle_bytes(first), canonical_audit_anchor_bundle_bytes(second))
         digest = audit_anchor_bundle_sha256(first)
         self.assertEqual(digest, sha256(canonical_audit_anchor_bundle_bytes(first)).hexdigest())
+        live_receipt = ExternalAuditAnchorReceipt(
+            "external_audit_anchor_receipt_v1",
+            "caller-live-receipt",
+            digest,
+            "AMAZON_S3_OBJECT_LOCK_COMPLIANCE",
+            "caller/asserted/object",
+            "2025-01-02T00:00:41Z",
+        )
+        with self.assertRaises(PersistenceConflictError):
+            self.store.record_anchor_receipt(
+                self.scope,
+                first,
+                live_receipt,
+                owner_id=self.lease.owner_id,
+                fencing_token=self.lease.fencing_token,
+                actor_reference="caller",
+            )
+        unanchored = SQLiteBrokerSafetyStore(self.database).recovery_plan(self.scope)
+        self.assertIsNone(unanchored.last_external_anchor_target)
+
         receipt = ExternalAuditAnchorReceipt(
             "external_audit_anchor_receipt_v1",
             "receipt-1",
@@ -1036,6 +1114,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
             checkpoint_facts.scope_key,
             checkpoint_facts.last_audit_sequence + 1,
             "f" * 64,
+            checkpoint_facts.high_water_summary_sha256,
         )
         with self.assertRaises(RestoreRejectedError):
             SQLiteBrokerSafetyStore.restore_backup(
@@ -1051,6 +1130,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
             checkpoint_facts.scope_key,
             checkpoint_facts.last_audit_sequence,
             checkpoint_facts.last_audit_root,
+            checkpoint_facts.high_water_summary_sha256,
         )
         active = SQLiteBrokerSafetyStore.restore_backup(
             backup,
@@ -1061,6 +1141,42 @@ class DurableBrokerStoreTests(unittest.TestCase):
             restored_at="2025-01-02T00:00:46Z",
         )
         self.assertIs(type(active), SQLiteBrokerSafetyStore)
+        with self.assertRaises(StaleFenceError):
+            active.persist_high_water(
+                self.scope,
+                self.fx.head,
+                owner_id=self.lease.owner_id,
+                fencing_token=self.lease.fencing_token,
+                now="2025-01-02T00:00:47Z",
+                actor_reference="operator-ref",
+            )
+        reacquired = active.acquire_lease(
+            self.scope,
+            owner_id=self.lease.owner_id,
+            acquired_at="2025-01-02T00:00:46Z",
+            expires_at="2025-01-02T00:01:00Z",
+        )
+        self.assertGreater(
+            reacquired.fencing_token,
+            self.lease.fencing_token,
+        )
+        with self.assertRaises(LeaseConflictError):
+            active.acquire_lease(
+                self.scope,
+                owner_id="replacement-owner",
+                acquired_at="2025-01-02T00:00:47Z",
+                expires_at="2025-01-02T00:01:01Z",
+            )
+        replacement = active.acquire_lease(
+            self.scope,
+            owner_id="replacement-owner",
+            acquired_at="2025-01-02T00:01:00Z",
+            expires_at="2025-01-02T00:02:00Z",
+        )
+        self.assertGreater(
+            replacement.fencing_token,
+            reacquired.fencing_token,
+        )
 
         corrupted = self.root / "corrupt.sqlite3"
         corrupted.write_bytes(backup.read_bytes() + b"corrupt")
@@ -1102,6 +1218,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 item.scope_key,
                 item.last_audit_sequence,
                 item.last_audit_root,
+                item.high_water_summary_sha256,
             )
             for item in manifest.scope_audit_checkpoints
         )
@@ -1140,6 +1257,81 @@ class DurableBrokerStoreTests(unittest.TestCase):
             restored_at="2025-01-02T00:00:46Z",
         )
         self.assertIs(type(restored), SQLiteBrokerSafetyStore)
+
+    def test_trusted_checkpoint_rejects_coherent_high_water_rollback(self):
+        self.store.persist_high_water(
+            self.scope,
+            self.fx.head,
+            **self.write(),
+        )
+        with sqlite3.connect(self.database) as connection:
+            old_row = connection.execute("SELECT lineage_key, artifact_json, artifact_sha256 FROM high_water").fetchone()
+        self.store.persist_high_water(
+            self.scope,
+            self.extension(ForwardEligibilityState.PAUSED),
+            **self.write(),
+        )
+        backup = self.root / "coherent-rollback.sqlite3"
+        manifest_path = self.root / "coherent-rollback.json"
+        manifest = self.store.backup(
+            backup,
+            manifest_path,
+            backup_timestamp="2025-01-02T00:00:45Z",
+        )
+        trusted_facts = manifest.scope_audit_checkpoints[0]
+        trusted = TrustedRecoveryCheckpoint(
+            self.store.store_id,
+            trusted_facts.scope_key,
+            trusted_facts.last_audit_sequence,
+            trusted_facts.last_audit_root,
+            trusted_facts.high_water_summary_sha256,
+        )
+
+        with sqlite3.connect(backup) as connection:
+            connection.execute(
+                "UPDATE high_water SET artifact_json=?, artifact_sha256=? WHERE lineage_key=?",
+                (old_row[1], old_row[2], old_row[0]),
+            )
+            per_scope_rows = connection.execute(
+                "SELECT lineage_key, artifact_sha256 FROM high_water WHERE scope_key=? ORDER BY lineage_key",
+                (trusted.scope_key,),
+            ).fetchall()
+            global_rows = connection.execute("SELECT scope_key, lineage_key, artifact_sha256 FROM high_water ORDER BY scope_key, lineage_key").fetchall()
+
+        canonical = lambda rows: json.dumps(
+            [list(row) for row in rows],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        rolled_back_summary = sha256(canonical(per_scope_rows)).hexdigest()
+        data["scope_audit_checkpoints"][0]["high_water_summary_sha256"] = rolled_back_summary
+        data["high_water_summary_sha256"] = sha256(canonical(global_rows)).hexdigest()
+        data["database_sha256"] = sha256(backup.read_bytes()).hexdigest()
+        manifest_path.write_bytes(
+            (
+                json.dumps(
+                    data,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode()
+        )
+        SQLiteBrokerSafetyStore.verify_backup(backup, manifest_path)
+        with self.assertRaises(RestoreRejectedError):
+            SQLiteBrokerSafetyStore.restore_backup(
+                backup,
+                manifest_path,
+                self.root / "coherent-active.sqlite3",
+                active=True,
+                checkpoint=trusted,
+                restored_at="2025-01-02T00:00:46Z",
+            )
 
     def test_backup_verification_rejects_logically_corrupt_artifact(self):
         self.store.persist_high_water(self.scope, self.fx.head, **self.write())

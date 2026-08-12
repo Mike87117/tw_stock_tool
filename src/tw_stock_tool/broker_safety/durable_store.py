@@ -37,7 +37,6 @@ from tw_stock_tool.broker_safety.durable_models import (
 )
 from tw_stock_tool.broker_safety.execution import (
     apply_broker_execution,
-    prepare_broker_submission,
     transition_broker_authorization_use,
     transition_broker_submission,
 )
@@ -977,101 +976,6 @@ class SQLiteBrokerSafetyStore:
         except Exception as exc:
             raise StoreCorruptionError("persisted high-water mark is invalid") from exc
 
-    def persist_submission(
-        self,
-        scope: BrokerAccountScope,
-        record: BrokerSubmissionRecord,
-        *,
-        owner_id: str,
-        fencing_token: int,
-        now: str,
-        actor_reference: str,
-    ) -> int:
-        if type(record) is not BrokerSubmissionRecord or record.state is not BrokerSubmissionState.PREPARED:
-            raise BrokerSafetyStoreError("direct submission persistence requires exact PREPARED state")
-        self._validate_intent_scope(
-            scope,
-            self._require_durable_intent(scope, record.intent_id),
-        )
-        expected = prepare_broker_submission(
-            self._require_durable_intent(scope, record.intent_id),
-            attempt_id=record.attempt_id,
-            recorded_at=record.recorded_at,
-        )
-        if record != expected:
-            raise PersistenceConflictError("PREPARED submission does not match the frozen A4 constructor")
-        text, digest = _artifact(record)
-        with self._transaction() as connection:
-            key = self._ensure_scope(connection, scope)
-            self._check_fence(connection, key, owner_id, fencing_token, now)
-            intent = self._read_artifact(
-                connection,
-                "intents",
-                "scope_key=? AND economic_intent_id=?",
-                (key, record.intent_id),
-                BrokerOrderIntent,
-            )
-            if intent is None or record.stable_client_order_id != intent.canonical_client_order_id:
-                raise PersistenceConflictError("submission requires its correlated durable intent")
-            row = connection.execute(
-                "SELECT version, artifact_json, artifact_sha256 FROM submissions_current WHERE scope_key=? AND intent_id=? AND attempt_id=?",
-                (key, record.intent_id, record.attempt_id),
-            ).fetchone()
-            if row is not None:
-                if tuple(row[1:]) != (text, digest):
-                    raise PersistenceConflictError("submission identity already has different facts")
-                return row[0]
-            connection.execute(
-                "INSERT INTO submissions_current VALUES(?, ?, ?, ?, 1, ?, ?)",
-                (
-                    key,
-                    record.intent_id,
-                    record.attempt_id,
-                    record.state.value,
-                    text,
-                    digest,
-                ),
-            )
-            connection.execute(
-                "INSERT INTO submission_history VALUES(?, ?, ?, 1, ?, ?, ?, ?)",
-                (
-                    key,
-                    record.intent_id,
-                    record.attempt_id,
-                    record.state.value,
-                    "INITIAL_PREPARED",
-                    text,
-                    digest,
-                ),
-            )
-            self._append_audit(
-                connection,
-                key,
-                event_type="SUBMISSION_PREPARED",
-                occurred_at=now,
-                recorded_at=now,
-                actor_reference=actor_reference,
-                references={
-                    "intent_id": record.intent_id,
-                    "attempt_id": record.attempt_id,
-                },
-                payload_sha256=digest,
-            )
-        return 1
-
-    def _require_durable_intent(self, scope: BrokerAccountScope, intent_id: str) -> BrokerOrderIntent:
-        with self._connect(readonly=True) as connection:
-            intent = self._read_artifact(
-                connection,
-                "intents",
-                "scope_key=? AND economic_intent_id=?",
-                (_scope_key(scope), intent_id),
-                BrokerOrderIntent,
-            )
-        if intent is None:
-            raise PersistenceConflictError("submission requires its correlated durable intent")
-        return intent
-
     def transition_submission(
         self,
         scope: BrokerAccountScope,
@@ -1880,7 +1784,7 @@ class SQLiteBrokerSafetyStore:
                         )
                         != (row[3], row[4], row[5])
                         or row[5] != previous_receipt_reference
-                        or row[6] not in {TEST_ANCHOR_TARGET, EXTERNAL_WORM_TARGET}
+                        or row[6] != TEST_ANCHOR_TARGET
                         or anchored_audit is None
                         or anchored_audit[0] != row[4]
                     ):
@@ -1949,24 +1853,8 @@ class SQLiteBrokerSafetyStore:
         if not history:
             raise StoreCorruptionError("submission history is missing")
         first_kind, prior, first_digest = history[0]
-        if first_kind == "INITIAL_PREPARED":
-            expected = prepare_broker_submission(
-                intent,
-                attempt_id=prior.attempt_id,
-                recorded_at=prior.recorded_at,
-            )
-            if commit is not None:
-                raise StoreCorruptionError("prepared submission cannot have a pre-submit commit")
-        elif first_kind == "ATOMIC_PRE_SUBMIT":
-            if commit is None or first_digest != commit[6]:
-                raise StoreCorruptionError("submitting history is not bound to its pre-submit commit")
-            expected = prior
-            if prior.state is not BrokerSubmissionState.SUBMITTING:
-                raise StoreCorruptionError("atomic pre-submit history must begin in SUBMITTING")
-        else:
-            raise StoreCorruptionError("submission history has an unsafe initial state")
-        if prior != expected:
-            raise StoreCorruptionError("initial submission snapshot is not canonical")
+        if first_kind != "ATOMIC_PRE_SUBMIT" or commit is None or first_digest != commit[6] or prior.state is not BrokerSubmissionState.SUBMITTING:
+            raise StoreCorruptionError("submission history must begin at atomic SUBMITTING")
 
         observed_execution_ids: set[str] = set()
         for transition_kind, current, _digest in history[1:]:
@@ -2051,11 +1939,8 @@ class SQLiteBrokerSafetyStore:
         bundle_digest = _digest_bytes(bundle_text.encode("utf-8"))
         if receipt.bundle_sha256 != bundle_digest:
             raise PersistenceConflictError("external receipt does not correlate to bundle")
-        if receipt.target not in {
-            TEST_ANCHOR_TARGET,
-            EXTERNAL_WORM_TARGET,
-        }:
-            raise PersistenceConflictError("external receipt target is not an approved anchor class")
+        if receipt.target != TEST_ANCHOR_TARGET:
+            raise PersistenceConflictError("Phase 56.5C only verifies deterministic fake anchors")
         if (bundle.store_id, bundle.scope_key) != (
             self.store_id,
             _scope_key(scope),
@@ -2147,6 +2032,17 @@ class SQLiteBrokerSafetyStore:
         return scope
 
     @staticmethod
+    def _scope_high_water_summary(
+        connection: sqlite3.Connection,
+        scope_key: str,
+    ) -> str:
+        rows = connection.execute(
+            "SELECT lineage_key, artifact_sha256 FROM high_water WHERE scope_key=? ORDER BY lineage_key",
+            (scope_key,),
+        ).fetchall()
+        return _digest_bytes(_canonical([list(row) for row in rows]))
+
+    @staticmethod
     def _scope_checkpoints(
         connection: sqlite3.Connection,
     ) -> tuple[ScopeAuditCheckpoint, ...]:
@@ -2167,6 +2063,7 @@ class SQLiteBrokerSafetyStore:
                     0 if audit is None else audit[0],
                     ZERO_AUDIT_DIGEST if audit is None else audit[1],
                     None if receipt is None else receipt[0],
+                    SQLiteBrokerSafetyStore._scope_high_water_summary(connection, scope[0]),
                 )
             )
         return tuple(result)
@@ -2357,12 +2254,23 @@ class SQLiteBrokerSafetyStore:
                 factory=_ClosingConnection,
             ) as source:
                 latest_audit = source.execute("SELECT recorded_at FROM audit ORDER BY recorded_at DESC LIMIT 1").fetchone()
+                latest_lease = source.execute("SELECT last_renewed_at FROM leases ORDER BY last_renewed_at DESC LIMIT 1").fetchone()
                 if latest_audit is not None and restore_time < _timestamp("latest_audit_recorded_at", latest_audit[0]):
                     raise RestoreRejectedError("restore time predates backup audit state")
+                if latest_lease is not None and restore_time <= _timestamp(
+                    "latest_lease_last_renewed_at",
+                    latest_lease[0],
+                ):
+                    raise RestoreRejectedError("restore time must follow every durable lease renewal")
                 for trusted in checkpoints:
                     snapshot = manifest_by_scope[trusted.scope_key]
-                    if trusted.store_id != manifest.store_id or snapshot.last_audit_sequence < trusted.minimum_audit_sequence:
-                        raise RestoreRejectedError("backup is behind trusted recovery state")
+                    if (
+                        trusted.store_id != manifest.store_id
+                        or snapshot.last_audit_sequence < trusted.minimum_audit_sequence
+                        or snapshot.high_water_summary_sha256 != trusted.high_water_summary_sha256
+                        or cls._scope_high_water_summary(source, trusted.scope_key) != trusted.high_water_summary_sha256
+                    ):
+                        raise RestoreRejectedError("backup is behind trusted audit or high-water state")
                     row = source.execute(
                         "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
                         (
@@ -2396,9 +2304,41 @@ class SQLiteBrokerSafetyStore:
                 raise RestoreRejectedError("restored scope failed logical recovery validation")
         with store._transaction() as connection:
             for scope in scopes:
+                key = _scope_key(scope)
+                lease = connection.execute(
+                    "SELECT fencing_token FROM leases WHERE scope_key=?",
+                    (key,),
+                ).fetchone()
+                if lease is not None:
+                    rotated_token = lease[0] + 1
+                    cursor = connection.execute(
+                        "UPDATE leases SET owner_id=?, fencing_token=?, expires_at=? WHERE scope_key=? AND fencing_token=?",
+                        (
+                            "restore-invalidated",
+                            rotated_token,
+                            restored_at,
+                            key,
+                            lease[0],
+                        ),
+                    )
+                    if cursor.rowcount != 1:
+                        raise StoreCorruptionError("restore lease rotation compare-and-swap failed")
+                    store._append_audit(
+                        connection,
+                        key,
+                        event_type="LEASE_FENCE_ROTATED_FOR_RESTORE",
+                        occurred_at=restored_at,
+                        recorded_at=restored_at,
+                        actor_reference="operator-recovery",
+                        references={
+                            "previous_fence": str(lease[0]),
+                            "rotated_fence": str(rotated_token),
+                        },
+                        payload_sha256=manifest.database_sha256,
+                    )
                 store._append_audit(
                     connection,
-                    _scope_key(scope),
+                    key,
                     event_type="BACKUP_RESTORE_ACTIVATED",
                     occurred_at=restored_at,
                     recorded_at=restored_at,

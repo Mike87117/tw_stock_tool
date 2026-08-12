@@ -243,12 +243,14 @@ class TrustedRecoveryCheckpoint:
     scope_key: str
     minimum_audit_sequence: int
     audit_root_digest: str
+    high_water_summary_sha256: str
 
     def __post_init__(self) -> None:
         _clean("store_id", self.store_id)
         _clean("scope_key", self.scope_key)
         _exact_positive("minimum_audit_sequence", self.minimum_audit_sequence)
         _digest("audit_root_digest", self.audit_root_digest)
+        _digest("high_water_summary_sha256", self.high_water_summary_sha256)
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +259,7 @@ class ScopeAuditCheckpoint:
     last_audit_sequence: int
     last_audit_root: str
     latest_external_receipt_reference: str | None
+    high_water_summary_sha256: str
 
     def __post_init__(self) -> None:
         _clean("scope_key", self.scope_key)
@@ -268,6 +271,7 @@ class ScopeAuditCheckpoint:
             "latest_external_receipt_reference",
             self.latest_external_receipt_reference,
         )
+        _digest("high_water_summary_sha256", self.high_water_summary_sha256)
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,7 +7,7 @@ This runbook covers the single-host SQLite safety store only. Phase 56.5C has no
 - Treat `SUBMITTING`, `UNKNOWN_SUBMISSION_STATE`, `RECONCILIATION_REQUIRED`, and every other non-terminal submission as open exposure. Do not authorize another attempt while `BrokerRecoveryPlan.blocks_new_authorization` is true.
 - Never edit or reset an immutable authorization, intent, authorization-use record, submission history row, execution, audit row, anchor receipt, backup, or manifest.
 - Never reuse an authorization by changing a `CONSUMED` or `ABANDONED` use record back to `RESERVED`.
-- Only the current unexpired account lease and its monotonic fencing token may write. Expiry and takeover, including takeover by the same owner name, create a new token.
+- Only the current unexpired account lease and its monotonic fencing token may write. Expiry and takeover, including takeover by the same owner name, create a new token. Active restore atomically increments and expires every restored fence before returning; no cached pre-restore owner/token remains authority.
 - Keep database files, WAL/SHM files, backups, manifests, and trusted checkpoints free of credentials and raw broker payloads. Filesystem permissions and encryption at rest are operator responsibilities.
 
 ## Normal restart
@@ -19,7 +19,7 @@ This runbook covers the single-host SQLite safety store only. Phase 56.5C has no
 5. Generate `recovery_plan(scope)`. A corruption reason or any non-terminal submission blocks new authorization.
 6. Correlate unresolved submissions with authoritative, read-only broker evidence outside this store. Do not infer a safe retry from timeout, absence, client metadata, or process exit.
 7. Persist only transitions supported by the existing pure A4 transition contract. If evidence remains ambiguous, retain or transition to an unresolved state and stop.
-8. Re-run `recovery_plan(scope)`, verify the audit chain, and confirm its last verified anchor sequence, root, receipt reference, and target class before creating the next `AuditAnchorBundle`. `DETERMINISTIC_FAKE_WORM` is test evidence only and is distinct from the selected future `AMAZON_S3_OBJECT_LOCK_COMPLIANCE` target. Phase 56.5C records only a receipt returned by an external port; it performs no network write.
+8. Re-run `recovery_plan(scope)`, verify the audit chain, and confirm its last verified anchor sequence, root, receipt reference, and target class before creating the next `AuditAnchorBundle`. Phase 56.5C accepts only `DETERMINISTIC_FAKE_WORM` test receipts into verified durable state. `AMAZON_S3_OBJECT_LOCK_COMPLIANCE` remains a selected future target and cannot be persisted until a separately reviewed live adapter/verifier exists. This phase performs no network write.
 
 ## Crash windows
 
@@ -30,8 +30,8 @@ After any abrupt exit, restart normally, acquire a new or still-valid lease as a
 ## Backup and verification
 
 1. Call `backup()` with new destination and manifest paths. Keep both immutable after creation.
-2. Run `verify_backup()` and retain its database digest, store ID, schema version, high-water summary, audit checkpoint, and latest external receipt reference.
-3. Store a `TrustedRecoveryCheckpoint` separately from the database and backup. It is the anti-rollback trust input; copying a checkpoint from the candidate backup is not independent evidence.
+2. Run `verify_backup()` and retain its database digest, store ID, schema/migration identity, global summary, and deterministic per-scope audit/root, high-water summary digest, and latest external receipt reference.
+3. Store one `TrustedRecoveryCheckpoint` per persisted scope separately from the database and backup, including its independently retained high-water summary digest. The complete set is the anti-rollback trust input; copying any checkpoint or digest from the candidate backup is not independent evidence.
 4. Periodically perform a forensic restore and verify that recovery remains blocked where unresolved state exists.
 
 ## Restore
@@ -39,7 +39,7 @@ After any abrupt exit, restart normally, acquire a new or still-valid lease as a
 - Default to `active=False`. A forensic restore exposes a read-only SQLite connection and cannot become a controller store.
 - An active restore requires an exact, unique, sorted set of independently retained trusted checkpoints covering every account scope in the store. Missing one scope is a restore rejection. Reject a backup behind any scope checkpoint, with the wrong audit digest, wrong store identity, invalid manifest/database digest, invalid schema or migration identity, broken anchor/audit chain, invalid artifact digest, broken lifecycle history, or missing execution/reference.
 - Restore to a new path only. Never overwrite the active database.
-- After an accepted active restore, preserve the appended restore audit event, acquire a fresh lease/fence before controller writes, run recovery, and resolve all non-terminal submissions before authorizing anything.
+- After an accepted active restore, preserve the lease-rotation and activation audit events. Every restored lease is already expired at a strictly higher fence; acquire again to receive an even higher usable fence, run recovery, and resolve all non-terminal submissions before authorizing anything.
 
 ## Suspected corruption or compromise
 
