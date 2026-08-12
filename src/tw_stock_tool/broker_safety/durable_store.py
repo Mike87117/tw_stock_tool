@@ -863,6 +863,10 @@ class SQLiteBrokerSafetyStore:
         fencing_token: int,
         actor_reference: str,
     ) -> BrokerAuthorizationUseRecord:
+        if target_state is AuthorizationUseState.CONSUMED:
+            raise BrokerSafetyStoreError(
+                "CONSUMED authorization use is owned by atomic pre-submit"
+            )
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
             self._check_fence(connection, key, owner_id, fencing_token, occurred_at)
@@ -2057,6 +2061,14 @@ class SQLiteBrokerSafetyStore:
                 "SELECT receipt_id FROM anchor_receipts WHERE scope_key=? ORDER BY anchored_at DESC, receipt_id DESC LIMIT 1",
                 (scope[0],),
             ).fetchone()
+            lease = connection.execute(
+                "SELECT fencing_token FROM leases WHERE scope_key=?",
+                (scope[0],),
+            ).fetchone()
+            if lease is None:
+                raise StoreCorruptionError(
+                    "persisted account scope has no fencing history"
+                )
             result.append(
                 ScopeAuditCheckpoint(
                     scope[0],
@@ -2064,6 +2076,7 @@ class SQLiteBrokerSafetyStore:
                     ZERO_AUDIT_DIGEST if audit is None else audit[1],
                     None if receipt is None else receipt[0],
                     SQLiteBrokerSafetyStore._scope_high_water_summary(connection, scope[0]),
+                    lease[0],
                 )
             )
         return tuple(result)
@@ -2167,7 +2180,7 @@ class SQLiteBrokerSafetyStore:
             checkpoints = self._scope_checkpoints(snapshot)
             summary = self._high_water_summary(snapshot)
         manifest = BackupManifest(
-            "broker_store_backup_manifest_v2",
+            "broker_store_backup_manifest_v3",
             self.store_id,
             STORE_SCHEMA_VERSION,
             backup_timestamp,
@@ -2269,6 +2282,7 @@ class SQLiteBrokerSafetyStore:
                         or snapshot.last_audit_sequence < trusted.minimum_audit_sequence
                         or snapshot.high_water_summary_sha256 != trusted.high_water_summary_sha256
                         or cls._scope_high_water_summary(source, trusted.scope_key) != trusted.high_water_summary_sha256
+                        or snapshot.maximum_fencing_token > trusted.maximum_fencing_token
                     ):
                         raise RestoreRejectedError("backup is behind trusted audit or high-water state")
                     row = source.execute(
@@ -2303,6 +2317,7 @@ class SQLiteBrokerSafetyStore:
             if "STORE_OR_AUDIT_CORRUPTION" in plan.blocking_reasons:
                 raise RestoreRejectedError("restored scope failed logical recovery validation")
         with store._transaction() as connection:
+            trusted_by_scope = {item.scope_key: item for item in checkpoints}
             for scope in scopes:
                 key = _scope_key(scope)
                 lease = connection.execute(
@@ -2310,7 +2325,10 @@ class SQLiteBrokerSafetyStore:
                     (key,),
                 ).fetchone()
                 if lease is not None:
-                    rotated_token = lease[0] + 1
+                    rotated_token = max(
+                        lease[0],
+                        trusted_by_scope[key].maximum_fencing_token,
+                    ) + 1
                     cursor = connection.execute(
                         "UPDATE leases SET owner_id=?, fencing_token=?, expires_at=? WHERE scope_key=? AND fencing_token=?",
                         (
@@ -2332,6 +2350,9 @@ class SQLiteBrokerSafetyStore:
                         actor_reference="operator-recovery",
                         references={
                             "previous_fence": str(lease[0]),
+                            "trusted_maximum_fence": str(
+                                trusted_by_scope[key].maximum_fencing_token
+                            ),
                             "rotated_fence": str(rotated_token),
                         },
                         payload_sha256=manifest.database_sha256,

@@ -244,6 +244,7 @@ class TrustedRecoveryCheckpoint:
     minimum_audit_sequence: int
     audit_root_digest: str
     high_water_summary_sha256: str
+    maximum_fencing_token: int
 
     def __post_init__(self) -> None:
         _clean("store_id", self.store_id)
@@ -251,6 +252,7 @@ class TrustedRecoveryCheckpoint:
         _exact_positive("minimum_audit_sequence", self.minimum_audit_sequence)
         _digest("audit_root_digest", self.audit_root_digest)
         _digest("high_water_summary_sha256", self.high_water_summary_sha256)
+        _exact_positive("maximum_fencing_token", self.maximum_fencing_token)
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +262,7 @@ class ScopeAuditCheckpoint:
     last_audit_root: str
     latest_external_receipt_reference: str | None
     high_water_summary_sha256: str
+    maximum_fencing_token: int
 
     def __post_init__(self) -> None:
         _clean("scope_key", self.scope_key)
@@ -272,6 +275,7 @@ class ScopeAuditCheckpoint:
             self.latest_external_receipt_reference,
         )
         _digest("high_water_summary_sha256", self.high_water_summary_sha256)
+        _exact_positive("maximum_fencing_token", self.maximum_fencing_token)
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,7 +289,7 @@ class BackupManifest:
     high_water_summary_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "broker_store_backup_manifest_v2":
+        if self.schema_version != "broker_store_backup_manifest_v3":
             raise BrokerSafetyStoreError("unsupported backup manifest schema")
         _clean("store_id", self.store_id)
         if type(self.store_schema_version) is not int or self.store_schema_version != STORE_SCHEMA_VERSION:

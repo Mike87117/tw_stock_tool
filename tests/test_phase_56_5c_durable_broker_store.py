@@ -27,6 +27,7 @@ from tw_stock_tool.broker_safety import (
     PersistenceConflictError,
     PreSubmitDisposition,
     RestoreRejectedError,
+    BrokerSafetyStoreError,
     SQLiteBrokerSafetyStore,
     StaleFenceError,
     StoreCorruptionError,
@@ -360,7 +361,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
         self.assertEqual(outputs.count(ClaimDisposition.ACQUIRED.value), 1)
         self.assertEqual(outputs.count(ClaimDisposition.ALREADY_CLAIMED.value), 1)
 
-    def test_claim_rollback_commit_and_terminal_transitions(self):
+    def test_claim_rollback_and_standalone_consumption_is_rejected(self):
         self.persist_dependencies()
         record = self.reserved()
         with self.assertRaises(Exception):
@@ -376,28 +377,46 @@ class DurableBrokerStoreTests(unittest.TestCase):
             **self.write(),
         )
         self.assertIs(acquired.disposition, ClaimDisposition.ACQUIRED)
-        consumed = self.store.transition_authorization_use(
-            self.scope,
-            authorization_id=record.authorization_id,
-            target_state=AuthorizationUseState.CONSUMED,
-            occurred_at="2025-01-02T00:00:34Z",
-            reason=None,
-            owner_id=self.lease.owner_id,
-            fencing_token=self.lease.fencing_token,
-            actor_reference="operator-ref",
-        )
-        self.assertIs(consumed.state, AuthorizationUseState.CONSUMED)
-        with self.assertRaises(Exception):
+        with sqlite3.connect(self.database) as connection:
+            before = connection.execute(
+                "SELECT state, artifact_json, artifact_sha256 FROM authorization_uses"
+            ).fetchone()
+            audit_count = connection.execute("SELECT COUNT(*) FROM audit").fetchone()[0]
+        with self.assertRaises(BrokerSafetyStoreError):
             self.store.transition_authorization_use(
                 self.scope,
                 authorization_id=record.authorization_id,
-                target_state=AuthorizationUseState.ABANDONED,
-                occurred_at="2025-01-02T00:00:35Z",
-                reason="not-reusable",
+                target_state=AuthorizationUseState.CONSUMED,
+                occurred_at="2025-01-02T00:00:34Z",
+                reason=None,
                 owner_id=self.lease.owner_id,
                 fencing_token=self.lease.fencing_token,
                 actor_reference="operator-ref",
             )
+        with sqlite3.connect(self.database) as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state, artifact_json, artifact_sha256 FROM authorization_uses"
+                ).fetchone(),
+                before,
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM audit").fetchone()[0],
+                audit_count,
+            )
+        abandoned = self.store.transition_authorization_use(
+            self.scope,
+            authorization_id=record.authorization_id,
+            target_state=AuthorizationUseState.ABANDONED,
+            occurred_at="2025-01-02T00:00:35Z",
+            reason="operator-abandoned",
+            owner_id=self.lease.owner_id,
+            fencing_token=self.lease.fencing_token,
+            actor_reference="operator-ref",
+        )
+        self.assertIs(abandoned.state, AuthorizationUseState.ABANDONED)
+        restarted = SQLiteBrokerSafetyStore(self.database).recovery_plan(self.scope)
+        self.assertNotIn("STORE_OR_AUDIT_CORRUPTION", restarted.blocking_reasons)
 
     def test_pre_submit_is_atomic_at_every_failure_boundary(self):
         for boundary in (
@@ -485,7 +504,19 @@ class DurableBrokerStoreTests(unittest.TestCase):
             gate_facts=self.pre_submit_gate_facts(),
         )
         self.assertEqual(committed.fencing_token, 1)
+        with sqlite3.connect(self.database) as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state, COUNT(*) FROM authorization_uses GROUP BY state"
+                ).fetchone(),
+                (AuthorizationUseState.CONSUMED.value, 1),
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM pre_submit_commits").fetchone()[0],
+                1,
+            )
         plan = SQLiteBrokerSafetyStore(self.database).recovery_plan(self.scope)
+        self.assertNotIn("STORE_OR_AUDIT_CORRUPTION", plan.blocking_reasons)
         self.assertTrue(plan.blocks_new_authorization)
         self.assertIn("UNRESOLVED_SUBMISSION_STATE", plan.blocking_reasons)
         self.assertEqual(plan.nonterminal_submission_count, 1)
@@ -592,6 +623,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 facts.last_audit_sequence,
                 facts.last_audit_root,
                 facts.high_water_summary_sha256,
+                facts.maximum_fencing_token,
             ),
             restored_at="2025-01-02T00:00:41Z",
         )
@@ -781,6 +813,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 0,
                 "0" * 64,
                 "0" * 64,
+                1,
             )
         with self.assertRaises(Exception):
             ExternalAuditAnchorReceipt(
@@ -1115,6 +1148,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
             checkpoint_facts.last_audit_sequence + 1,
             "f" * 64,
             checkpoint_facts.high_water_summary_sha256,
+            checkpoint_facts.maximum_fencing_token,
         )
         with self.assertRaises(RestoreRejectedError):
             SQLiteBrokerSafetyStore.restore_backup(
@@ -1131,6 +1165,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
             checkpoint_facts.last_audit_sequence,
             checkpoint_facts.last_audit_root,
             checkpoint_facts.high_water_summary_sha256,
+            checkpoint_facts.maximum_fencing_token,
         )
         active = SQLiteBrokerSafetyStore.restore_backup(
             backup,
@@ -1183,6 +1218,77 @@ class DurableBrokerStoreTests(unittest.TestCase):
         with self.assertRaises(RestoreRejectedError):
             SQLiteBrokerSafetyStore.verify_backup(corrupted, manifest)
 
+    def test_restore_fence_exceeds_independently_trusted_later_timeline(self):
+        self.store.persist_high_water(self.scope, self.fx.head, **self.write())
+        backup = self.root / "old-fence.sqlite3"
+        manifest_path = self.root / "old-fence.json"
+        manifest = self.store.backup(
+            backup,
+            manifest_path,
+            backup_timestamp="2025-01-02T00:00:45Z",
+        )
+        backup_facts = manifest.scope_audit_checkpoints[0]
+        self.assertEqual(backup_facts.maximum_fencing_token, 1)
+
+        second = self.store.acquire_lease(
+            self.scope,
+            owner_id="controller-2",
+            acquired_at="2025-01-02T01:00:00Z",
+            expires_at="2025-01-02T02:00:00Z",
+        )
+        cached = self.store.acquire_lease(
+            self.scope,
+            owner_id=self.lease.owner_id,
+            acquired_at="2025-01-02T02:00:00Z",
+            expires_at="2025-01-02T03:00:00Z",
+        )
+        self.assertEqual((second.fencing_token, cached.fencing_token), (2, 3))
+        trusted = TrustedRecoveryCheckpoint(
+            self.store.store_id,
+            backup_facts.scope_key,
+            backup_facts.last_audit_sequence,
+            backup_facts.last_audit_root,
+            backup_facts.high_water_summary_sha256,
+            cached.fencing_token,
+        )
+
+        active = SQLiteBrokerSafetyStore.restore_backup(
+            backup,
+            manifest_path,
+            self.root / "old-fence-active.sqlite3",
+            active=True,
+            checkpoint=trusted,
+            restored_at="2025-01-02T03:00:00Z",
+        )
+        self.assertGreater(
+            active.recovery_plan(self.scope).fencing_token,
+            cached.fencing_token,
+        )
+        with self.assertRaises(StaleFenceError):
+            active.persist_high_water(
+                self.scope,
+                self.fx.head,
+                owner_id=cached.owner_id,
+                fencing_token=cached.fencing_token,
+                now="2025-01-02T03:00:01Z",
+                actor_reference="cached-controller",
+            )
+        reacquired = active.acquire_lease(
+            self.scope,
+            owner_id=cached.owner_id,
+            acquired_at="2025-01-02T03:00:00Z",
+            expires_at="2025-01-02T04:00:00Z",
+        )
+        self.assertGreater(reacquired.fencing_token, cached.fencing_token)
+        with self.assertRaises(StaleFenceError):
+            active.persist_high_water(
+                self.scope,
+                self.fx.head,
+                owner_id=cached.owner_id,
+                fencing_token=cached.fencing_token,
+                now="2025-01-02T03:00:01Z",
+                actor_reference="cached-controller",
+            )
     def test_multi_account_restore_requires_every_scope_checkpoint(self):
         other = BrokerAccountScope(
             self.scope.broker_id,
@@ -1219,6 +1325,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 item.last_audit_sequence,
                 item.last_audit_root,
                 item.high_water_summary_sha256,
+                item.maximum_fencing_token,
             )
             for item in manifest.scope_audit_checkpoints
         )
@@ -1285,6 +1392,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
             trusted_facts.last_audit_sequence,
             trusted_facts.last_audit_root,
             trusted_facts.high_water_summary_sha256,
+            trusted_facts.maximum_fencing_token,
         )
 
         with sqlite3.connect(backup) as connection:

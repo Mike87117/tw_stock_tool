@@ -7,7 +7,7 @@ This runbook covers the single-host SQLite safety store only. Phase 56.5C has no
 - Treat `SUBMITTING`, `UNKNOWN_SUBMISSION_STATE`, `RECONCILIATION_REQUIRED`, and every other non-terminal submission as open exposure. Do not authorize another attempt while `BrokerRecoveryPlan.blocks_new_authorization` is true.
 - Never edit or reset an immutable authorization, intent, authorization-use record, submission history row, execution, audit row, anchor receipt, backup, or manifest.
 - Never reuse an authorization by changing a `CONSUMED` or `ABANDONED` use record back to `RESERVED`.
-- Only the current unexpired account lease and its monotonic fencing token may write. Expiry and takeover, including takeover by the same owner name, create a new token. Active restore atomically increments and expires every restored fence before returning; no cached pre-restore owner/token remains authority.
+- Only the current unexpired account lease and its monotonic fencing token may write. Expiry and takeover, including takeover by the same owner name, create a new token. Active restore atomically rotates every restored fence above both the backup token and the independently retained per-scope fencing high-water before returning; no cached pre-restore owner/token can regain authority.
 - Keep database files, WAL/SHM files, backups, manifests, and trusted checkpoints free of credentials and raw broker payloads. Filesystem permissions and encryption at rest are operator responsibilities.
 
 ## Normal restart
@@ -31,7 +31,7 @@ After any abrupt exit, restart normally, acquire a new or still-valid lease as a
 
 1. Call `backup()` with new destination and manifest paths. Keep both immutable after creation.
 2. Run `verify_backup()` and retain its database digest, store ID, schema/migration identity, global summary, and deterministic per-scope audit/root, high-water summary digest, and latest external receipt reference.
-3. Store one `TrustedRecoveryCheckpoint` per persisted scope separately from the database and backup, including its independently retained high-water summary digest. The complete set is the anti-rollback trust input; copying any checkpoint or digest from the candidate backup is not independent evidence.
+3. Store one `TrustedRecoveryCheckpoint` per persisted scope separately from the database and backup, including its independently retained high-water summary digest and maximum accepted fencing token. Refresh this evidence after every fencing-token advance even when audit and high-water state are unchanged. The complete set is the anti-rollback trust input; copying any checkpoint or digest from the candidate backup is not independent evidence.
 4. Periodically perform a forensic restore and verify that recovery remains blocked where unresolved state exists.
 
 ## Restore
