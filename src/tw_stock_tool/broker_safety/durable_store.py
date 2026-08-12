@@ -26,7 +26,9 @@ from tw_stock_tool.broker_safety.durable_models import (
     LeaseConflictError,
     PersistenceConflictError,
     PreSubmitCommit,
+    PreSubmitDisposition,
     RestoreRejectedError,
+    ScopeAuditCheckpoint,
     STORE_SCHEMA_VERSION,
     StaleFenceError,
     StoreCorruptionError,
@@ -35,6 +37,7 @@ from tw_stock_tool.broker_safety.durable_models import (
 )
 from tw_stock_tool.broker_safety.execution import (
     apply_broker_execution,
+    prepare_broker_submission,
     transition_broker_authorization_use,
     transition_broker_submission,
 )
@@ -52,7 +55,7 @@ from tw_stock_tool.broker_safety.execution_models import (
 from tw_stock_tool.broker_safety.lineage import (
     validate_forward_eligibility_high_water_mark,
 )
-from tw_stock_tool.broker_safety.models import _clean, _timestamp
+from tw_stock_tool.broker_safety.models import BrokerEnvironment, _clean, _timestamp
 from tw_stock_tool.broker_safety.serialization import (
     export_broker_safety_artifact_json,
     load_broker_safety_artifact_json,
@@ -64,6 +67,7 @@ from tw_stock_tool.broker_safety.source_models import (
 )
 from tw_stock_tool.broker_safety.source_serialization import (
     export_forward_eligibility_high_water_mark_json,
+    export_forward_eligibility_progression_json,
     load_forward_eligibility_high_water_mark_json,
 )
 
@@ -80,6 +84,7 @@ class _ClosingConnection(sqlite3.Connection):
 
 MIGRATION_ID = "001_phase_56_5c_initial"
 EXTERNAL_WORM_TARGET = "AMAZON_S3_OBJECT_LOCK_COMPLIANCE"
+TEST_ANCHOR_TARGET = "DETERMINISTIC_FAKE_WORM"
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE = re.compile(r"[A-Za-z0-9_.:/-]+\Z")
 _FORBIDDEN = re.compile(r"(?i)(password|api[_-]?key|secret|token|certificate|private[_-]?key|raw[_-]?(account|request|response))")
@@ -106,12 +111,13 @@ _SCHEMA = (
     "CREATE TABLE intents(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), economic_intent_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, client_order_id TEXT NOT NULL, authorization_id TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, economic_intent_id), UNIQUE(scope_key, idempotency_key), UNIQUE(scope_key, client_order_id))",
     "CREATE TABLE provider_ids(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), provider_name TEXT NOT NULL, provider_client_id TEXT NOT NULL, canonical_client_id TEXT NOT NULL, PRIMARY KEY(scope_key, provider_name, provider_client_id), UNIQUE(scope_key, provider_name, canonical_client_id))",
     "CREATE TABLE authorization_uses(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), authorization_id TEXT NOT NULL, authorization_use_id TEXT NOT NULL, economic_intent_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, state TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, authorization_use_id))",
+    "CREATE TABLE pre_submit_commits(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), authorization_use_id TEXT NOT NULL, authorization_id TEXT NOT NULL, economic_intent_id TEXT NOT NULL, attempt_id TEXT NOT NULL, persistence_version TEXT NOT NULL, request_sha256 TEXT NOT NULL, submission_sha256 TEXT NOT NULL, audit_sequence INTEGER NOT NULL, audit_root_digest TEXT NOT NULL, fencing_token INTEGER NOT NULL, PRIMARY KEY(scope_key, authorization_use_id), UNIQUE(scope_key, economic_intent_id), UNIQUE(scope_key, economic_intent_id, attempt_id))",
     "CREATE TABLE submissions_current(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), intent_id TEXT NOT NULL, attempt_id TEXT NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL CHECK(version > 0), artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, intent_id, attempt_id))",
-    "CREATE TABLE submission_history(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), intent_id TEXT NOT NULL, attempt_id TEXT NOT NULL, version INTEGER NOT NULL, state TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, intent_id, attempt_id, version))",
+    "CREATE TABLE submission_history(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), intent_id TEXT NOT NULL, attempt_id TEXT NOT NULL, version INTEGER NOT NULL, state TEXT NOT NULL, transition_kind TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, intent_id, attempt_id, version))",
     "CREATE TABLE executions(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), execution_id TEXT NOT NULL, intent_id TEXT NOT NULL, attempt_id TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, execution_id))",
     "CREATE TABLE kill_switch(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), kill_switch_version TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, kill_switch_version))",
     "CREATE TABLE audit(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), sequence INTEGER NOT NULL CHECK(sequence > 0), record_id TEXT NOT NULL, event_type TEXT NOT NULL, occurred_at TEXT NOT NULL, recorded_at TEXT NOT NULL, actor_reference TEXT NOT NULL, references_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL, previous_digest TEXT NOT NULL, record_digest TEXT NOT NULL, external_anchor_reference TEXT, PRIMARY KEY(scope_key, sequence), UNIQUE(scope_key, record_id), UNIQUE(scope_key, record_digest))",
-    "CREATE TABLE anchor_receipts(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), receipt_id TEXT NOT NULL, bundle_sha256 TEXT NOT NULL, target TEXT NOT NULL, object_reference TEXT NOT NULL, anchored_at TEXT NOT NULL, PRIMARY KEY(scope_key, receipt_id))",
+    "CREATE TABLE anchor_receipts(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), receipt_id TEXT NOT NULL, bundle_json TEXT NOT NULL, bundle_sha256 TEXT NOT NULL, anchored_sequence INTEGER NOT NULL, anchored_root TEXT NOT NULL, previous_receipt_reference TEXT, target TEXT NOT NULL, object_reference TEXT NOT NULL, anchored_at TEXT NOT NULL, PRIMARY KEY(scope_key, receipt_id))",
     "CREATE TABLE backup_history(backup_sha256 TEXT PRIMARY KEY, manifest_json TEXT NOT NULL, created_at TEXT NOT NULL)",
 )
 MIGRATION_CHECKSUM = sha256("\n".join(_SCHEMA).encode()).hexdigest()
@@ -489,12 +495,27 @@ class SQLiteBrokerSafetyStore:
             rows = connection.execute("SELECT * FROM audit WHERE scope_key=? ORDER BY sequence", (key,)).fetchall()
         previous = ZERO_AUDIT_DIGEST
         for expected, row in enumerate(rows, 1):
-            if row[1] != expected or row[9] != previous:
+            if row[0] != key or row[1] != expected or row[9] != previous:
                 raise StoreCorruptionError("broker audit sequence or linkage is broken")
             try:
                 references = json.loads(row[7])
-            except json.JSONDecodeError as exc:
-                raise StoreCorruptionError("broker audit references are malformed") from exc
+                BrokerAuditRecord(
+                    self.store_id,
+                    key,
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    row[5],
+                    row[6],
+                    row[7],
+                    row[8],
+                    row[9],
+                    row[10],
+                    row[11],
+                )
+            except Exception as exc:
+                raise StoreCorruptionError("broker audit record is malformed") from exc
             facts = {
                 "actor_reference": row[6],
                 "event_type": row[3],
@@ -966,8 +987,19 @@ class SQLiteBrokerSafetyStore:
         now: str,
         actor_reference: str,
     ) -> int:
-        if type(record) is not BrokerSubmissionRecord:
-            raise BrokerSafetyStoreError("submission must be exact")
+        if type(record) is not BrokerSubmissionRecord or record.state is not BrokerSubmissionState.PREPARED:
+            raise BrokerSafetyStoreError("direct submission persistence requires exact PREPARED state")
+        self._validate_intent_scope(
+            scope,
+            self._require_durable_intent(scope, record.intent_id),
+        )
+        expected = prepare_broker_submission(
+            self._require_durable_intent(scope, record.intent_id),
+            attempt_id=record.attempt_id,
+            recorded_at=record.recorded_at,
+        )
+        if record != expected:
+            raise PersistenceConflictError("PREPARED submission does not match the frozen A4 constructor")
         text, digest = _artifact(record)
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
@@ -991,23 +1023,54 @@ class SQLiteBrokerSafetyStore:
                 return row[0]
             connection.execute(
                 "INSERT INTO submissions_current VALUES(?, ?, ?, ?, 1, ?, ?)",
-                (key, record.intent_id, record.attempt_id, record.state.value, text, digest),
+                (
+                    key,
+                    record.intent_id,
+                    record.attempt_id,
+                    record.state.value,
+                    text,
+                    digest,
+                ),
             )
             connection.execute(
-                "INSERT INTO submission_history VALUES(?, ?, ?, 1, ?, ?, ?)",
-                (key, record.intent_id, record.attempt_id, record.state.value, text, digest),
+                "INSERT INTO submission_history VALUES(?, ?, ?, 1, ?, ?, ?, ?)",
+                (
+                    key,
+                    record.intent_id,
+                    record.attempt_id,
+                    record.state.value,
+                    "INITIAL_PREPARED",
+                    text,
+                    digest,
+                ),
             )
             self._append_audit(
                 connection,
                 key,
-                event_type="SUBMISSION_PERSISTED",
+                event_type="SUBMISSION_PREPARED",
                 occurred_at=now,
                 recorded_at=now,
                 actor_reference=actor_reference,
-                references={"intent_id": record.intent_id, "attempt_id": record.attempt_id},
+                references={
+                    "intent_id": record.intent_id,
+                    "attempt_id": record.attempt_id,
+                },
                 payload_sha256=digest,
             )
         return 1
+
+    def _require_durable_intent(self, scope: BrokerAccountScope, intent_id: str) -> BrokerOrderIntent:
+        with self._connect(readonly=True) as connection:
+            intent = self._read_artifact(
+                connection,
+                "intents",
+                "scope_key=? AND economic_intent_id=?",
+                (_scope_key(scope), intent_id),
+                BrokerOrderIntent,
+            )
+        if intent is None:
+            raise PersistenceConflictError("submission requires its correlated durable intent")
+        return intent
 
     def transition_submission(
         self,
@@ -1023,6 +1086,11 @@ class SQLiteBrokerSafetyStore:
         actor_reference: str,
         transition_facts: Mapping[str, object] | None = None,
     ) -> tuple[BrokerSubmissionRecord, int]:
+        if evidence in (
+            BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+            BrokerSubmissionEvidence.SUBMIT_REQUEST,
+        ):
+            raise BrokerSafetyStoreError("authorization and SUBMITTING are owned by atomic pre-submit")
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
             self._check_fence(connection, key, owner_id, fencing_token, recorded_at)
@@ -1059,13 +1127,31 @@ class SQLiteBrokerSafetyStore:
             text, digest = _artifact(updated)
             cursor = connection.execute(
                 "UPDATE submissions_current SET state=?, version=?, artifact_json=?, artifact_sha256=? WHERE scope_key=? AND intent_id=? AND attempt_id=? AND version=?",
-                (updated.state.value, version, text, digest, key, intent_id, attempt_id, expected_version),
+                (
+                    updated.state.value,
+                    version,
+                    text,
+                    digest,
+                    key,
+                    intent_id,
+                    attempt_id,
+                    expected_version,
+                ),
             )
             if cursor.rowcount != 1:
                 raise PersistenceConflictError("submission version compare-and-swap failed")
             connection.execute(
-                "INSERT INTO submission_history VALUES(?, ?, ?, ?, ?, ?, ?)",
-                (key, intent_id, attempt_id, version, updated.state.value, text, digest),
+                "INSERT INTO submission_history VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    key,
+                    intent_id,
+                    attempt_id,
+                    version,
+                    updated.state.value,
+                    evidence.value,
+                    text,
+                    digest,
+                ),
             )
             self._append_audit(
                 connection,
@@ -1074,7 +1160,11 @@ class SQLiteBrokerSafetyStore:
                 occurred_at=recorded_at,
                 recorded_at=recorded_at,
                 actor_reference=actor_reference,
-                references={"intent_id": intent_id, "attempt_id": attempt_id},
+                references={
+                    "intent_id": intent_id,
+                    "attempt_id": attempt_id,
+                    "evidence": evidence.value,
+                },
                 payload_sha256=digest,
             )
         return updated, version
@@ -1097,10 +1187,20 @@ class SQLiteBrokerSafetyStore:
         fail_at: str | None = None,
     ) -> PreSubmitCommit:
         self._validate_intent_scope(scope, intent)
+        _safe_text("persistence_version", persistence_version)
         if type(authorization) is not BrokerExecutionAuthorization:
             raise BrokerSafetyStoreError("authorization must be exact")
         if (
-            (authorization.broker_id, authorization.environment, authorization.account_reference) != (scope.broker_id, scope.environment, scope.account_reference)
+            (
+                authorization.broker_id,
+                authorization.environment,
+                authorization.account_reference,
+            )
+            != (
+                scope.broker_id,
+                scope.environment,
+                scope.account_reference,
+            )
             or authorization.progression_fingerprint != progression.progression_fingerprint
             or intent.progression_fingerprint != progression.progression_fingerprint
         ):
@@ -1127,12 +1227,53 @@ class SQLiteBrokerSafetyStore:
             authorization_use=consumed,
             **dict(gate_facts),
         )
+        reserved_text, reserved_digest = _artifact(reserved_use)
+        consumed_text, consumed_digest = _artifact(consumed)
+        auth_text, auth_digest = _artifact(authorization)
+        intent_text, intent_digest = _artifact(intent)
+        submission_text, submission_digest = _artifact(submitting)
+        request_digest = _digest_bytes(
+            _canonical(
+                {
+                    "authorized_submission_sha256": _artifact(authorized_submission)[1],
+                    "authorization_sha256": auth_digest,
+                    "intent_sha256": intent_digest,
+                    "persistence_version": persistence_version,
+                    "progression_sha256": _digest_bytes(export_forward_eligibility_progression_json(progression).encode()),
+                    "reserved_use_sha256": reserved_digest,
+                    "submitting_sha256": submission_digest,
+                }
+            )
+        )
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
             self._check_fence(connection, key, owner_id, fencing_token, occurred_at)
+            existing_use_row = connection.execute(
+                "SELECT authorization_use_id, economic_intent_id, idempotency_key, state, artifact_json, artifact_sha256 FROM authorization_uses WHERE scope_key=? AND authorization_id=?",
+                (key, authorization.authorization_id),
+            ).fetchone()
+            if existing_use_row is not None:
+                durable_use = self._validate_artifact_row(existing_use_row[4:], BrokerAuthorizationUseRecord)
+                if (
+                    durable_use.authorization_use_id,
+                    durable_use.economic_intent_id,
+                    durable_use.idempotency_key,
+                    durable_use.state.value,
+                ) != tuple(existing_use_row[:4]) or durable_use.authorization_id != authorization.authorization_id:
+                    raise StoreCorruptionError("durable authorization-use identity is inconsistent")
+                if durable_use.state is AuthorizationUseState.CONSUMED:
+                    return self._resolve_pre_submit_replay(
+                        connection,
+                        key,
+                        durable_use,
+                        submitting,
+                        persistence_version,
+                        request_digest,
+                    )
+                if durable_use.state is not AuthorizationUseState.RESERVED or (existing_use_row[4], existing_use_row[5]) != (reserved_text, reserved_digest):
+                    raise PersistenceConflictError("authorization use is not available for pre-submit")
             mark, _ = self._advance_high_water(connection, key, progression)
             self._fail(fail_at, "high_water")
-            auth_text, auth_digest = _artifact(authorization)
             self._put_immutable(
                 connection,
                 "authorizations",
@@ -1144,50 +1285,73 @@ class SQLiteBrokerSafetyStore:
             self._fail(fail_at, "authorization")
             self._put_intent(connection, key, intent)
             self._fail(fail_at, "intent")
-            use_text, use_digest = _artifact(consumed)
-            existing_use = connection.execute(
-                "SELECT artifact_json, artifact_sha256 FROM authorization_uses WHERE scope_key=? AND authorization_id=?",
-                (key, authorization.authorization_id),
-            ).fetchone()
-            if existing_use is not None and tuple(existing_use) not in (
-                _artifact(reserved_use),
-                (use_text, use_digest),
-            ):
-                raise PersistenceConflictError("authorization use is already claimed differently")
-            if existing_use is None:
+            if existing_use_row is None:
                 connection.execute(
                     "INSERT INTO authorization_uses VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                    (key, consumed.authorization_id, consumed.authorization_use_id, consumed.economic_intent_id, consumed.idempotency_key, consumed.state.value, use_text, use_digest),
+                    (
+                        key,
+                        reserved_use.authorization_id,
+                        reserved_use.authorization_use_id,
+                        reserved_use.economic_intent_id,
+                        reserved_use.idempotency_key,
+                        reserved_use.state.value,
+                        reserved_text,
+                        reserved_digest,
+                    ),
                 )
-            else:
-                connection.execute(
-                    "UPDATE authorization_uses SET state=?, artifact_json=?, artifact_sha256=? WHERE scope_key=? AND authorization_id=?",
-                    (consumed.state.value, use_text, use_digest, key, consumed.authorization_id),
-                )
+            cursor = connection.execute(
+                "UPDATE authorization_uses SET state=?, artifact_json=?, artifact_sha256=? WHERE scope_key=? AND authorization_id=? AND authorization_use_id=? AND state=? AND artifact_sha256=?",
+                (
+                    consumed.state.value,
+                    consumed_text,
+                    consumed_digest,
+                    key,
+                    consumed.authorization_id,
+                    consumed.authorization_use_id,
+                    AuthorizationUseState.RESERVED.value,
+                    reserved_digest,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise PersistenceConflictError("authorization use was not durably RESERVED")
             self._fail(fail_at, "authorization_use")
-            submission_text, submission_digest = _artifact(submitting)
-            existing_submission = connection.execute(
-                "SELECT version, artifact_json, artifact_sha256 FROM submissions_current WHERE scope_key=? AND intent_id=? AND attempt_id=?",
-                (key, submitting.intent_id, submitting.attempt_id),
-            ).fetchone()
-            if existing_submission is not None:
-                raise PersistenceConflictError("pre-submit attempt already exists")
+            if connection.execute(
+                "SELECT 1 FROM submissions_current WHERE scope_key=? AND intent_id=?",
+                (key, submitting.intent_id),
+            ).fetchone():
+                raise PersistenceConflictError("economic intent already has a submission attempt")
             connection.execute(
                 "INSERT INTO submissions_current VALUES(?, ?, ?, ?, 1, ?, ?)",
-                (key, submitting.intent_id, submitting.attempt_id, submitting.state.value, submission_text, submission_digest),
+                (
+                    key,
+                    submitting.intent_id,
+                    submitting.attempt_id,
+                    submitting.state.value,
+                    submission_text,
+                    submission_digest,
+                ),
             )
             connection.execute(
-                "INSERT INTO submission_history VALUES(?, ?, ?, 1, ?, ?, ?)",
-                (key, submitting.intent_id, submitting.attempt_id, submitting.state.value, submission_text, submission_digest),
+                "INSERT INTO submission_history VALUES(?, ?, ?, 1, ?, ?, ?, ?)",
+                (
+                    key,
+                    submitting.intent_id,
+                    submitting.attempt_id,
+                    submitting.state.value,
+                    "ATOMIC_PRE_SUBMIT",
+                    submission_text,
+                    submission_digest,
+                ),
             )
             self._fail(fail_at, "submission")
             combined_digest = _digest_bytes(
                 _canonical(
                     {
                         "authorization": auth_digest,
-                        "authorization_use": use_digest,
+                        "authorization_use": consumed_digest,
                         "high_water": _source_artifact(mark)[1],
-                        "intent": _artifact(intent)[1],
+                        "intent": intent_digest,
+                        "request": request_digest,
                         "submission": submission_digest,
                     }
                 )
@@ -1208,7 +1372,97 @@ class SQLiteBrokerSafetyStore:
                 payload_sha256=combined_digest,
             )
             self._fail(fail_at, "audit")
-        return PreSubmitCommit(persistence_version, fencing_token, audit.sequence, audit.record_digest)
+            connection.execute(
+                "INSERT INTO pre_submit_commits VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    key,
+                    consumed.authorization_use_id,
+                    consumed.authorization_id,
+                    consumed.economic_intent_id,
+                    submitting.attempt_id,
+                    persistence_version,
+                    request_digest,
+                    submission_digest,
+                    audit.sequence,
+                    audit.record_digest,
+                    fencing_token,
+                ),
+            )
+            self._fail(fail_at, "commit_record")
+        return PreSubmitCommit(
+            PreSubmitDisposition.COMMITTED,
+            persistence_version,
+            consumed.authorization_use_id,
+            intent.economic_intent_id,
+            submitting.attempt_id,
+            fencing_token,
+            audit.sequence,
+            audit.record_digest,
+        )
+
+    def _resolve_pre_submit_replay(
+        self,
+        connection: sqlite3.Connection,
+        scope_key: str,
+        durable_use: BrokerAuthorizationUseRecord,
+        submitting: BrokerSubmissionRecord,
+        persistence_version: str,
+        request_digest: str,
+    ) -> PreSubmitCommit:
+        commit = connection.execute(
+            "SELECT authorization_id, economic_intent_id, attempt_id, "
+            "persistence_version, request_sha256, submission_sha256, "
+            "audit_sequence, audit_root_digest, fencing_token "
+            "FROM pre_submit_commits WHERE scope_key=? "
+            "AND authorization_use_id=?",
+            (scope_key, durable_use.authorization_use_id),
+        ).fetchone()
+        if commit is None:
+            raise StoreCorruptionError("CONSUMED authorization use has no pre-submit commit")
+        expected = (
+            durable_use.authorization_id,
+            durable_use.economic_intent_id,
+            submitting.attempt_id,
+            persistence_version,
+            request_digest,
+            _artifact(submitting)[1],
+        )
+        if tuple(commit[:6]) != expected:
+            raise PersistenceConflictError("consumed authorization use is bound to another attempt")
+        history = connection.execute(
+            "SELECT state, transition_kind, artifact_sha256 FROM submission_history WHERE scope_key=? AND intent_id=? AND attempt_id=? AND version=1",
+            (
+                scope_key,
+                durable_use.economic_intent_id,
+                submitting.attempt_id,
+            ),
+        ).fetchone()
+        audit = connection.execute(
+            "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
+            (scope_key, commit[6]),
+        ).fetchone()
+        if (
+            history is None
+            or tuple(history)
+            != (
+                BrokerSubmissionState.SUBMITTING.value,
+                "ATOMIC_PRE_SUBMIT",
+                commit[5],
+            )
+            or audit is None
+            or audit[0] != commit[7]
+        ):
+            raise StoreCorruptionError("pre-submit commit lost its submission or audit binding")
+        return PreSubmitCommit(
+            PreSubmitDisposition.ALREADY_COMMITTED,
+            commit[3],
+            durable_use.authorization_use_id,
+            commit[1],
+            commit[2],
+            commit[8],
+            commit[6],
+            commit[7],
+        )
 
     @staticmethod
     def _fail(selected: str | None, boundary: str) -> None:
@@ -1278,8 +1532,17 @@ class SQLiteBrokerSafetyStore:
                 (updated.state.value, version, state_text, state_digest, key, updated.intent_id, updated.attempt_id, expected_submission_version),
             )
             connection.execute(
-                "INSERT INTO submission_history VALUES(?, ?, ?, ?, ?, ?, ?)",
-                (key, updated.intent_id, updated.attempt_id, version, updated.state.value, state_text, state_digest),
+                "INSERT INTO submission_history VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    key,
+                    updated.intent_id,
+                    updated.attempt_id,
+                    version,
+                    updated.state.value,
+                    f"EXECUTION:{execution.execution_id}",
+                    state_text,
+                    state_digest,
+                ),
             )
             self._append_audit(
                 connection,
@@ -1335,16 +1598,18 @@ class SQLiteBrokerSafetyStore:
                 lease = connection.execute("SELECT fencing_token FROM leases WHERE scope_key=?", (key,)).fetchone()
 
                 high_water = connection.execute(
-                    "SELECT artifact_json, artifact_sha256 FROM high_water WHERE scope_key=?",
+                    "SELECT lineage_key, artifact_json, artifact_sha256 FROM high_water WHERE scope_key=?",
                     (key,),
                 ).fetchall()
                 for row in high_water:
-                    if _digest_bytes(row[0].encode()) != row[1]:
+                    if _digest_bytes(row[1].encode()) != row[2]:
                         raise StoreCorruptionError("high-water digest mismatch")
                     try:
-                        load_forward_eligibility_high_water_mark_json(row[0])
+                        mark = load_forward_eligibility_high_water_mark_json(row[1])
                     except Exception as exc:
                         raise StoreCorruptionError("persisted high-water artifact is invalid") from exc
+                    if _lineage_key(mark.lineage_key) != row[0]:
+                        raise StoreCorruptionError("high-water lineage key is not canonical")
 
                 authorization_rows = connection.execute(
                     "SELECT authorization_id, artifact_json, artifact_sha256 FROM authorizations WHERE scope_key=?",
@@ -1410,6 +1675,7 @@ class SQLiteBrokerSafetyStore:
                     "SELECT authorization_id, authorization_use_id, economic_intent_id, idempotency_key, state, artifact_json, artifact_sha256 FROM authorization_uses WHERE scope_key=?",
                     (key,),
                 ).fetchall()
+                uses_by_id: dict[str, BrokerAuthorizationUseRecord] = {}
                 for row in use_rows:
                     use = self._validate_artifact_row(row[5:], BrokerAuthorizationUseRecord)
                     if (
@@ -1424,14 +1690,10 @@ class SQLiteBrokerSafetyStore:
                         or use.authorization_id not in authorizations
                         or use.economic_intent_id not in intents
                         or intents[use.economic_intent_id].idempotency_key != use.idempotency_key
-                        or (
-                            use.environment,
-                            use.account_reference,
-                        )
-                        != (scope.environment, scope.account_reference)
+                        or (use.environment, use.account_reference) != (scope.environment, scope.account_reference)
                     ):
                         raise StoreCorruptionError("authorization-use identity or reference mismatch")
-
+                    uses_by_id[use.authorization_use_id] = use
                 submission_rows = connection.execute(
                     "SELECT intent_id, attempt_id, state, version, artifact_json, artifact_sha256 FROM submissions_current WHERE scope_key=?",
                     (key,),
@@ -1452,44 +1714,112 @@ class SQLiteBrokerSafetyStore:
                         row[5],
                     )
 
+                commit_rows = connection.execute(
+                    "SELECT authorization_use_id, authorization_id, "
+                    "economic_intent_id, attempt_id, persistence_version, "
+                    "request_sha256, submission_sha256, audit_sequence, "
+                    "audit_root_digest, fencing_token "
+                    "FROM pre_submit_commits WHERE scope_key=?",
+                    (key,),
+                ).fetchall()
+                commits_by_submission: dict[tuple[str, str], sqlite3.Row] = {}
+                for row in commit_rows:
+                    use = uses_by_id.get(row[0])
+                    pair = (row[2], row[3])
+                    audit = connection.execute(
+                        "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
+                        (key, row[7]),
+                    ).fetchone()
+                    for name, value in (
+                        ("persistence_version", row[4]),
+                        ("request_sha256", row[5]),
+                        ("submission_sha256", row[6]),
+                        ("audit_root_digest", row[8]),
+                    ):
+                        (_require_sha(name, value) if name.endswith("sha256") or name == "audit_root_digest" else _safe_text(name, value))
+                    if (
+                        use is None
+                        or use.state is not AuthorizationUseState.CONSUMED
+                        or (
+                            use.authorization_id,
+                            use.economic_intent_id,
+                        )
+                        != (row[1], row[2])
+                        or pair not in submissions
+                        or submissions[pair][1].pre_submit_persistence_version != row[4]
+                        or type(row[7]) is not int
+                        or row[7] <= 0
+                        or type(row[9]) is not int
+                        or row[9] <= 0
+                        or audit is None
+                        or audit[0] != row[8]
+                    ):
+                        raise StoreCorruptionError("pre-submit commit identity or audit binding is invalid")
+                    if pair in commits_by_submission:
+                        raise StoreCorruptionError("multiple pre-submit commits exist for one submission")
+                    commits_by_submission[pair] = row
+                committed_use_ids = {row[0] for row in commit_rows}
+                for use_id, use in uses_by_id.items():
+                    if (use.state is AuthorizationUseState.CONSUMED) != (use_id in committed_use_ids):
+                        raise StoreCorruptionError("consumed authorization use and pre-submit commit differ")
                 history_rows = connection.execute(
-                    "SELECT intent_id, attempt_id, version, state, artifact_json, artifact_sha256 FROM submission_history WHERE scope_key=? ORDER BY intent_id, attempt_id, version",
+                    "SELECT intent_id, attempt_id, version, state, transition_kind, artifact_json, artifact_sha256 FROM submission_history WHERE scope_key=? ORDER BY intent_id, attempt_id, version",
                     (key,),
                 ).fetchall()
                 observed_versions: dict[tuple[str, str], list[int]] = {}
+                histories: dict[
+                    tuple[str, str],
+                    list[tuple[str, BrokerSubmissionRecord, str]],
+                ] = {}
                 last_history: dict[tuple[str, str], tuple[int, str, str]] = {}
                 for row in history_rows:
-                    historical = self._validate_artifact_row(row[4:], BrokerSubmissionRecord)
+                    historical = self._validate_artifact_row(row[5:], BrokerSubmissionRecord)
                     pair = (row[0], row[1])
-                    if (historical.intent_id, historical.attempt_id, historical.state.value) != (row[0], row[1], row[3]) or pair not in submissions:
+                    if (
+                        historical.intent_id,
+                        historical.attempt_id,
+                        historical.state.value,
+                    ) != (row[0], row[1], row[3]) or pair not in submissions:
                         raise StoreCorruptionError("submission history identity or reference mismatch")
+                    _safe_text("transition_kind", row[4])
                     observed_versions.setdefault(pair, []).append(row[2])
-                    last_history[pair] = (row[2], row[4], row[5])
-                for pair, (version, _current, text, digest) in submissions.items():
+                    histories.setdefault(pair, []).append((row[4], historical, row[6]))
+                    last_history[pair] = (row[2], row[5], row[6])
+                for pair, (
+                    version,
+                    _current,
+                    text,
+                    digest,
+                ) in submissions.items():
                     if observed_versions.get(pair) != list(range(1, version + 1)):
                         raise StoreCorruptionError("submission history versions are not contiguous")
                     if last_history.get(pair) != (version, text, digest):
                         raise StoreCorruptionError("submission current state does not match history")
-
                 execution_rows = connection.execute(
                     "SELECT execution_id, intent_id, attempt_id, artifact_json, artifact_sha256 FROM executions WHERE scope_key=?",
                     (key,),
                 ).fetchall()
+                executions_by_submission: dict[tuple[str, str], dict[str, BrokerExecutionRecord]] = {}
                 for row in execution_rows:
                     execution = self._validate_artifact_row(row[3:], BrokerExecutionRecord)
                     pair = (execution.intent_id, execution.attempt_id)
                     if (
-                        (
-                            execution.execution_id,
-                            execution.intent_id,
-                            execution.attempt_id,
-                        )
-                        != tuple(row[:3])
-                        or pair not in submissions
-                        or execution.execution_id not in submissions[pair][1].execution_ids
-                    ):
+                        execution.execution_id,
+                        execution.intent_id,
+                        execution.attempt_id,
+                    ) != tuple(row[:3]) or pair not in submissions:
                         raise StoreCorruptionError("execution identity or submission reference mismatch")
-
+                    executions_by_submission.setdefault(pair, {})[execution.execution_id] = execution
+                for pair, history in histories.items():
+                    self._validate_submission_lifecycle(
+                        intents[pair[0]],
+                        history,
+                        executions_by_submission.get(pair, {}),
+                        commits_by_submission.get(pair),
+                    )
+                    current_execution_ids = set(submissions[pair][1].execution_ids)
+                    if current_execution_ids != set(executions_by_submission.get(pair, {})):
+                        raise StoreCorruptionError("submission and durable execution IDs differ")
                 kill_rows = connection.execute(
                     "SELECT kill_switch_version, artifact_json, artifact_sha256 FROM kill_switch WHERE scope_key=? ORDER BY rowid",
                     (key,),
@@ -1508,15 +1838,55 @@ class SQLiteBrokerSafetyStore:
                         raise StoreCorruptionError("kill-switch identity or account scope mismatch")
 
                 receipt_rows = connection.execute(
-                    "SELECT receipt_id, bundle_sha256, target, object_reference, anchored_at FROM anchor_receipts WHERE scope_key=? ORDER BY anchored_at, receipt_id",
+                    "SELECT receipt_id, bundle_json, bundle_sha256, "
+                    "anchored_sequence, anchored_root, "
+                    "previous_receipt_reference, target, object_reference, "
+                    "anchored_at FROM anchor_receipts WHERE scope_key=? "
+                    "ORDER BY anchored_at, receipt_id",
                     (key,),
                 ).fetchall()
+                previous_receipt_reference: str | None = None
+                anchor_checkpoint: tuple[int, str, str] | None = None
                 for row in receipt_rows:
-                    _safe_text("receipt_id", row[0])
-                    _require_sha("bundle_sha256", row[1])
-                    _safe_text("target", row[2])
-                    _safe_text("object_reference", row[3])
-                    _timestamp("anchored_at", row[4])
+                    try:
+                        bundle_data = json.loads(row[1])
+                        bundle = AuditAnchorBundle(**bundle_data)
+                    except Exception as exc:
+                        raise StoreCorruptionError("persisted anchor bundle is invalid") from exc
+                    bundle_bytes = canonical_audit_anchor_bundle_bytes(bundle)
+                    anchored_audit = connection.execute(
+                        "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
+                        (key, row[3]),
+                    ).fetchone()
+                    for name, value in (
+                        ("receipt_id", row[0]),
+                        ("object_reference", row[7]),
+                    ):
+                        _safe_text(name, value)
+                    _require_sha("bundle_sha256", row[2])
+                    _require_sha("anchored_root", row[4])
+                    _timestamp("anchored_at", row[8])
+                    if (
+                        bundle_bytes.decode("utf-8") != row[1]
+                        or _digest_bytes(bundle_bytes) != row[2]
+                        or bundle.store_id != self.store_id
+                        or bundle.scope_key != key
+                        or bundle.store_schema_version != STORE_SCHEMA_VERSION
+                        or bundle.first_audit_sequence != 1
+                        or (
+                            bundle.last_audit_sequence,
+                            bundle.audit_root_digest,
+                            bundle.previous_receipt_reference,
+                        )
+                        != (row[3], row[4], row[5])
+                        or row[5] != previous_receipt_reference
+                        or row[6] not in {TEST_ANCHOR_TARGET, EXTERNAL_WORM_TARGET}
+                        or anchored_audit is None
+                        or anchored_audit[0] != row[4]
+                    ):
+                        raise StoreCorruptionError("external anchor checkpoint chain is invalid")
+                    previous_receipt_reference = row[0]
+                    anchor_checkpoint = (row[3], row[4], row[6])
 
                 nonterminal = sum(row[2] not in _TERMINAL_SUBMISSIONS for row in submission_rows)
                 unresolved = sum(row[2] in _UNRESOLVED_SUBMISSIONS for row in submission_rows)
@@ -1534,7 +1904,7 @@ class SQLiteBrokerSafetyStore:
                 lease = None
                 high_water = uses = intents_for_count = submission_rows = ()
                 nonterminal = unresolved = 0
-                kill = receipt = None
+                kill = receipt = anchor_checkpoint = None
                 audit_sequence, audit_root = 0, ZERO_AUDIT_DIGEST
             else:
                 raise
@@ -1550,6 +1920,9 @@ class SQLiteBrokerSafetyStore:
             audit_sequence,
             audit_root,
             None if receipt is None else receipt[0],
+            None if anchor_checkpoint is None else anchor_checkpoint[0],
+            None if anchor_checkpoint is None else anchor_checkpoint[1],
+            None if anchor_checkpoint is None else anchor_checkpoint[2],
             bool(reasons),
             tuple(sorted(set(reasons))),
         )
@@ -1565,6 +1938,69 @@ class SQLiteBrokerSafetyStore:
         if type(value) is not expected:
             raise StoreCorruptionError("persisted artifact type mismatch")
         return value
+
+    @staticmethod
+    def _validate_submission_lifecycle(
+        intent: BrokerOrderIntent,
+        history: list[tuple[str, BrokerSubmissionRecord, str]],
+        executions: dict[str, BrokerExecutionRecord],
+        commit: sqlite3.Row | None,
+    ) -> None:
+        if not history:
+            raise StoreCorruptionError("submission history is missing")
+        first_kind, prior, first_digest = history[0]
+        if first_kind == "INITIAL_PREPARED":
+            expected = prepare_broker_submission(
+                intent,
+                attempt_id=prior.attempt_id,
+                recorded_at=prior.recorded_at,
+            )
+            if commit is not None:
+                raise StoreCorruptionError("prepared submission cannot have a pre-submit commit")
+        elif first_kind == "ATOMIC_PRE_SUBMIT":
+            if commit is None or first_digest != commit[6]:
+                raise StoreCorruptionError("submitting history is not bound to its pre-submit commit")
+            expected = prior
+            if prior.state is not BrokerSubmissionState.SUBMITTING:
+                raise StoreCorruptionError("atomic pre-submit history must begin in SUBMITTING")
+        else:
+            raise StoreCorruptionError("submission history has an unsafe initial state")
+        if prior != expected:
+            raise StoreCorruptionError("initial submission snapshot is not canonical")
+
+        observed_execution_ids: set[str] = set()
+        for transition_kind, current, _digest in history[1:]:
+            if transition_kind.startswith("EXECUTION:"):
+                execution_id = transition_kind.removeprefix("EXECUTION:")
+                execution = executions.get(execution_id)
+                if execution is None or execution_id in observed_execution_ids:
+                    raise StoreCorruptionError("submission history execution reference is invalid")
+                expected = apply_broker_execution(prior, intent, execution)
+                observed_execution_ids.add(execution_id)
+            else:
+                try:
+                    evidence = BrokerSubmissionEvidence(transition_kind)
+                except ValueError as exc:
+                    raise StoreCorruptionError("submission history transition is unknown") from exc
+                if evidence in {
+                    BrokerSubmissionEvidence.AUTHORIZATION_GATE,
+                    BrokerSubmissionEvidence.SUBMIT_REQUEST,
+                }:
+                    raise StoreCorruptionError("submission history bypasses atomic pre-submit")
+                expected = transition_broker_submission(
+                    prior,
+                    intent,
+                    evidence=evidence,
+                    recorded_at=current.recorded_at,
+                    broker_order_id=current.broker_order_id,
+                    sanitized_outcome=current.sanitized_outcome,
+                    last_reconciliation_id=current.last_reconciliation_id,
+                )
+            if current != expected:
+                raise StoreCorruptionError("submission history violates the A4 transition contract")
+            prior = current
+        if observed_execution_ids != set(executions):
+            raise StoreCorruptionError("durable execution records do not match submission history")
 
     def build_anchor_bundle(self, scope: BrokerAccountScope, *, created_at: str) -> AuditAnchorBundle:
         created = _timestamp("created_at", created_at)
@@ -1611,8 +2047,15 @@ class SQLiteBrokerSafetyStore:
             raise BrokerSafetyStoreError("receipt must be exact")
         if _timestamp("anchored_at", receipt.anchored_at) < _timestamp("bundle_created_at", bundle.created_at):
             raise PersistenceConflictError("external receipt predates its bundle")
-        if receipt.bundle_sha256 != audit_anchor_bundle_sha256(bundle):
+        bundle_text = canonical_audit_anchor_bundle_bytes(bundle).decode("utf-8")
+        bundle_digest = _digest_bytes(bundle_text.encode("utf-8"))
+        if receipt.bundle_sha256 != bundle_digest:
             raise PersistenceConflictError("external receipt does not correlate to bundle")
+        if receipt.target not in {
+            TEST_ANCHOR_TARGET,
+            EXTERNAL_WORM_TARGET,
+        }:
+            raise PersistenceConflictError("external receipt target is not an approved anchor class")
         if (bundle.store_id, bundle.scope_key) != (
             self.store_id,
             _scope_key(scope),
@@ -1628,11 +2071,18 @@ class SQLiteBrokerSafetyStore:
                 receipt.anchored_at,
             )
             existing = connection.execute(
-                "SELECT bundle_sha256, target, object_reference, anchored_at FROM anchor_receipts WHERE scope_key=? AND receipt_id=?",
+                "SELECT bundle_json, bundle_sha256, anchored_sequence, "
+                "anchored_root, previous_receipt_reference, target, "
+                "object_reference, anchored_at FROM anchor_receipts "
+                "WHERE scope_key=? AND receipt_id=?",
                 (key, receipt.receipt_id),
             ).fetchone()
             expected_receipt = (
-                receipt.bundle_sha256,
+                bundle_text,
+                bundle_digest,
+                bundle.last_audit_sequence,
+                bundle.audit_root_digest,
+                bundle.previous_receipt_reference,
                 receipt.target,
                 receipt.object_reference,
                 receipt.anchored_at,
@@ -1655,17 +2105,21 @@ class SQLiteBrokerSafetyStore:
             ):
                 raise PersistenceConflictError("anchor bundle no longer matches current audit root")
             connection.execute(
-                "INSERT INTO anchor_receipts VALUES(?, ?, ?, ?, ?, ?)",
+                "INSERT INTO anchor_receipts VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     key,
                     receipt.receipt_id,
-                    receipt.bundle_sha256,
+                    bundle_text,
+                    bundle_digest,
+                    bundle.last_audit_sequence,
+                    bundle.audit_root_digest,
+                    bundle.previous_receipt_reference,
                     receipt.target,
                     receipt.object_reference,
                     receipt.anchored_at,
                 ),
             )
-            payload = _digest_bytes(canonical_audit_anchor_bundle_bytes(bundle))
+            payload = bundle_digest
             self._append_audit(
                 connection,
                 key,
@@ -1681,6 +2135,110 @@ class SQLiteBrokerSafetyStore:
     def _high_water_summary(self, connection: sqlite3.Connection) -> str:
         rows = connection.execute("SELECT scope_key, lineage_key, artifact_sha256 FROM high_water ORDER BY scope_key, lineage_key").fetchall()
         return _digest_bytes(_canonical([list(row) for row in rows]))
+
+    @staticmethod
+    def _scope_from_row(row: sqlite3.Row | tuple[Any, ...]) -> BrokerAccountScope:
+        try:
+            scope = BrokerAccountScope(row[1], BrokerEnvironment(row[2]), row[3])
+        except Exception as exc:
+            raise StoreCorruptionError("persisted account scope is invalid") from exc
+        if _scope_key(scope) != row[0]:
+            raise StoreCorruptionError("persisted account scope key is not canonical")
+        return scope
+
+    @staticmethod
+    def _scope_checkpoints(
+        connection: sqlite3.Connection,
+    ) -> tuple[ScopeAuditCheckpoint, ...]:
+        scopes = connection.execute("SELECT scope_key FROM account_scopes ORDER BY scope_key").fetchall()
+        result: list[ScopeAuditCheckpoint] = []
+        for scope in scopes:
+            audit = connection.execute(
+                "SELECT sequence, record_digest FROM audit WHERE scope_key=? ORDER BY sequence DESC LIMIT 1",
+                (scope[0],),
+            ).fetchone()
+            receipt = connection.execute(
+                "SELECT receipt_id FROM anchor_receipts WHERE scope_key=? ORDER BY anchored_at DESC, receipt_id DESC LIMIT 1",
+                (scope[0],),
+            ).fetchone()
+            result.append(
+                ScopeAuditCheckpoint(
+                    scope[0],
+                    0 if audit is None else audit[0],
+                    ZERO_AUDIT_DIGEST if audit is None else audit[1],
+                    None if receipt is None else receipt[0],
+                )
+            )
+        return tuple(result)
+
+    @classmethod
+    def _validate_snapshot(cls, backup_path: Path, manifest: BackupManifest) -> None:
+        try:
+            connection = sqlite3.connect(
+                f"file:{backup_path.as_posix()}?mode=ro",
+                uri=True,
+                factory=_ClosingConnection,
+            )
+            connection.row_factory = sqlite3.Row
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+            user_version = connection.execute("PRAGMA user_version").fetchone()[0]
+            metadata = dict(connection.execute("SELECT key, value FROM metadata ORDER BY key"))
+            migrations = connection.execute("SELECT version, migration_id, checksum, applied_at FROM schema_migrations ORDER BY version").fetchall()
+            schema = {row[0]: row[1] for row in connection.execute("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+            expected_schema = {statement.split("(", 1)[0].removeprefix("CREATE TABLE "): statement for statement in _SCHEMA}
+            scope_rows = connection.execute("SELECT scope_key, broker_id, environment, account_reference FROM account_scopes ORDER BY scope_key").fetchall()
+            scopes = tuple(cls._scope_from_row(row) for row in scope_rows)
+            observed_checkpoints = cls._scope_checkpoints(connection)
+            high_water_rows = connection.execute("SELECT scope_key, lineage_key, artifact_sha256 FROM high_water ORDER BY scope_key, lineage_key").fetchall()
+            summary = _digest_bytes(_canonical([list(row) for row in high_water_rows]))
+        except Exception as exc:
+            raise RestoreRejectedError("backup database cannot be structurally validated") from exc
+        finally:
+            if "connection" in locals():
+                connection.close()
+        if (
+            integrity != "ok"
+            or foreign_key_errors
+            or user_version != STORE_SCHEMA_VERSION
+            or metadata
+            != {
+                "schema_version": str(STORE_SCHEMA_VERSION),
+                "store_id": manifest.store_id,
+            }
+            or len(migrations) != 1
+            or tuple(migrations[0][:3]) != (STORE_SCHEMA_VERSION, MIGRATION_ID, MIGRATION_CHECKSUM)
+            or schema != expected_schema
+            or observed_checkpoints != manifest.scope_audit_checkpoints
+            or summary != manifest.high_water_summary_sha256
+        ):
+            raise RestoreRejectedError("backup contents do not match schema or manifest")
+        try:
+            _timestamp("migration_applied_at", migrations[0][3])
+        except Exception as exc:
+            raise RestoreRejectedError("backup migration timestamp is invalid") from exc
+
+        validator = object.__new__(cls)
+        validator.path = backup_path
+        validator.busy_timeout_ms = 5000
+        expected = {item.scope_key: item for item in manifest.scope_audit_checkpoints}
+        for scope in scopes:
+            try:
+                sequence, root = validator.verify_audit_chain(scope)
+                plan = validator.recovery_plan(scope)
+            except Exception as exc:
+                raise RestoreRejectedError("backup scope cannot be recovered") from exc
+            checkpoint = expected[_scope_key(scope)]
+            if (
+                "STORE_OR_AUDIT_CORRUPTION" in plan.blocking_reasons
+                or (sequence, root)
+                != (
+                    checkpoint.last_audit_sequence,
+                    checkpoint.last_audit_root,
+                )
+                or plan.last_external_receipt_reference != checkpoint.latest_external_receipt_reference
+            ):
+                raise RestoreRejectedError("backup scope logical recovery validation failed")
 
     def backup(
         self,
@@ -1705,64 +2263,61 @@ class SQLiteBrokerSafetyStore:
                 source.backup(target)
             finally:
                 target.close()
+
         database_sha = _digest_bytes(destination.read_bytes())
         with sqlite3.connect(destination, factory=_ClosingConnection) as snapshot:
             snapshot.row_factory = sqlite3.Row
-            audit = snapshot.execute("SELECT sequence, record_digest FROM audit ORDER BY sequence DESC LIMIT 1").fetchone()
-            receipt = snapshot.execute("SELECT receipt_id FROM anchor_receipts ORDER BY anchored_at DESC, receipt_id DESC LIMIT 1").fetchone()
+            checkpoints = self._scope_checkpoints(snapshot)
             summary = self._high_water_summary(snapshot)
         manifest = BackupManifest(
-            "broker_store_backup_manifest_v1",
+            "broker_store_backup_manifest_v2",
             self.store_id,
             STORE_SCHEMA_VERSION,
             backup_timestamp,
             database_sha,
-            0 if audit is None else audit[0],
-            ZERO_AUDIT_DIGEST if audit is None else audit[1],
+            checkpoints,
             summary,
-            None if receipt is None else receipt[0],
         )
         manifest_path.write_bytes(_canonical(asdict(manifest)) + b"\n")
+        if self.verify_backup(destination, manifest_path) != manifest:
+            raise BrokerSafetyStoreError("new backup did not verify exactly")
         with self._transaction() as connection:
-            connection.execute("INSERT INTO backup_history VALUES(?, ?, ?)", (database_sha, _canonical(asdict(manifest)).decode(), backup_timestamp))
+            connection.execute(
+                "INSERT INTO backup_history VALUES(?, ?, ?)",
+                (
+                    database_sha,
+                    _canonical(asdict(manifest)).decode(),
+                    backup_timestamp,
+                ),
+            )
         return manifest
 
     @staticmethod
-    def verify_backup(backup_path: str | Path, manifest_path: str | Path) -> BackupManifest:
+    def verify_backup(
+        backup_path: str | Path,
+        manifest_path: str | Path,
+    ) -> BackupManifest:
         backup_path = Path(backup_path).resolve()
         manifest_path = Path(manifest_path).resolve()
         try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest_bytes = manifest_path.read_bytes()
+            data = json.loads(manifest_bytes.decode("utf-8"))
+            checkpoint_data = data["scope_audit_checkpoints"]
+            if type(checkpoint_data) is not list:
+                raise ValueError("scope checkpoints must be a JSON list")
+            data["scope_audit_checkpoints"] = tuple(ScopeAuditCheckpoint(**item) for item in checkpoint_data)
             manifest = BackupManifest(**data)
+            if manifest_bytes != _canonical(asdict(manifest)) + b"\n":
+                raise ValueError("backup manifest is not canonical")
         except Exception as exc:
             raise RestoreRejectedError("backup manifest is invalid") from exc
         try:
-            observed_database_sha256 = _digest_bytes(backup_path.read_bytes())
+            observed_sha = _digest_bytes(backup_path.read_bytes())
         except OSError as exc:
             raise RestoreRejectedError("backup database cannot be read") from exc
-        if observed_database_sha256 != manifest.database_sha256:
+        if observed_sha != manifest.database_sha256:
             raise RestoreRejectedError("backup database digest mismatch")
-        try:
-            connection = sqlite3.connect(f"file:{backup_path.as_posix()}?mode=ro", uri=True)
-            connection.row_factory = sqlite3.Row
-            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
-            metadata = dict(connection.execute("SELECT key, value FROM metadata"))
-            audit = connection.execute("SELECT sequence, record_digest FROM audit ORDER BY sequence DESC LIMIT 1").fetchone()
-            rows = connection.execute("SELECT scope_key, lineage_key, artifact_sha256 FROM high_water ORDER BY scope_key, lineage_key").fetchall()
-        except sqlite3.Error as exc:
-            raise RestoreRejectedError("backup database cannot be validated") from exc
-        finally:
-            if "connection" in locals():
-                connection.close()
-        observed_audit = (0, ZERO_AUDIT_DIGEST) if audit is None else tuple(audit)
-        if (
-            integrity != "ok"
-            or metadata.get("store_id") != manifest.store_id
-            or int(metadata.get("schema_version", -1)) != manifest.store_schema_version
-            or observed_audit != (manifest.last_audit_sequence, manifest.last_audit_root)
-            or _digest_bytes(_canonical([list(row) for row in rows])) != manifest.high_water_summary_sha256
-        ):
-            raise RestoreRejectedError("backup contents do not match manifest")
+        SQLiteBrokerSafetyStore._validate_snapshot(backup_path, manifest)
         return manifest
 
     @classmethod
@@ -1773,7 +2328,7 @@ class SQLiteBrokerSafetyStore:
         destination: str | Path,
         *,
         active: bool,
-        checkpoint: TrustedRecoveryCheckpoint | None = None,
+        checkpoint: (TrustedRecoveryCheckpoint | tuple[TrustedRecoveryCheckpoint, ...] | None) = None,
         restored_at: str,
     ) -> SQLiteBrokerSafetyStore | ForensicBrokerSafetyStore:
         restore_time = _timestamp("restored_at", restored_at)
@@ -1782,28 +2337,46 @@ class SQLiteBrokerSafetyStore:
         if destination.exists():
             raise RestoreRejectedError("restore destination must not already exist")
         if active:
-            if type(checkpoint) is not TrustedRecoveryCheckpoint:
-                raise RestoreRejectedError("active restore requires a trusted checkpoint")
-            if checkpoint.store_id != manifest.store_id or manifest.last_audit_sequence < checkpoint.minimum_audit_sequence:
-                raise RestoreRejectedError("backup is behind trusted recovery state")
+            if type(checkpoint) is TrustedRecoveryCheckpoint:
+                checkpoints = (checkpoint,)
+            elif (
+                type(checkpoint) is tuple
+                and all(type(item) is TrustedRecoveryCheckpoint for item in checkpoint)
+                and tuple(item.scope_key for item in checkpoint) == tuple(sorted(item.scope_key for item in checkpoint))
+                and len({item.scope_key for item in checkpoint}) == len(checkpoint)
+            ):
+                checkpoints = checkpoint
+            else:
+                raise RestoreRejectedError("active restore requires exact per-scope trusted checkpoints")
+            manifest_by_scope = {item.scope_key: item for item in manifest.scope_audit_checkpoints}
+            if {item.scope_key for item in checkpoints} != set(manifest_by_scope):
+                raise RestoreRejectedError("trusted checkpoints must cover every persisted scope")
             with sqlite3.connect(
                 f"file:{Path(backup_path).resolve().as_posix()}?mode=ro",
                 uri=True,
                 factory=_ClosingConnection,
             ) as source:
-                row = source.execute(
-                    "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
-                    (
-                        checkpoint.scope_key,
-                        checkpoint.minimum_audit_sequence,
-                    ),
-                ).fetchone()
                 latest_audit = source.execute("SELECT recorded_at FROM audit ORDER BY recorded_at DESC LIMIT 1").fetchone()
                 if latest_audit is not None and restore_time < _timestamp("latest_audit_recorded_at", latest_audit[0]):
                     raise RestoreRejectedError("restore time predates backup audit state")
-            if row is None or row[0] != checkpoint.audit_root_digest:
-                raise RestoreRejectedError("backup does not preserve the trusted audit checkpoint")
-        source = sqlite3.connect(f"file:{Path(backup_path).resolve().as_posix()}?mode=ro", uri=True)
+                for trusted in checkpoints:
+                    snapshot = manifest_by_scope[trusted.scope_key]
+                    if trusted.store_id != manifest.store_id or snapshot.last_audit_sequence < trusted.minimum_audit_sequence:
+                        raise RestoreRejectedError("backup is behind trusted recovery state")
+                    row = source.execute(
+                        "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
+                        (
+                            trusted.scope_key,
+                            trusted.minimum_audit_sequence,
+                        ),
+                    ).fetchone()
+                    if row is None or row[0] != trusted.audit_root_digest:
+                        raise RestoreRejectedError("backup does not preserve a trusted per-scope audit checkpoint")
+
+        source = sqlite3.connect(
+            f"file:{Path(backup_path).resolve().as_posix()}?mode=ro",
+            uri=True,
+        )
         target = sqlite3.connect(destination)
         try:
             source.backup(target)
@@ -1812,13 +2385,20 @@ class SQLiteBrokerSafetyStore:
             target.close()
         if not active:
             return ForensicBrokerSafetyStore(destination)
+
         store = cls(destination, migration_applied_at=restored_at)
+        with store._connect(readonly=True) as connection:
+            scope_rows = connection.execute("SELECT scope_key, broker_id, environment, account_reference FROM account_scopes ORDER BY scope_key").fetchall()
+        scopes = tuple(store._scope_from_row(row) for row in scope_rows)
+        for scope in scopes:
+            plan = store.recovery_plan(scope)
+            if "STORE_OR_AUDIT_CORRUPTION" in plan.blocking_reasons:
+                raise RestoreRejectedError("restored scope failed logical recovery validation")
         with store._transaction() as connection:
-            scopes = connection.execute("SELECT scope_key FROM account_scopes ORDER BY scope_key").fetchall()
-            for row in scopes:
+            for scope in scopes:
                 store._append_audit(
                     connection,
-                    row[0],
+                    _scope_key(scope),
                     event_type="BACKUP_RESTORE_ACTIVATED",
                     occurred_at=restored_at,
                     recorded_at=restored_at,
@@ -1847,6 +2427,7 @@ class ForensicBrokerSafetyStore:
 
 __all__ = [
     "EXTERNAL_WORM_TARGET",
+    "TEST_ANCHOR_TARGET",
     "ForensicBrokerSafetyStore",
     "MIGRATION_CHECKSUM",
     "MIGRATION_ID",

@@ -65,6 +65,11 @@ class ClaimDisposition(StrEnum):
     ALREADY_CLAIMED = "ALREADY_CLAIMED"
 
 
+class PreSubmitDisposition(StrEnum):
+    COMMITTED = "COMMITTED"
+    ALREADY_COMMITTED = "ALREADY_COMMITTED"
+
+
 @dataclass(frozen=True, slots=True)
 class BrokerAccountScope:
     broker_id: str
@@ -112,13 +117,25 @@ class AuthorizationClaimResult:
 
 @dataclass(frozen=True, slots=True)
 class PreSubmitCommit:
+    disposition: PreSubmitDisposition
     persistence_version: str
+    authorization_use_id: str
+    intent_id: str
+    attempt_id: str
     fencing_token: int
     audit_sequence: int
     audit_root_digest: str
 
     def __post_init__(self) -> None:
-        _clean("persistence_version", self.persistence_version)
+        if type(self.disposition) is not PreSubmitDisposition:
+            raise BrokerSafetyStoreError("disposition must be an exact PreSubmitDisposition")
+        for name in (
+            "persistence_version",
+            "authorization_use_id",
+            "intent_id",
+            "attempt_id",
+        ):
+            _clean(name, getattr(self, name))
         _exact_positive("fencing_token", self.fencing_token)
         _exact_positive("audit_sequence", self.audit_sequence)
         _digest("audit_root_digest", self.audit_root_digest)
@@ -235,36 +252,50 @@ class TrustedRecoveryCheckpoint:
 
 
 @dataclass(frozen=True, slots=True)
+class ScopeAuditCheckpoint:
+    scope_key: str
+    last_audit_sequence: int
+    last_audit_root: str
+    latest_external_receipt_reference: str | None
+
+    def __post_init__(self) -> None:
+        _clean("scope_key", self.scope_key)
+        _exact_nonnegative("last_audit_sequence", self.last_audit_sequence)
+        _digest("last_audit_root", self.last_audit_root)
+        if (self.last_audit_sequence == 0) != (self.last_audit_root == ZERO_AUDIT_DIGEST):
+            raise BrokerSafetyStoreError("scope audit checkpoint is inconsistent")
+        _optional_text(
+            "latest_external_receipt_reference",
+            self.latest_external_receipt_reference,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class BackupManifest:
     schema_version: str
     store_id: str
     store_schema_version: int
     backup_timestamp: str
     database_sha256: str
-    last_audit_sequence: int
-    last_audit_root: str
+    scope_audit_checkpoints: tuple[ScopeAuditCheckpoint, ...]
     high_water_summary_sha256: str
-    latest_external_receipt_reference: str | None
 
     def __post_init__(self) -> None:
-        if self.schema_version != "broker_store_backup_manifest_v1":
+        if self.schema_version != "broker_store_backup_manifest_v2":
             raise BrokerSafetyStoreError("unsupported backup manifest schema")
         _clean("store_id", self.store_id)
         if type(self.store_schema_version) is not int or self.store_schema_version != STORE_SCHEMA_VERSION:
             raise BrokerSafetyStoreError("unsupported backup store schema")
         _timestamp("backup_timestamp", self.backup_timestamp)
         _digest("database_sha256", self.database_sha256)
-        _exact_nonnegative("last_audit_sequence", self.last_audit_sequence)
-        _digest("last_audit_root", self.last_audit_root)
-        if self.last_audit_sequence == 0 and self.last_audit_root != ZERO_AUDIT_DIGEST:
-            raise BrokerSafetyStoreError("empty audit checkpoint must use the zero digest")
-        if self.last_audit_sequence > 0 and self.last_audit_root == ZERO_AUDIT_DIGEST:
-            raise BrokerSafetyStoreError("non-empty audit checkpoint cannot use zero digest")
+        if (
+            type(self.scope_audit_checkpoints) is not tuple
+            or any(type(item) is not ScopeAuditCheckpoint for item in self.scope_audit_checkpoints)
+            or tuple(item.scope_key for item in self.scope_audit_checkpoints) != tuple(sorted(item.scope_key for item in self.scope_audit_checkpoints))
+            or len({item.scope_key for item in self.scope_audit_checkpoints}) != len(self.scope_audit_checkpoints)
+        ):
+            raise BrokerSafetyStoreError("scope audit checkpoints must be exact, unique, and sorted")
         _digest("high_water_summary_sha256", self.high_water_summary_sha256)
-        _optional_text(
-            "latest_external_receipt_reference",
-            self.latest_external_receipt_reference,
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +311,9 @@ class BrokerRecoveryPlan:
     last_audit_sequence: int
     last_audit_root: str
     last_external_receipt_reference: str | None
+    last_external_anchor_sequence: int | None
+    last_external_anchor_root: str | None
+    last_external_anchor_target: str | None
     blocks_new_authorization: bool
     blocking_reasons: tuple[str, ...]
 
@@ -305,6 +339,22 @@ class BrokerRecoveryPlan:
             "last_external_receipt_reference",
             self.last_external_receipt_reference,
         )
+        if self.last_external_anchor_sequence is not None:
+            _exact_positive(
+                "last_external_anchor_sequence",
+                self.last_external_anchor_sequence,
+            )
+        if self.last_external_anchor_root is not None:
+            _digest("last_external_anchor_root", self.last_external_anchor_root)
+        _optional_text("last_external_anchor_target", self.last_external_anchor_target)
+        anchor_values = (
+            self.last_external_receipt_reference,
+            self.last_external_anchor_sequence,
+            self.last_external_anchor_root,
+            self.last_external_anchor_target,
+        )
+        if any(value is None for value in anchor_values) != all(value is None for value in anchor_values):
+            raise BrokerSafetyStoreError("external anchor recovery checkpoint is incomplete")
         if type(self.blocks_new_authorization) is not bool:
             raise BrokerSafetyStoreError("blocks_new_authorization must be an exact bool")
         if type(self.blocking_reasons) is not tuple or any(type(reason) is not str or not reason for reason in self.blocking_reasons):
@@ -323,12 +373,14 @@ __all__ = [
     "BrokerRecoveryPlan",
     "BrokerSafetyStoreError",
     "ClaimDisposition",
+    "PreSubmitDisposition",
     "ExternalAuditAnchorPort",
     "ExternalAuditAnchorReceipt",
     "LeaseConflictError",
     "PersistenceConflictError",
     "PreSubmitCommit",
     "RestoreRejectedError",
+    "ScopeAuditCheckpoint",
     "STORE_SCHEMA_VERSION",
     "StaleFenceError",
     "StoreCorruptionError",
