@@ -1,0 +1,114 @@
+{
+  "instrument_catalog_evidence": {
+    "schema_version": "twse-tpex-security-identity-projection-v1",
+    "source_version": "sanitized-recorded-2025-01-02-v1",
+    "twse_endpoint": "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+    "tpex_endpoint": "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",
+    "twse": [
+      {"Code": "0050", "Name": "SANITIZED ETF"},
+      {"Code": "2330", "Name": "SANITIZED STOCK"}
+    ],
+    "tpex": []
+  },
+  "bank_remain": {
+    "is_success": true,
+    "message": null,
+    "data": {
+      "branch_no": "TEST-BRANCH",
+      "account": "TEST-ACCOUNT-0001",
+      "currency": "TWD",
+      "balance": 5000,
+      "available_balance": 4000
+    }
+  },
+  "inventories": {
+    "is_success": true,
+    "message": null,
+    "data": [
+      {
+        "date": "2025/01/02",
+        "branch_no": "TEST-BRANCH",
+        "account": "TEST-ACCOUNT-0001",
+        "stock_no": "2330",
+        "order_type": "Stock",
+        "lastday_qty": 6,
+        "buy_qty": 4,
+        "buy_filled_qty": 4,
+        "buy_value": 400,
+        "today_qty": 10,
+        "tradable_qty": 10,
+        "sell_qty": 0,
+        "sell_filled_qty": 0,
+        "sell_value": 0,
+        "odd": {
+          "lastday_qty": 0,
+          "buy_qty": 0,
+          "buy_filled_qty": 0,
+          "buy_value": 0,
+          "today_qty": 0,
+          "tradable_qty": 0,
+          "sell_qty": 0,
+          "sell_filled_qty": 0,
+          "sell_value": 0
+        }
+      }
+    ]
+  },
+  "unrealized_pnl": {
+    "is_success": true,
+    "message": null,
+    "data": [
+      {
+        "date": "2025/01/02",
+        "branch_no": "TEST-BRANCH",
+        "account": "TEST-ACCOUNT-0001",
+        "stock_no": "2330",
+        "buy_sell": "Buy",
+        "order_type": "Stock",
+        "cost_price": 100.25,
+        "tradable_qty": 10,
+        "today_qty": 10,
+        "unrealized_profit": 25,
+        "unrealized_loss": 0
+      }
+    ]
+  },
+  "order_results": {
+    "is_success": true,
+    "message": null,
+    "data": [
+      {
+        "function_type": 10,
+        "date": "2025/01/02",
+        "seq_no": "TEST-SEQ-1",
+        "branch_no": "TEST-BRANCH",
+        "account": "TEST-ACCOUNT-0001",
+        "order_no": "TEST-ORDER-1",
+        "asset_type": 0,
+        "market": "TAIEX",
+        "market_type": "Common",
+        "stock_no": "2330",
+        "buy_sell": "Buy",
+        "price_type": "Limit",
+        "price": 100.25,
+        "quantity": 10,
+        "time_in_force": "ROD",
+        "order_type": "Stock",
+        "is_pre_order": false,
+        "status": 10,
+        "after_price_type": "Limit",
+        "after_price": 100.25,
+        "unit": 1000,
+        "after_qty": 10,
+        "filled_qty": 4,
+        "filled_money": 401,
+        "before_qty": null,
+        "before_price": null,
+        "user_def": "NOTCLIENT",
+        "last_time": "09:30:05.157",
+        "details": null,
+        "error_message": null
+      }
+    ]
+  }
+}
