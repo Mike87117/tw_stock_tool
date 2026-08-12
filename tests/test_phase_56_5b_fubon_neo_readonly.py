@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 from copy import deepcopy
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from decimal import Decimal
 import importlib
 import json
@@ -13,14 +13,18 @@ from unittest.mock import patch
 
 from tw_stock_tool.broker_adapters.fubon_neo import (
     FUBON_NEO_BROKER_ID,
+    FUBON_NEO_INSTRUMENT_CATALOG_SOURCE,
     FUBON_NEO_CURRENCY,
     FUBON_NEO_MARKET,
     FUBON_NEO_SDK_VERSION,
+    FUBON_NEO_TEST_CONNECTION_IDENTITY,
     FUBON_NEO_SOURCE_VERSION,
     FUBON_NEO_TEST_ENDPOINT,
     FubonNeoErrorCode,
     FubonNeoIncompleteAccountRead,
+    FubonNeoInstrumentCatalog,
     FubonNeoReadError,
+    FubonNeoReadConnectionIdentity,
     FubonNeoReadonlyAdapter,
     FubonNeoReadonlyPort,
     FubonNeoTestConfig,
@@ -55,8 +59,13 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "fubon_neo_test_readonly_v2_
 
 
 class RecordedReadonlyPort:
-    def __init__(self, fixture: dict) -> None:
+    def __init__(
+        self,
+        fixture: dict,
+        connection_identity: object = FUBON_NEO_TEST_CONNECTION_IDENTITY,
+    ) -> None:
         self.fixture = deepcopy(fixture)
+        self.connection_identity = connection_identity
         self.calls: list[str] = []
 
     def _read(self, name: str):
@@ -95,9 +104,27 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         values.update(changes)
         return FubonNeoTestConfig(**values)
 
+    def catalog(self, **changes) -> FubonNeoInstrumentCatalog:
+        fixture = self.recorded["instrument_catalog"]
+        values = dict(
+            source=fixture["source"],
+            source_version=fixture["source_version"],
+            taiex_symbols=tuple(fixture["TAIEX"]),
+            taisdaq_symbols=tuple(fixture["TAISDAQ"]),
+        )
+        values.update(changes)
+        return FubonNeoInstrumentCatalog(**values)
+
+    def adapter(self, port, *, catalog=None, config=None) -> FubonNeoReadonlyAdapter:
+        return FubonNeoReadonlyAdapter(
+            self.config() if config is None else config,
+            port,
+            self.catalog() if catalog is None else catalog,
+        )
+
     def read(self, fixture=None):
         port = RecordedReadonlyPort(self.recorded if fixture is None else fixture)
-        result = FubonNeoReadonlyAdapter(self.config(), port).read_account_observations(
+        result = self.adapter(port).read_account_observations(
             capability_snapshot_id=CAPABILITY_ID,
             retrieved_at=RETRIEVED_AT,
         )
@@ -106,7 +133,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
     def error(self, fixture, code: FubonNeoErrorCode) -> FubonNeoReadError:
         port = RecordedReadonlyPort(fixture)
         with self.assertRaises(FubonNeoReadError) as caught:
-            FubonNeoReadonlyAdapter(self.config(), port).read_account_observations(
+            self.adapter(port).read_account_observations(
                 capability_snapshot_id=CAPABILITY_ID,
                 retrieved_at=RETRIEVED_AT,
             )
@@ -157,11 +184,64 @@ class FubonNeoReadonlyTests(unittest.TestCase):
             dict(endpoint="wss://production.invalid/TASP/XCPXWS"),
         ):
             with self.subTest(bad=bad), self.assertRaises(FubonNeoReadError):
-                FubonNeoReadonlyAdapter(self.config(**bad), port)
+                self.adapter(port, config=self.config(**bad))
         self.assertEqual(port.calls, [])
         with self.assertRaises(FubonNeoReadError):
-            FubonNeoReadonlyAdapter(object(), port)
+            self.adapter(port, config=object())
         self.assertEqual(port.calls, [])
+
+    def test_session_provenance_mismatch_precedes_every_provider_read(self):
+        variants = (
+            replace(FUBON_NEO_TEST_CONNECTION_IDENTITY, broker_id="OTHER"),
+            replace(
+                FUBON_NEO_TEST_CONNECTION_IDENTITY,
+                environment=BrokerEnvironment.LIVE,
+            ),
+            replace(
+                FUBON_NEO_TEST_CONNECTION_IDENTITY,
+                endpoint="wss://neoapi.fbs.com.tw/TASP/XCPXWS",
+            ),
+            replace(FUBON_NEO_TEST_CONNECTION_IDENTITY, sdk_version="2.2.7"),
+            replace(
+                FUBON_NEO_TEST_CONNECTION_IDENTITY,
+                provider_contract_version="unreviewed-v2",
+            ),
+            replace(FUBON_NEO_TEST_CONNECTION_IDENTITY, product_scope="OTHER"),
+            None,
+        )
+        self.assertIs(
+            type(FUBON_NEO_TEST_CONNECTION_IDENTITY),
+            FubonNeoReadConnectionIdentity,
+        )
+        for identity in variants:
+            port = RecordedReadonlyPort(self.recorded, identity)
+            with self.subTest(identity=identity), self.assertRaises(FubonNeoReadError) as caught:
+                self.adapter(port)
+            self.assertIs(
+                caught.exception.code,
+                FubonNeoErrorCode.SESSION_PROVENANCE_MISMATCH,
+            )
+            self.assertEqual(port.calls, [])
+
+        swapped_port = RecordedReadonlyPort(self.recorded)
+        adapter = self.adapter(swapped_port)
+        swapped_port.connection_identity = replace(
+            FUBON_NEO_TEST_CONNECTION_IDENTITY,
+            endpoint="wss://neoapi.fbs.com.tw/TASP/XCPXWS",
+        )
+        with self.assertRaises(FubonNeoReadError) as capability_caught:
+            adapter.read_capabilities(
+                capability_snapshot_id=CAPABILITY_ID,
+                observed_at=RETRIEVED_AT,
+            )
+        self.assertIs(capability_caught.exception.code, FubonNeoErrorCode.SESSION_PROVENANCE_MISMATCH)
+        with self.assertRaises(FubonNeoReadError) as caught:
+            adapter.read_account_observations(
+                capability_snapshot_id=CAPABILITY_ID,
+                retrieved_at=RETRIEVED_AT,
+            )
+        self.assertIs(caught.exception.code, FubonNeoErrorCode.SESSION_PROVENANCE_MISMATCH)
+        self.assertEqual(swapped_port.calls, [])
 
     def test_runtime_account_binding_is_repr_safe(self):
         config = self.config()
@@ -173,9 +253,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         self.assertFalse(config.matches_provider_account("OTHER", "TEST-BRANCH"))
 
     def test_capabilities_are_exact_and_unknown_semantics_stay_unknown(self):
-        capabilities = FubonNeoReadonlyAdapter(
-            self.config(), RecordedReadonlyPort(self.recorded)
-        ).read_capabilities(
+        capabilities = self.adapter(RecordedReadonlyPort(self.recorded)).read_capabilities(
             capability_snapshot_id=CAPABILITY_ID,
             observed_at=RETRIEVED_AT,
         )
@@ -232,6 +310,47 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         result, _ = self.read(multiple)
         self.assertEqual([item.canonical_symbol for item in result.positions], ["0050", "2330"])
 
+    def test_positions_require_authoritative_versioned_market_classification(self):
+        for surface in ("inventories", "unrealized_pnl"):
+            self.assertNotIn("market", self.recorded[surface]["data"][0])
+        self.assertEqual(self.catalog().source, FUBON_NEO_INSTRUMENT_CATALOG_SOURCE)
+        self.assertEqual(self.catalog().source_version, "sanitized-recorded-2025-01-02-v1")
+
+        port = RecordedReadonlyPort(self.recorded)
+        with self.assertRaises(FubonNeoReadError) as caught:
+            self.adapter(
+                port,
+                catalog=self.catalog(taiex_symbols=("0050",)),
+            ).read_account_observations(
+                capability_snapshot_id=CAPABILITY_ID,
+                retrieved_at=RETRIEVED_AT,
+            )
+        self.assertIs(
+            caught.exception.code,
+            FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+        )
+
+        for surface in ("inventories", "unrealized_pnl"):
+            fixture = deepcopy(self.recorded)
+            fixture[surface]["data"][0]["market"] = "TAIEX"
+            with self.subTest(surface=surface):
+                self.error(fixture, FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD)
+
+        no_catalog_port = RecordedReadonlyPort(self.recorded)
+        with self.assertRaises(FubonNeoReadError) as caught:
+            self.adapter(no_catalog_port, catalog=object())
+        self.assertIs(
+            caught.exception.code,
+            FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+        )
+        self.assertEqual(no_catalog_port.calls, [])
+        with self.assertRaises(FubonNeoReadError) as caught:
+            self.catalog(source="CALLER_ASSERTED")
+        self.assertIs(
+            caught.exception.code,
+            FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+        )
+
     def test_non_cash_odd_lot_and_unsupported_market_positions_fail_closed(self):
         cases = []
         for order_type in ("Margin", "Short", "DayTrade", "SBL", "Unknown"):
@@ -260,9 +379,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         self.error(duplicate, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
 
         duplicate_pnl = deepcopy(self.recorded)
-        duplicate_pnl["unrealized_pnl"]["data"].append(
-            deepcopy(duplicate_pnl["unrealized_pnl"]["data"][0])
-        )
+        duplicate_pnl["unrealized_pnl"]["data"].append(deepcopy(duplicate_pnl["unrealized_pnl"]["data"][0]))
         self.error(duplicate_pnl, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
 
         orphan_pnl = deepcopy(self.recorded)
@@ -278,12 +395,62 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         self.error(contradictory_inventory, FubonNeoErrorCode.PROVIDER_RESPONSE_MALFORMED)
 
     def test_terminal_order_rows_are_not_open_exposure(self):
-        for status in (14, 15, 19, 20, 24, 29, 30, 34, 39, 40, 50, 90):
+        for status in (30, 40, 50, 90):
             fixture = deepcopy(self.recorded)
             fixture["order_results"]["data"][0]["status"] = status
             result, _ = self.read(fixture)
             with self.subTest(status=status):
                 self.assertEqual(result.open_orders, ())
+
+    def test_failed_change_and_history_rows_never_independently_prove_terminal(self):
+        for status in (14, 15, 19, 20, 24, 29, 34, 39):
+            fixture = deepcopy(self.recorded)
+            fixture["order_results"]["data"][0]["status"] = status
+            with self.subTest(status=status):
+                self.error(fixture, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
+
+    def test_failed_modify_cancel_and_history_correlate_to_current_exposure(self):
+        for status in (14, 15, 19, 20, 24, 29, 34, 39):
+            fixture = deepcopy(self.recorded)
+            evidence = deepcopy(fixture["order_results"]["data"][0])
+            evidence["status"] = status
+            fixture["order_results"]["data"].append(evidence)
+            with self.subTest(status=status):
+                orders = self.read(fixture)[0].open_orders
+                self.assertEqual(len(orders), 1)
+                self.assertEqual(orders[0].status, BrokerOrderStatus.PARTIALLY_FILLED)
+
+        for field, value in (("stock_no", "0050"), ("buy_sell", "Sell")):
+            fixture = deepcopy(self.recorded)
+            evidence = deepcopy(fixture["order_results"]["data"][0])
+            evidence["status"] = 19
+            evidence[field] = value
+            fixture["order_results"]["data"].append(evidence)
+            with self.subTest(conflict=field):
+                self.error(fixture, FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS)
+
+        reversed_rows = deepcopy(self.recorded)
+        failed_cancel = deepcopy(reversed_rows["order_results"]["data"][0])
+        failed_cancel["status"] = 39
+        reversed_rows["order_results"]["data"] = [
+            failed_cancel,
+            reversed_rows["order_results"]["data"][0],
+        ]
+        self.assertEqual(
+            self.read(reversed_rows)[0].open_orders[0].remaining_quantity,
+            D("6"),
+        )
+
+    def test_backend_and_transmitting_statuses_remain_pending(self):
+        for status in (0, 4, 8):
+            fixture = deepcopy(self.recorded)
+            record = fixture["order_results"]["data"][0]
+            record["status"] = status
+            record["filled_qty"] = 0
+            with self.subTest(status=status):
+                mapped = self.read(fixture)[0].open_orders[0]
+                self.assertEqual(mapped.status, BrokerOrderStatus.PENDING_SUBMIT)
+                self.assertEqual(mapped.remaining_quantity, D("10"))
 
     def test_timeout_and_unknown_order_statuses_fail_closed(self):
         for status in (9, 8.0, None, 999, "10", True):
@@ -294,9 +461,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
 
     def test_repeated_orders_collapse_only_when_exact_and_conflicts_reject(self):
         repeated = deepcopy(self.recorded)
-        repeated["order_results"]["data"].append(
-            deepcopy(repeated["order_results"]["data"][0])
-        )
+        repeated["order_results"]["data"].append(deepcopy(repeated["order_results"]["data"][0]))
         self.assertEqual(len(self.read(repeated)[0].open_orders), 1)
 
         conflict = deepcopy(repeated)
@@ -469,9 +634,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
             result.require_complete_snapshot()
         self.assertIs(caught.exception.code, FubonNeoErrorCode.MANDATORY_ACCOUNT_FIELD_UNAVAILABLE)
         with self.assertRaises(FubonNeoReadError):
-            FubonNeoReadonlyAdapter(
-                self.config(), RecordedReadonlyPort(self.recorded)
-            ).read_account_snapshot(
+            self.adapter(RecordedReadonlyPort(self.recorded)).read_account_snapshot(
                 capability_snapshot_id=CAPABILITY_ID,
                 retrieved_at=RETRIEVED_AT,
             )
@@ -539,12 +702,20 @@ class FubonNeoReadonlyTests(unittest.TestCase):
                 require_fubon_neo_sdk()
         self.assertIs(caught.exception.code, FubonNeoErrorCode.OPTIONAL_DEPENDENCY_MISSING)
         self.assertNotIn("raw module detail", str(caught.exception))
+        with (
+            patch("tw_stock_tool.broker_adapters.fubon_neo.adapter.import_module"),
+            patch(
+                "tw_stock_tool.broker_adapters.fubon_neo.adapter.distribution_version",
+                return_value="2.2.7",
+            ),
+            self.assertRaises(FubonNeoReadError) as caught,
+        ):
+            require_fubon_neo_sdk()
+        self.assertIs(caught.exception.code, FubonNeoErrorCode.SESSION_PROVENANCE_MISMATCH)
 
     def test_provider_exceptions_are_sanitized(self):
         fixture = deepcopy(self.recorded)
-        fixture["bank_remain"] = RuntimeError(
-            "TEST-ACCOUNT-0001 TEST-BRANCH raw-name raw-id raw-key raw-certificate"
-        )
+        fixture["bank_remain"] = RuntimeError("TEST-ACCOUNT-0001 TEST-BRANCH raw-name raw-id raw-key raw-certificate")
         error = self.error(fixture, FubonNeoErrorCode.PROVIDER_READ_FAILED)
         for token in (
             "TEST-ACCOUNT-0001",
@@ -557,11 +728,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
             self.assertNotIn(token, str(error))
 
     def test_readonly_protocol_dependency_and_side_effect_audits(self):
-        protocol_methods = {
-            name
-            for name, value in FubonNeoReadonlyPort.__dict__.items()
-            if callable(value) and not name.startswith("_")
-        }
+        protocol_methods = {name for name, value in FubonNeoReadonlyPort.__dict__.items() if callable(value) and not name.startswith("_")}
         self.assertEqual(
             protocol_methods,
             {
@@ -574,17 +741,37 @@ class FubonNeoReadonlyTests(unittest.TestCase):
         root = Path(__file__).parents[1]
         package = root / "src" / "tw_stock_tool" / "broker_adapters" / "fubon_neo"
         forbidden_imports = (
-            "requests", "httpx", "urllib", "socket", "sqlite3", "sqlalchemy",
-            "pandas", "shioaji",
+            "requests",
+            "httpx",
+            "urllib",
+            "socket",
+            "sqlite3",
+            "sqlalchemy",
+            "pandas",
+            "shioaji",
         )
         forbidden_calls = {
-            "place_order", "cancel_order", "modify_order", "replace_order",
-            "batch_order", "submit", "cancel", "connect", "login", "open",
-            "write_text", "write_bytes",
+            "place_order",
+            "cancel_order",
+            "modify_order",
+            "replace_order",
+            "batch_order",
+            "submit",
+            "cancel",
+            "connect",
+            "login",
+            "open",
+            "write_text",
+            "write_bytes",
         }
         secret_names = {
-            "password", "api_key", "cert_path", "cert_pass", "personal_id",
-            "access_token", "refresh_token",
+            "password",
+            "api_key",
+            "cert_path",
+            "cert_pass",
+            "personal_id",
+            "access_token",
+            "refresh_token",
         }
         for path in package.glob("*.py"):
             source = path.read_text(encoding="utf-8")
@@ -604,11 +791,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
                     self.assertNotIn(node.arg.lower(), secret_names)
         pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
         self.assertNotIn("fubon_neo", pyproject)
-        self.assertFalse(any(
-            path.suffix.lower() in {".whl", ".pfx", ".p12"}
-            for path in root.rglob("*")
-            if ".git" not in path.parts
-        ))
+        self.assertFalse(any(path.suffix.lower() in {".whl", ".pfx", ".p12"} for path in root.rglob("*") if ".git" not in path.parts))
         fixture_text = FIXTURE_PATH.read_text(encoding="utf-8")
         for token in ("raw-name", "raw-id", "raw-key", "certificate"):
             self.assertNotIn(token, fixture_text)

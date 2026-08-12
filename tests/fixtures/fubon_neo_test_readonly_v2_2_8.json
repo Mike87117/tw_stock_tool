@@ -1,4 +1,13 @@
 {
+  "instrument_catalog": {
+    "source": "TWSE_TPEX_OFFICIAL_OPEN_DATA",
+    "source_version": "sanitized-recorded-2025-01-02-v1",
+    "TAIEX": [
+      "0050",
+      "2330"
+    ],
+    "TAISDAQ": []
+  },
   "bank_remain": {
     "is_success": true,
     "message": null,

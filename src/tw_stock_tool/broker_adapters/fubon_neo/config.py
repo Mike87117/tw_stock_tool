@@ -1,6 +1,7 @@
 """Closed configuration for the reviewed Fubon Neo TEST environment."""
 
 from dataclasses import InitVar, dataclass, field
+from enum import StrEnum
 from hmac import compare_digest, digest
 from secrets import token_bytes
 
@@ -18,6 +19,7 @@ FUBON_NEO_MARKET = "TW_SECURITIES"
 FUBON_NEO_CURRENCY = "TWD"
 FUBON_NEO_SDK_VERSION = "2.2.8"
 FUBON_NEO_SOURCE_VERSION = "fubon-neo-2.2.8-test-readonly-v1"
+FUBON_NEO_INSTRUMENT_CATALOG_SOURCE = "TWSE_TPEX_OFFICIAL_OPEN_DATA"
 
 
 def _exact_text(name: str, value: object) -> str:
@@ -43,11 +45,7 @@ class FubonNeoTestConfig:
     _branch_digest: bytes = field(init=False, repr=False, compare=False)
 
     def __post_init__(self, expected_account: str, expected_branch: str) -> None:
-        if (
-            type(self.environment) is not BrokerEnvironment
-            or self.environment is not BrokerEnvironment.SANDBOX
-            or self.endpoint != FUBON_NEO_TEST_ENDPOINT
-        ):
+        if type(self.environment) is not BrokerEnvironment or self.environment is not BrokerEnvironment.SANDBOX or self.endpoint != FUBON_NEO_TEST_ENDPOINT:
             raise FubonNeoReadError(
                 FubonNeoErrorCode.ENVIRONMENT_NOT_TEST,
                 "the reviewed Fubon Neo TEST environment is required",
@@ -80,12 +78,85 @@ class FubonNeoTestConfig:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class FubonNeoReadConnectionIdentity:
+    """Immutable provenance asserted by the provider session wrapper."""
+
+    broker_id: str
+    environment: BrokerEnvironment
+    endpoint: str
+    sdk_version: str
+    provider_contract_version: str
+    product_scope: str
+
+
+FUBON_NEO_TEST_CONNECTION_IDENTITY = FubonNeoReadConnectionIdentity(
+    broker_id=FUBON_NEO_BROKER_ID,
+    environment=BrokerEnvironment.SANDBOX,
+    endpoint=FUBON_NEO_TEST_ENDPOINT,
+    sdk_version=FUBON_NEO_SDK_VERSION,
+    provider_contract_version=FUBON_NEO_SOURCE_VERSION,
+    product_scope=FUBON_NEO_MARKET,
+)
+
+
+class FubonNeoInstrumentMarket(StrEnum):
+    TAIEX = "TAIEX"
+    TAISDAQ = "TAISDAQ"
+
+
+@dataclass(frozen=True, slots=True)
+class FubonNeoInstrumentCatalog:
+    """Versioned classification attested from the official TWSE/TPEX catalogs."""
+
+    source: str
+    source_version: str
+    taiex_symbols: tuple[str, ...]
+    taisdaq_symbols: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.source != FUBON_NEO_INSTRUMENT_CATALOG_SOURCE:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+                "the reviewed TWSE/TPEX classification source is required",
+            )
+        _exact_text("source_version", self.source_version)
+        if type(self.taiex_symbols) is not tuple or type(self.taisdaq_symbols) is not tuple:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+                "instrument classifications must be immutable tuples",
+            )
+        all_symbols = self.taiex_symbols + self.taisdaq_symbols
+        if self.taiex_symbols != tuple(sorted(self.taiex_symbols)) or self.taisdaq_symbols != tuple(sorted(self.taisdaq_symbols)):
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+                "instrument classifications must be canonically ordered",
+            )
+        if any(type(symbol) is not str or len(symbol) != 4 or not symbol.isascii() or not symbol.isdigit() for symbol in all_symbols) or len(set(all_symbols)) != len(all_symbols):
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+                "instrument classifications are malformed or ambiguous",
+            )
+
+    def market_for(self, broker_symbol: str) -> FubonNeoInstrumentMarket | None:
+        if broker_symbol in self.taiex_symbols:
+            return FubonNeoInstrumentMarket.TAIEX
+        if broker_symbol in self.taisdaq_symbols:
+            return FubonNeoInstrumentMarket.TAISDAQ
+        return None
+
+
 __all__ = [
     "FUBON_NEO_BROKER_ID",
     "FUBON_NEO_CURRENCY",
+    "FUBON_NEO_INSTRUMENT_CATALOG_SOURCE",
     "FUBON_NEO_MARKET",
     "FUBON_NEO_SDK_VERSION",
     "FUBON_NEO_SOURCE_VERSION",
+    "FUBON_NEO_TEST_CONNECTION_IDENTITY",
     "FUBON_NEO_TEST_ENDPOINT",
+    "FubonNeoInstrumentCatalog",
+    "FubonNeoInstrumentMarket",
+    "FubonNeoReadConnectionIdentity",
     "FubonNeoTestConfig",
 ]

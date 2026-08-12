@@ -15,6 +15,7 @@ from tw_stock_tool.broker_adapters.fubon_neo.config import (
     FUBON_NEO_CURRENCY,
     FUBON_NEO_MARKET,
     FUBON_NEO_SOURCE_VERSION,
+    FubonNeoInstrumentCatalog,
     FubonNeoTestConfig,
 )
 from tw_stock_tool.broker_adapters.fubon_neo.errors import (
@@ -47,8 +48,10 @@ _SYMBOL = re.compile(r"\d{4}\Z")
 _DATE = re.compile(r"\d{4}/\d{2}/\d{2}\Z")
 _TIME = re.compile(r"\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\Z")
 _MAX_ABS_NUMBER = Decimal("1000000000000000")
-_ACTIVE_STATUSES = {0, 4, 8, 10}
-_TERMINAL_OR_HISTORY_STATUSES = {14, 15, 19, 20, 24, 29, 30, 34, 39, 40, 50, 90}
+_CURRENT_STATUSES = {0, 4, 8, 10}
+_PENDING_STATUSES = {0, 4, 8}
+_NONTERMINAL_EVIDENCE_STATUSES = {14, 15, 19, 20, 24, 29, 34, 39}
+_TERMINAL_STATUSES = {30, 40, 50, 90}
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +163,7 @@ def _verify_identity(record: Mapping[str, object], config: FubonNeoTestConfig) -
         )
 
 
-def _symbol(record: Mapping[str, object]) -> str:
+def _symbol_code(record: Mapping[str, object]) -> str:
     if "canonical_symbol" in record or "symbol_override" in record:
         raise FubonNeoReadError(
             FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
@@ -169,12 +172,32 @@ def _symbol(record: Mapping[str, object]) -> str:
     value = record.get("stock_no")
     if type(value) is not str or _SYMBOL.fullmatch(value) is None:
         raise _malformed("stock_no is not a reviewed Taiwan securities identifier")
-    if record.get("market") not in (None, "TAIEX", "TAISDAQ"):
+    return value
+
+
+def _position_symbol(record: Mapping[str, object], catalog: FubonNeoInstrumentCatalog) -> str:
+    if "market" in record or "market_type" in record:
+        raise FubonNeoReadError(
+            FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
+            "position market metadata is not an authoritative classification source",
+        )
+    value = _symbol_code(record)
+    if catalog.market_for(value) is None:
+        raise FubonNeoReadError(
+            FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+            "position symbol is absent from the authoritative catalog version",
+        )
+    return value
+
+
+def _order_symbol(record: Mapping[str, object]) -> str:
+    value = _symbol_code(record)
+    if record.get("market") not in ("TAIEX", "TAISDAQ"):
         raise FubonNeoReadError(
             FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
             "provider market is outside the reviewed listed/OTC securities scope",
         )
-    if record.get("market_type") not in (None, "Common"):
+    if record.get("market_type") != "Common":
         raise FubonNeoReadError(
             FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
             "provider session or lot type is outside the reviewed common-lot scope",
@@ -227,9 +250,7 @@ def map_cash(data: object, config: FubonNeoTestConfig) -> FubonNeoCashObservatio
     # v2.2.8 documents balance as bank balance; available_balance stays unclassified.
     return FubonNeoCashObservation(
         cash=exact_decimal(record["balance"]),
-        unclassified_available_balance=exact_decimal(
-            record["available_balance"], nonnegative=True
-        ),
+        unclassified_available_balance=exact_decimal(record["available_balance"], nonnegative=True),
     )
 
 
@@ -244,8 +265,14 @@ def map_positions(
     unrealized_data: object,
     config: FubonNeoTestConfig,
     *,
+    instrument_catalog: FubonNeoInstrumentCatalog,
     retrieved_at: str,
 ) -> tuple[BrokerPositionSnapshot, ...]:
+    if type(instrument_catalog) is not FubonNeoInstrumentCatalog:
+        raise FubonNeoReadError(
+            FubonNeoErrorCode.INSTRUMENT_CLASSIFICATION_UNTRUSTED,
+            "an exact authoritative instrument catalog is required",
+        )
     if type(inventory_data) is not list or type(unrealized_data) is not list:
         raise _malformed("position inputs must be provider lists")
     inventories: dict[tuple[str, str], tuple[Mapping[str, object], int, int]] = {}
@@ -253,7 +280,7 @@ def map_positions(
         record = _record(item)
         _verify_identity(record, config)
         _validate_observation_date(record, retrieved_at)
-        symbol = _symbol(record)
+        symbol = _position_symbol(record, instrument_catalog)
         if record.get("order_type") != "Stock":
             raise FubonNeoReadError(
                 FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
@@ -262,10 +289,20 @@ def map_positions(
         odd = record.get("odd")
         if odd is not None:
             odd_record = _record(odd)
-            if any(_exact_int(odd_record, name) != 0 for name in (
-                "lastday_qty", "buy_qty", "buy_filled_qty", "buy_value",
-                "today_qty", "tradable_qty", "sell_qty", "sell_filled_qty", "sell_value",
-            )):
+            if any(
+                _exact_int(odd_record, name) != 0
+                for name in (
+                    "lastday_qty",
+                    "buy_qty",
+                    "buy_filled_qty",
+                    "buy_value",
+                    "today_qty",
+                    "tradable_qty",
+                    "sell_qty",
+                    "sell_filled_qty",
+                    "sell_value",
+                )
+            ):
                 raise FubonNeoReadError(
                     FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
                     "odd-lot inventory is outside the reviewed common-lot scope",
@@ -273,8 +310,13 @@ def map_positions(
         quantities = {
             name: _exact_int(record, name)
             for name in (
-                "lastday_qty", "buy_qty", "buy_filled_qty", "today_qty",
-                "tradable_qty", "sell_qty", "sell_filled_qty",
+                "lastday_qty",
+                "buy_qty",
+                "buy_filled_qty",
+                "today_qty",
+                "tradable_qty",
+                "sell_qty",
+                "sell_filled_qty",
             )
         }
         _exact_int(record, "buy_value")
@@ -282,10 +324,7 @@ def map_positions(
         if (
             quantities["buy_filled_qty"] > quantities["buy_qty"]
             or quantities["sell_filled_qty"] > quantities["sell_qty"]
-            or quantities["today_qty"]
-            != quantities["lastday_qty"]
-            + quantities["buy_filled_qty"]
-            - quantities["sell_filled_qty"]
+            or quantities["today_qty"] != quantities["lastday_qty"] + quantities["buy_filled_qty"] - quantities["sell_filled_qty"]
             or quantities["tradable_qty"] > quantities["today_qty"]
         ):
             raise _malformed("inventory quantities are contradictory")
@@ -302,7 +341,7 @@ def map_positions(
         record = _record(item)
         _verify_identity(record, config)
         _validate_observation_date(record, retrieved_at)
-        symbol = _symbol(record)
+        symbol = _position_symbol(record, instrument_catalog)
         if record.get("order_type") != "Stock" or record.get("buy_sell") != "Buy":
             raise FubonNeoReadError(
                 FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
@@ -364,12 +403,12 @@ def map_positions(
     return tuple(sorted(positions, key=lambda item: item.canonical_symbol))
 
 
-def _map_open_order(
+def _order_context(
     record: Mapping[str, object],
     config: FubonNeoTestConfig,
     *,
     retrieved_at: str,
-) -> BrokerOpenOrderSnapshot:
+) -> tuple[str, str, OrderSide]:
     _verify_identity(record, config)
     _validate_observation_date(record, retrieved_at)
     if _exact_int(record, "asset_type") != 0:
@@ -377,12 +416,31 @@ def _map_open_order(
             FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
             "non-securities order record is outside scope",
         )
-    symbol = _symbol(record)
+    symbol = _order_symbol(record)
     if record.get("order_type") != "Stock":
         raise FubonNeoReadError(
             FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
             "non-cash securities order cannot be represented losslessly",
         )
+    side = {"Buy": OrderSide.BUY, "Sell": OrderSide.SELL}.get(record.get("buy_sell"))
+    if side is None:
+        raise FubonNeoReadError(
+            FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
+            "provider side is unknown",
+        )
+    order_no = record.get("order_no")
+    if type(order_no) is not str or not order_no or order_no.strip() != order_no:
+        raise _malformed("order evidence requires a stable broker order number")
+    return symbol, order_no, side
+
+
+def _map_open_order(
+    record: Mapping[str, object],
+    config: FubonNeoTestConfig,
+    *,
+    retrieved_at: str,
+) -> BrokerOpenOrderSnapshot:
+    symbol, order_no, side = _order_context(record, config, retrieved_at=retrieved_at)
     if type(record.get("is_pre_order")) is not bool:
         raise _malformed("is_pre_order must be an exact bool")
     function_type = record.get("function_type")
@@ -391,21 +449,12 @@ def _map_open_order(
             FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
             "change-log order rows are not current exposure records",
         )
-    order_no = record.get("order_no")
-    if type(order_no) is not str or not order_no or order_no.strip() != order_no:
-        raise _malformed("active order requires a stable broker order number")
     original = _exact_int(record, "quantity", positive=True)
     effective = _exact_int(record, "after_qty", positive=True)
     filled = _exact_int(record, "filled_qty")
     _exact_int(record, "unit", positive=True)
     if original != effective or filled > original:
         raise _malformed("order quantities cannot be represented by exact A2 accounting")
-    side = {"Buy": OrderSide.BUY, "Sell": OrderSide.SELL}.get(record.get("buy_sell"))
-    if side is None:
-        raise FubonNeoReadError(
-            FubonNeoErrorCode.UNSUPPORTED_PROVIDER_RECORD,
-            "provider side is unknown",
-        )
     price_type = record.get("after_price_type") or record.get("price_type")
     order_type = {"Limit": OrderType.LIMIT, "Market": OrderType.MARKET}.get(price_type)
     if order_type is None:
@@ -430,7 +479,9 @@ def _map_open_order(
             "provider time-in-force is unknown",
         )
     status_code = record.get("status")
-    if status_code == 0:
+    if status_code in _PENDING_STATUSES:
+        if filled != 0:
+            raise _malformed("pending provider status cannot report a fill")
         status = BrokerOrderStatus.PENDING_SUBMIT
     elif filled == 0:
         status = BrokerOrderStatus.OPEN
@@ -471,37 +522,59 @@ def map_open_orders(
         raise _malformed("order input must be a provider list")
     active: dict[str, BrokerOpenOrderSnapshot] = {}
     terminal_ids: set[str] = set()
+    nonterminal_evidence: dict[str, tuple[str, OrderSide]] = {}
     for item in data:
         record = _record(item)
-        _verify_identity(record, config)
         status = record.get("status")
         if type(status) is not int:
             raise FubonNeoReadError(
                 FubonNeoErrorCode.PROVIDER_STATUS_UNKNOWN,
                 "provider order status is missing or unknown",
             )
-        if status == 9 or status not in _ACTIVE_STATUSES | _TERMINAL_OR_HISTORY_STATUSES:
+        if status not in (_CURRENT_STATUSES | _NONTERMINAL_EVIDENCE_STATUSES | _TERMINAL_STATUSES):
             raise FubonNeoReadError(
                 FubonNeoErrorCode.PROVIDER_STATUS_UNKNOWN,
                 "provider order status is not safe to classify",
             )
-        order_no = record.get("order_no")
-        if status in _TERMINAL_OR_HISTORY_STATUSES:
-            if type(order_no) is str and order_no:
+        if status in _CURRENT_STATUSES:
+            mapped = _map_open_order(record, config, retrieved_at=retrieved_at)
+            prior = active.get(mapped.broker_order_id)
+            if prior is not None and prior != mapped:
+                raise FubonNeoReadError(
+                    FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                    "duplicate broker order number has conflicting current facts",
+                )
+            active[mapped.broker_order_id] = mapped
+        else:
+            symbol, order_no, side = _order_context(record, config, retrieved_at=retrieved_at)
+            if status in _TERMINAL_STATUSES:
                 terminal_ids.add(order_no)
-            continue
-        mapped = _map_open_order(record, config, retrieved_at=retrieved_at)
-        prior = active.get(mapped.broker_order_id)
-        if prior is not None and prior != mapped:
-            raise FubonNeoReadError(
-                FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
-                "duplicate broker order number has conflicting current facts",
-            )
-        active[mapped.broker_order_id] = mapped
-    if terminal_ids & set(active):
+            else:
+                correlation = (symbol, side)
+                prior = nonterminal_evidence.get(order_no)
+                if prior is not None and prior != correlation:
+                    raise FubonNeoReadError(
+                        FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                        "nonterminal order evidence has conflicting stable identity",
+                    )
+                nonterminal_evidence[order_no] = correlation
+    active_ids = set(active)
+    if terminal_ids & active_ids:
         raise FubonNeoReadError(
             FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
             "broker order number has both terminal and active records",
+        )
+    for order_no, correlation in nonterminal_evidence.items():
+        current = active.get(order_no)
+        if current is not None and (current.broker_symbol, current.side) != correlation:
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+                "current and nonterminal evidence have conflicting stable identity",
+            )
+    if set(nonterminal_evidence) - active_ids - terminal_ids:
+        raise FubonNeoReadError(
+            FubonNeoErrorCode.AMBIGUOUS_PROVIDER_RECORDS,
+            "nonterminal order evidence has no authoritative current row",
         )
     return tuple(sorted(active.values(), key=lambda item: item.broker_order_id))
 
