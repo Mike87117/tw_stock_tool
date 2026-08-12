@@ -236,3 +236,48 @@ __all__ += [
     "transition_broker_authorization_use", "transition_broker_submission",
     "BrokerAccountSnapshotReader", "BrokerCapabilitiesReader", "TradingSessionReader",
 ]
+
+from tw_stock_tool.broker_safety.durable_models import (
+    AuditAnchorBundle,
+    AuthorizationClaimResult,
+    BackupManifest,
+    BrokerAccountLease,
+    BrokerAccountScope,
+    BrokerAuditRecord,
+    BrokerRecoveryPlan,
+    BrokerSafetyStoreError,
+    ClaimDisposition,
+    ExternalAuditAnchorPort,
+    ExternalAuditAnchorReceipt,
+    LeaseConflictError,
+    PersistenceConflictError,
+    PreSubmitCommit,
+    RestoreRejectedError,
+    STORE_SCHEMA_VERSION,
+    StaleFenceError,
+    StoreCorruptionError,
+    TrustedRecoveryCheckpoint,
+    ZERO_AUDIT_DIGEST,
+)
+from tw_stock_tool.broker_safety.durable_store import (
+    EXTERNAL_WORM_TARGET,
+    ForensicBrokerSafetyStore,
+    MIGRATION_CHECKSUM,
+    MIGRATION_ID,
+    SQLiteBrokerSafetyStore,
+    audit_anchor_bundle_sha256,
+    canonical_audit_anchor_bundle_bytes,
+)
+
+__all__ += [
+    "AuditAnchorBundle", "AuthorizationClaimResult", "BackupManifest",
+    "BrokerAccountLease", "BrokerAccountScope", "BrokerAuditRecord",
+    "BrokerRecoveryPlan", "BrokerSafetyStoreError", "ClaimDisposition",
+    "EXTERNAL_WORM_TARGET", "ExternalAuditAnchorPort",
+    "ExternalAuditAnchorReceipt", "ForensicBrokerSafetyStore",
+    "LeaseConflictError", "MIGRATION_CHECKSUM", "MIGRATION_ID",
+    "PersistenceConflictError", "PreSubmitCommit", "RestoreRejectedError",
+    "STORE_SCHEMA_VERSION", "SQLiteBrokerSafetyStore", "StaleFenceError",
+    "StoreCorruptionError", "TrustedRecoveryCheckpoint", "ZERO_AUDIT_DIGEST",
+    "audit_anchor_bundle_sha256", "canonical_audit_anchor_bundle_bytes",
+]
