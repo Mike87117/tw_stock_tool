@@ -7,6 +7,10 @@ from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version as distribution_version
 from typing import Protocol
 
+from tw_stock_tool.broker_adapters.fubon_neo.account_readiness import (
+    FubonNeoAccountFactReadiness,
+    current_fubon_neo_account_fact_readiness,
+)
 from tw_stock_tool.broker_adapters.fubon_neo.config import (
     FUBON_NEO_SDK_VERSION,
     FUBON_NEO_TEST_CONNECTION_IDENTITY,
@@ -31,6 +35,7 @@ from tw_stock_tool.broker_safety import (
     BrokerCapabilities,
     BrokerOpenOrderSnapshot,
     BrokerPositionSnapshot,
+    ProviderReadinessState,
 )
 
 
@@ -56,8 +61,25 @@ class FubonNeoIncompleteAccountRead:
     cash: FubonNeoCashObservation
     positions: tuple[BrokerPositionSnapshot, ...]
     open_orders: tuple[BrokerOpenOrderSnapshot, ...]
+    account_fact_readiness: FubonNeoAccountFactReadiness
     retrieved_at: str
     missing_mandatory_fields: tuple[str, ...] = ("buying_power", "equity")
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.account_fact_readiness) is not FubonNeoAccountFactReadiness
+            or self.account_fact_readiness != current_fubon_neo_account_fact_readiness()
+            or self.account_fact_readiness.overall is not ProviderReadinessState.BLOCKED
+        ):
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.MANDATORY_ACCOUNT_FIELD_UNAVAILABLE,
+                "account observations require the exact reviewed BLOCKED readiness result",
+            )
+        if self.missing_mandatory_fields != ("buying_power", "equity"):
+            raise FubonNeoReadError(
+                FubonNeoErrorCode.MANDATORY_ACCOUNT_FIELD_UNAVAILABLE,
+                "mandatory account fields cannot be overridden",
+            )
 
     def require_complete_snapshot(self) -> BrokerAccountSnapshot:
         raise FubonNeoReadError(
@@ -124,6 +146,12 @@ class FubonNeoReadonlyAdapter:
             observed_at=observed_at,
         )
 
+    def read_account_fact_readiness(self) -> FubonNeoAccountFactReadiness:
+        """Expose the reviewed semantic gate without reading or mutating the broker."""
+
+        self._assert_provenance(self._port)
+        return current_fubon_neo_account_fact_readiness()
+
     def read_account_observations(
         self,
         *,
@@ -156,6 +184,7 @@ class FubonNeoReadonlyAdapter:
                 self._config,
                 retrieved_at=retrieved_at,
             ),
+            account_fact_readiness=self.read_account_fact_readiness(),
             retrieved_at=retrieved_at,
         )
 

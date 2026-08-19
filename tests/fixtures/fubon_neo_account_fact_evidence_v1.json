@@ -1,0 +1,246 @@
+{
+  "schema_version": "fubon-neo-account-fact-fixture-v1",
+  "source_version": "sanitized-official-shaped-2026-08-19-v1",
+  "observation_date": "2025/01/02",
+  "normal": {
+    "bank_remain": {
+      "is_success": true,
+      "message": null,
+      "data": {
+        "branch_no": "SANITIZED-BRANCH",
+        "account": "SANITIZED-ACCOUNT-01",
+        "currency": "TWD",
+        "balance": 5000,
+        "available_balance": 4000
+      }
+    },
+    "query_settlement": {
+      "is_success": true,
+      "message": null,
+      "data": {
+        "account": {
+          "branch_no": "SANITIZED-BRANCH",
+          "account": "SANITIZED-ACCOUNT-01"
+        },
+        "details": [
+          {
+            "date": "2025/01/02",
+            "settlement_date": "2025/01/06",
+            "buy_value": 1000,
+            "buy_fee": 1,
+            "buy_settlement": -1001,
+            "buy_tax": 0,
+            "sell_value": 0,
+            "sell_fee": 0,
+            "sell_settlement": 0,
+            "sell_tax": 0,
+            "total_bs_value": 1000,
+            "total_fee": 1,
+            "total_tax": 0,
+            "total_settlement_amount": -1001,
+            "currency": "TWD"
+          },
+          {
+            "date": "2025/01/02",
+            "settlement_date": "2025/01/07",
+            "buy_value": 0,
+            "buy_fee": 0,
+            "buy_settlement": 0,
+            "buy_tax": 0,
+            "sell_value": 600,
+            "sell_fee": 1,
+            "sell_settlement": 597,
+            "sell_tax": 2,
+            "total_bs_value": 600,
+            "total_fee": 1,
+            "total_tax": 2,
+            "total_settlement_amount": 597,
+            "currency": "TWD"
+          }
+        ]
+      }
+    },
+    "inventories": {
+      "is_success": true,
+      "message": null,
+      "data": [
+        {
+          "date": "2025/01/02",
+          "branch_no": "SANITIZED-BRANCH",
+          "account": "SANITIZED-ACCOUNT-01",
+          "stock_no": "2330",
+          "order_type": "Stock",
+          "lastday_qty": 10,
+          "buy_qty": 0,
+          "buy_filled_qty": 0,
+          "buy_value": 0,
+          "today_qty": 10,
+          "tradable_qty": 10,
+          "sell_qty": 0,
+          "sell_filled_qty": 0,
+          "sell_value": 0,
+          "odd": {
+            "lastday_qty": 0,
+            "buy_qty": 0,
+            "buy_filled_qty": 0,
+            "buy_value": 0,
+            "today_qty": 0,
+            "tradable_qty": 0,
+            "sell_qty": 0,
+            "sell_filled_qty": 0,
+            "sell_value": 0
+          }
+        }
+      ]
+    },
+    "empty_inventories": {
+      "is_success": true,
+      "message": null,
+      "data": []
+    },
+    "unrealized_gains_and_loses": {
+      "is_success": true,
+      "message": null,
+      "data": [
+        {
+          "date": "2025/01/02",
+          "branch_no": "SANITIZED-BRANCH",
+          "account": "SANITIZED-ACCOUNT-01",
+          "stock_no": "2330",
+          "buy_sell": "Buy",
+          "order_type": "Stock",
+          "cost_price": 100.25,
+          "tradable_qty": 10,
+          "today_qty": 10,
+          "unrealized_profit": 25,
+          "unrealized_loss": 0
+        }
+      ]
+    },
+    "realized_gains_and_loses": {
+      "is_success": true,
+      "message": null,
+      "data": [
+        {
+          "date": "2025/01/02",
+          "branch_no": "SANITIZED-BRANCH",
+          "account": "SANITIZED-ACCOUNT-01",
+          "stock_no": "2330",
+          "buy_sell": "Sell",
+          "filled_qty": 2,
+          "filled_price": 110.0,
+          "order_type": "Stock",
+          "realized_profit": 19,
+          "realized_loss": 0
+        }
+      ]
+    },
+    "realized_gains_and_loses_summary": {
+      "is_success": true,
+      "message": null,
+      "data": [
+        {
+          "start_date": "20250102",
+          "end_date": "20250102",
+          "branch_no": "SANITIZED-BRANCH",
+          "account": "SANITIZED-ACCOUNT-01",
+          "stock_no": "2330",
+          "buy_sell": "Sell",
+          "order_type": "Stock",
+          "filled_qty": 2,
+          "filled_avg_price": 110.0,
+          "realized_profit_and_loss": 19
+        }
+      ]
+    },
+    "maintenance": {
+      "is_success": true,
+      "message": null,
+      "data": {
+        "date": "2025/01/02",
+        "branch_no": "SANITIZED-BRANCH",
+        "account": "SANITIZED-ACCOUNT-01",
+        "maintenance_summary": {
+          "margin_value": 0,
+          "shortsell_value": 0,
+          "shortsell_margin": 0,
+          "collateral": 0,
+          "margin_loan_amt": 0,
+          "maintenance_ratio": 0.0
+        },
+        "maintenance_detail": []
+      }
+    },
+    "margin_quota": {
+      "is_success": true,
+      "message": null,
+      "data": [
+        {
+          "stock_no": "2330",
+          "date": "2025/01/02",
+          "shortsell_orig_quota": 100,
+          "shortsell_tradable_quota": 90,
+          "margin_orig_quota": 200,
+          "margin_tradable_quota": 180,
+          "margin_ratio": 60,
+          "short_ratio": 90
+        }
+      ]
+    },
+    "futures_options_margin_equity_rejected": {
+      "date": "2025/01/02",
+      "branch_no": "SANITIZED-FUTOPT-BRANCH",
+      "account": "SANITIZED-FUTOPT-ACCOUNT",
+      "currency": "NTD",
+      "today_equity": 999999.0,
+      "available_margin": 888888.0
+    }
+  },
+  "adversarial": {
+    "missing_field": {
+      "branch_no": "SANITIZED-BRANCH",
+      "account": "SANITIZED-ACCOUNT-01",
+      "currency": "TWD",
+      "available_balance": 4000
+    },
+    "duplicate_settlement_rows": [
+      {
+        "date": "2025/01/02",
+        "settlement_date": "2025/01/06",
+        "total_settlement_amount": -1001,
+        "currency": "TWD"
+      },
+      {
+        "date": "2025/01/02",
+        "settlement_date": "2025/01/06",
+        "total_settlement_amount": -1001,
+        "currency": "TWD"
+      }
+    ],
+    "wrong_account": {
+      "branch_no": "SANITIZED-BRANCH",
+      "account": "OTHER-SANITIZED-ACCOUNT",
+      "currency": "TWD",
+      "balance": 5000,
+      "available_balance": 4000
+    },
+    "wrong_currency": {
+      "branch_no": "SANITIZED-BRANCH",
+      "account": "SANITIZED-ACCOUNT-01",
+      "currency": "USD",
+      "balance": 5000,
+      "available_balance": 4000
+    },
+    "stale_date": {
+      "date": "2025/01/01",
+      "branch_no": "SANITIZED-BRANCH",
+      "account": "SANITIZED-ACCOUNT-01",
+      "stock_no": "2330"
+    },
+    "contradictory_accounting_inputs": {
+      "inventory_today_qty": 10,
+      "unrealized_today_qty": 9,
+      "currency": "TWD"
+    }
+  }
+}
