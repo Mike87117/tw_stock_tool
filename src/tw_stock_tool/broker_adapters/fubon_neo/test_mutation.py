@@ -36,6 +36,7 @@ from tw_stock_tool.broker_safety.test_mutation_models import (
     BrokerTestMutationEnvelope,
     BrokerTestMutationModelError,
     BrokerTestMutationPolicy,
+    BrokerTestOperatorOptIn,
     BrokerTestPreSubmitCommit,
     BrokerTestSubmissionRecord,
     DurableTestProviderTagBinding,
@@ -54,6 +55,8 @@ FUBON_PROVIDER_MATCH_SCHEMA_VERSION = "fubon-provider-order-match-v1"
 FUBON_TEST_MUTATION_REVIEWED_SOURCE_URLS = (
     "https://www.fbs.com.tw/TradeAPI/docs/welcome/",
     "https://www.fbs.com.tw/TradeAPI/docs/trading/guide/advance/ping_pong/",
+    "https://www.fbs.com.tw/TradeAPI/docs/trading/library/python/trade/GetOrderResults/",
+    "https://www.fbs.com.tw/TradeAPI/docs/download/download-sdk/",
     "https://www.fbs.com.tw/wcm/new_web/trade/trade_20250320_458309.html",
 )
 
@@ -114,8 +117,8 @@ FUBON_TEST_D0_BLOCKER_DISPOSITIONS = tuple(
             ),
             D0BlockerTestDisposition(
                 D0PrerequisiteName.CLIENT_CORRELATION_LOST_ACK_SAFETY,
-                D0BlockerTestClassification.REPLACED_BY_TEST_ONLY_FAIL_CLOSED_RULE,
-                "DURABLE_FENCED_TAG_BINDING_EXACT_OBSERVATION_MATCH_AND_NEVER_RETRY",
+                D0BlockerTestClassification.REQUIRED_BEFORE_ANY_TEST_MUTATION,
+                "BLOCKED_UNTIL_SEALED_PROVIDER_READ_AND_PHASE_C_TEST_MAPPING_EXIST",
                 True,
             ),
             D0BlockerTestDisposition(
@@ -165,6 +168,7 @@ FUBON_TEST_MUTATION_POLICY = BrokerTestMutationPolicy(
 
 _READINESS_AUTHORITY = object()
 _MATCH_AUTHORITY = object()
+_OBSERVATION_AUTHORITY = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,7 +208,7 @@ class FubonNeoTestMutationReadiness:
             FUBON_NEO_TEST_ENDPOINT,
             FUBON_TEST_MUTATION_POLICY,
             FUBON_TEST_D0_BLOCKER_DISPOSITIONS,
-            TestMutationReadinessOutcome.READY_FOR_TEST_MUTATION_ADAPTER,
+            TestMutationReadinessOutcome.BLOCKED,
             FUBON_TEST_MUTATION_REVIEWED_SOURCE_URLS,
         ):
             raise BrokerTestMutationModelError("TEST readiness differs from the frozen reviewed result")
@@ -219,7 +223,7 @@ _CURRENT_READINESS = FubonNeoTestMutationReadiness(
     FUBON_NEO_TEST_ENDPOINT,
     FUBON_TEST_MUTATION_POLICY,
     FUBON_TEST_D0_BLOCKER_DISPOSITIONS,
-    TestMutationReadinessOutcome.READY_FOR_TEST_MUTATION_ADAPTER,
+    TestMutationReadinessOutcome.BLOCKED,
     FUBON_TEST_MUTATION_REVIEWED_SOURCE_URLS,
     _READINESS_AUTHORITY,
 )
@@ -241,7 +245,6 @@ def build_fubon_test_mutation_envelope(
     symbol: str,
     quantity: int,
     limit_price: Decimal,
-    operator_opt_in_reference: str,
     created_at: str,
     expires_at: str,
 ) -> BrokerTestMutationEnvelope:
@@ -272,7 +275,6 @@ def build_fubon_test_mutation_envelope(
         "COMMON_LOT",
         OrderType.LIMIT,
         TimeInForce.DAY,
-        operator_opt_in_reference,
         created_at,
         expires_at,
         test_mutation_artifact_sha256(policy),
@@ -281,11 +283,11 @@ def build_fubon_test_mutation_envelope(
 
 def build_fubon_test_execution_authorization(
     envelope: BrokerTestMutationEnvelope,
+    operator_opt_in: BrokerTestOperatorOptIn,
     *,
     authorization_id: str,
     issued_at: str,
     expires_at: str,
-    approver_reference: str,
 ) -> BrokerTestExecutionAuthorization:
     if type(envelope) is not BrokerTestMutationEnvelope or (
         envelope.broker_id,
@@ -299,6 +301,22 @@ def build_fubon_test_execution_authorization(
         test_mutation_artifact_sha256(FUBON_TEST_MUTATION_POLICY),
     ):
         raise BrokerTestMutationModelError("authorization requires the exact reviewed Fubon TEST envelope")
+    if type(operator_opt_in) is not BrokerTestOperatorOptIn or (
+        operator_opt_in.envelope_id,
+        operator_opt_in.envelope_sha256,
+        operator_opt_in.policy_sha256,
+        operator_opt_in.environment,
+        operator_opt_in.endpoint,
+        operator_opt_in.account_reference,
+    ) != (
+        envelope.envelope_id,
+        test_mutation_artifact_sha256(envelope),
+        envelope.policy_sha256,
+        envelope.environment,
+        envelope.endpoint,
+        envelope.account_reference,
+    ):
+        raise BrokerTestMutationModelError("authorization requires the exact bounded operator opt-in")
     if _timestamp("issued_at", issued_at) < _timestamp("envelope.created_at", envelope.created_at) or _timestamp("expires_at", expires_at) > _timestamp("envelope.expires_at", envelope.expires_at):
         raise BrokerTestMutationModelError("authorization lifetime must be inside its TEST envelope")
     return BrokerTestExecutionAuthorization(
@@ -308,13 +326,14 @@ def build_fubon_test_execution_authorization(
         envelope.envelope_id,
         test_mutation_artifact_sha256(envelope),
         envelope.policy_sha256,
+        operator_opt_in.operator_opt_in_id,
+        test_mutation_artifact_sha256(operator_opt_in),
         envelope.broker_id,
         envelope.environment,
         envelope.endpoint,
         envelope.account_reference,
         issued_at,
         expires_at,
-        approver_reference,
         True,
         TestLimitAuthority.SYNTHETIC_SANDBOX_HARNESS_ONLY,
     )
@@ -347,9 +366,39 @@ def persist_fubon_test_provider_tag_binding(
     )
 
 
+def issue_fubon_test_operator_opt_in(
+    store: SQLiteBrokerTestMutationStore,
+    scope: BrokerAccountScope,
+    envelope: BrokerTestMutationEnvelope,
+    *,
+    operator_opt_in_id: str,
+    issued_at: str,
+    expires_at: str,
+    operator_reference: str,
+    owner_id: str,
+    fencing_token: int,
+    actor_reference: str,
+) -> BrokerTestOperatorOptIn:
+    if type(store) is not SQLiteBrokerTestMutationStore:
+        raise BrokerTestMutationModelError("Fubon TEST opt-in requires the exact TEST store")
+    return store.issue_test_operator_opt_in(
+        scope,
+        FUBON_TEST_MUTATION_POLICY,
+        envelope,
+        operator_opt_in_id=operator_opt_in_id,
+        issued_at=issued_at,
+        expires_at=expires_at,
+        operator_reference=operator_reference,
+        owner_id=owner_id,
+        fencing_token=fencing_token,
+        actor_reference=actor_reference,
+    )
+
+
 def commit_fubon_test_pre_submit(
     store: SQLiteBrokerTestMutationStore,
     scope: BrokerAccountScope,
+    operator_opt_in: BrokerTestOperatorOptIn,
     authorization: BrokerTestExecutionAuthorization,
     envelope: BrokerTestMutationEnvelope,
     *,
@@ -367,6 +416,7 @@ def commit_fubon_test_pre_submit(
     return store.commit_test_pre_submit(
         scope,
         FUBON_TEST_MUTATION_POLICY,
+        operator_opt_in,
         authorization,
         envelope,
         provider_name="FUBON_NEO_USER_DEF_V1",
@@ -423,8 +473,13 @@ class FubonProviderOrderObservation:
     order_type: OrderType
     time_in_force: TimeInForce
     limit_price: Decimal
+    _authority: InitVar[object]
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _authority: object) -> None:
+        if _authority is not _OBSERVATION_AUTHORITY:
+            raise BrokerTestMutationModelError(
+                "provider observations must originate at a sealed reviewed provider-read boundary"
+            )
         if self.schema_version != FUBON_PROVIDER_OBSERVATION_SCHEMA_VERSION or self.environment is not BrokerEnvironment.SANDBOX or self.endpoint != FUBON_NEO_TEST_ENDPOINT:
             raise BrokerTestMutationModelError("provider observation must come from exact Fubon TEST provenance")
         for name in ("account_reference", "trading_date", "provider_order_id", "provider_tag", "symbol"):
@@ -571,6 +626,7 @@ __all__ = [
     "ValidatedProviderOrderMatch",
     "build_fubon_test_execution_authorization",
     "build_fubon_test_mutation_envelope",
+    "issue_fubon_test_operator_opt_in",
     "apply_fubon_test_lost_ack",
     "commit_fubon_test_pre_submit",
     "correlate_fubon_provider_observations",

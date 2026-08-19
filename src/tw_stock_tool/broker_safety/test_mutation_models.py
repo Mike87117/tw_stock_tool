@@ -24,6 +24,7 @@ from tw_stock_tool.broker_safety.models import (
 TEST_MUTATION_SCHEMA_VERSION = "broker-test-mutation-v1"
 TEST_POLICY_ARTIFACT_TYPE = "broker_test_mutation_policy"
 TEST_ENVELOPE_ARTIFACT_TYPE = "broker_test_mutation_envelope"
+TEST_OPERATOR_OPT_IN_ARTIFACT_TYPE = "broker_test_operator_opt_in"
 TEST_AUTHORIZATION_ARTIFACT_TYPE = "broker_test_mutation_authorization"
 TEST_SUBMISSION_ARTIFACT_TYPE = "broker_test_submission"
 TEST_PROVIDER_BINDING_SCHEMA_VERSION = "broker-test-provider-binding-v1"
@@ -33,6 +34,7 @@ _CANONICAL_ID = re.compile(r"twst1-[0-9a-f]{64}\Z")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _TEST_BINDING_AUTHORITY = object()
+_TEST_OPT_IN_AUTHORITY = object()
 
 
 class BrokerTestMutationModelError(ValueError):
@@ -200,7 +202,6 @@ class BrokerTestMutationEnvelope:
     lot_mode: str
     order_type: OrderType
     time_in_force: TimeInForce
-    operator_opt_in_reference: str
     created_at: str
     expires_at: str
     policy_sha256: str
@@ -248,8 +249,66 @@ class BrokerTestMutationEnvelope:
         expires = _timestamp("expires_at", self.expires_at)
         if created >= expires or self.created_at[:10] != self.trading_date or self.expires_at[:10] != self.trading_date:
             raise BrokerTestMutationModelError("TEST envelope must expire on its exact trading date")
-        _clean("operator_opt_in_reference", self.operator_opt_in_reference)
         _exact_sha("policy_sha256", self.policy_sha256)
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerTestOperatorOptIn:
+    """Store-issued, expiring authority for one exact SANDBOX envelope."""
+
+    schema_version: str
+    artifact_type: str
+    operator_opt_in_id: str
+    broker_id: str
+    environment: BrokerEnvironment
+    endpoint: str
+    account_reference: str
+    envelope_id: str
+    envelope_sha256: str
+    policy_sha256: str
+    trading_date: str
+    issued_at: str
+    expires_at: str
+    operator_reference: str
+    one_shot: bool
+    _authority: InitVar[object]
+
+    def __post_init__(self, _authority: object) -> None:
+        if _authority is not _TEST_OPT_IN_AUTHORITY:
+            raise BrokerTestMutationModelError(
+                "TEST operator opt-in must be issued under the Phase C controller fence"
+            )
+        if (
+            self.schema_version != TEST_MUTATION_SCHEMA_VERSION
+            or self.artifact_type != TEST_OPERATOR_OPT_IN_ARTIFACT_TYPE
+        ):
+            raise BrokerTestMutationModelError("unknown TEST operator opt-in version")
+        _uuid4("operator_opt_in_id", self.operator_opt_in_id)
+        _clean("broker_id", self.broker_id)
+        _clean("endpoint", self.endpoint)
+        _clean("account_reference", self.account_reference)
+        _uuid4("envelope_id", self.envelope_id)
+        _exact_sha("envelope_sha256", self.envelope_sha256)
+        _exact_sha("policy_sha256", self.policy_sha256)
+        _exact_date("trading_date", self.trading_date)
+        issued = _timestamp("issued_at", self.issued_at)
+        expires = _timestamp("expires_at", self.expires_at)
+        _clean("operator_reference", self.operator_reference)
+        if (
+            type(self.environment) is not BrokerEnvironment
+            or self.environment is not BrokerEnvironment.SANDBOX
+        ):
+            raise BrokerTestMutationModelError("TEST operator opt-in structurally rejects LIVE")
+        if (
+            issued >= expires
+            or self.issued_at[:10] != self.trading_date
+            or self.expires_at[:10] != self.trading_date
+        ):
+            raise BrokerTestMutationModelError(
+                "TEST operator opt-in must be expiring and same-date"
+            )
+        if self.one_shot is not True:
+            raise BrokerTestMutationModelError("TEST operator opt-in must be one-shot")
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,13 +319,14 @@ class BrokerTestExecutionAuthorization:
     envelope_id: str
     envelope_sha256: str
     policy_sha256: str
+    operator_opt_in_id: str
+    operator_opt_in_sha256: str
     broker_id: str
     environment: BrokerEnvironment
     endpoint: str
     account_reference: str
     issued_at: str
     expires_at: str
-    approver_reference: str
     one_shot: bool
     limit_authority: TestLimitAuthority
 
@@ -277,6 +337,8 @@ class BrokerTestExecutionAuthorization:
         _uuid4("envelope_id", self.envelope_id)
         _exact_sha("envelope_sha256", self.envelope_sha256)
         _exact_sha("policy_sha256", self.policy_sha256)
+        _uuid4("operator_opt_in_id", self.operator_opt_in_id)
+        _exact_sha("operator_opt_in_sha256", self.operator_opt_in_sha256)
         _clean("broker_id", self.broker_id)
         _clean("endpoint", self.endpoint)
         _clean("account_reference", self.account_reference)
@@ -284,7 +346,6 @@ class BrokerTestExecutionAuthorization:
         expires = _timestamp("expires_at", self.expires_at)
         if issued >= expires:
             raise BrokerTestMutationModelError("TEST authorization expiry must follow issuance")
-        _clean("approver_reference", self.approver_reference)
         if type(self.environment) is not BrokerEnvironment or self.environment is not BrokerEnvironment.SANDBOX:
             raise BrokerTestMutationModelError("TEST authorization structurally rejects LIVE")
         if self.one_shot is not True or self.limit_authority is not TestLimitAuthority.SYNTHETIC_SANDBOX_HARNESS_ONLY:
@@ -396,12 +457,14 @@ __all__ = [
     "BrokerTestMutationEnvelope",
     "BrokerTestMutationModelError",
     "BrokerTestMutationPolicy",
+    "BrokerTestOperatorOptIn",
     "BrokerTestPreSubmitCommit",
     "BrokerTestSubmissionRecord",
     "DurableTestProviderTagBinding",
     "TEST_AUTHORIZATION_ARTIFACT_TYPE",
     "TEST_ENVELOPE_ARTIFACT_TYPE",
     "TEST_MUTATION_SCHEMA_VERSION",
+    "TEST_OPERATOR_OPT_IN_ARTIFACT_TYPE",
     "TEST_POLICY_ARTIFACT_TYPE",
     "TEST_PRE_SUBMIT_PERSISTENCE_VERSION",
     "TEST_PROVIDER_BINDING_SCHEMA_VERSION",

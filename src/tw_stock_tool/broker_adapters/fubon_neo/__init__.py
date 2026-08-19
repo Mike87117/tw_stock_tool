@@ -89,6 +89,7 @@ from tw_stock_tool.broker_adapters.fubon_neo.test_mutation import (
     commit_fubon_test_pre_submit,
     correlate_fubon_provider_observations,
     current_fubon_neo_test_mutation_readiness,
+    issue_fubon_test_operator_opt_in,
     persist_fubon_test_provider_tag_binding,
     resolve_validated_fubon_lost_ack,
 )
@@ -171,6 +172,7 @@ __all__ = [
     "commit_fubon_test_pre_submit",
     "correlate_fubon_provider_observations",
     "current_fubon_neo_test_mutation_readiness",
+    "issue_fubon_test_operator_opt_in",
     "persist_fubon_test_provider_tag_binding",
     "resolve_validated_fubon_lost_ack",
 ]

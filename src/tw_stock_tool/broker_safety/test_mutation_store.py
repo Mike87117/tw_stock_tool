@@ -1,4 +1,4 @@
-"""Isolated SQLite durability boundary for non-promotable TEST mutation artifacts."""
+"""TEST-only lifecycle sidecar bound read-only to Phase C authority."""
 
 from __future__ import annotations
 
@@ -14,14 +14,15 @@ from typing import Iterator
 from uuid import UUID, uuid4
 
 from tw_stock_tool.broker_safety.durable_models import (
-    BrokerAccountLease,
     BrokerAccountScope,
     BrokerSafetyStoreError,
-    LeaseConflictError,
     PersistenceConflictError,
-    StaleFenceError,
     StoreCorruptionError,
     ZERO_AUDIT_DIGEST,
+)
+from tw_stock_tool.broker_safety.durable_store import (
+    SQLiteBrokerSafetyStore,
+    _scope_key as _phase_c_scope_key,
 )
 from tw_stock_tool.broker_safety.models import BrokerEnvironment, _clean, _timestamp
 from tw_stock_tool.broker_safety.test_mutation_models import (
@@ -30,12 +31,14 @@ from tw_stock_tool.broker_safety.test_mutation_models import (
     TEST_PROVIDER_BINDING_SCHEMA_VERSION,
     BrokerTestExecutionAuthorization,
     BrokerTestMutationEnvelope,
+    BrokerTestOperatorOptIn,
     BrokerTestMutationPolicy,
     BrokerTestPreSubmitCommit,
     BrokerTestSubmissionRecord,
     DurableTestProviderTagBinding,
     TestSubmissionState,
     _TEST_BINDING_AUTHORITY,
+    _TEST_OPT_IN_AUTHORITY,
     test_mutation_artifact_sha256,
 )
 from tw_stock_tool.broker_safety.test_mutation_serialization import (
@@ -44,8 +47,8 @@ from tw_stock_tool.broker_safety.test_mutation_serialization import (
 )
 
 
-TEST_STORE_SCHEMA_VERSION = 1
-TEST_STORE_MIGRATION_ID = "001_phase_56_5d0_1_test_only"
+TEST_STORE_SCHEMA_VERSION = 2
+TEST_STORE_MIGRATION_ID = "002_phase_56_5d0_1_phase_c_authority_bound"
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE = re.compile(r"[A-Za-z0-9_.:/-]+\Z")
 _FORBIDDEN = re.compile(
@@ -54,18 +57,18 @@ _FORBIDDEN = re.compile(
 
 _SCHEMA = (
     "CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-    "CREATE TABLE account_scopes(scope_key TEXT PRIMARY KEY, broker_id TEXT NOT NULL, environment TEXT NOT NULL, account_reference TEXT NOT NULL, UNIQUE(broker_id, environment, account_reference))",
-    "CREATE TABLE leases(scope_key TEXT PRIMARY KEY REFERENCES account_scopes(scope_key), owner_id TEXT NOT NULL, fencing_token INTEGER NOT NULL CHECK(fencing_token > 0), acquired_at TEXT NOT NULL, expires_at TEXT NOT NULL, last_renewed_at TEXT NOT NULL)",
-    "CREATE TABLE policies(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), policy_sha256 TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, policy_sha256))",
-    "CREATE TABLE envelopes(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), envelope_id TEXT NOT NULL, economic_intent_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, client_order_id TEXT NOT NULL, sequence INTEGER NOT NULL CHECK(sequence > 0), artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, envelope_id), UNIQUE(scope_key, economic_intent_id), UNIQUE(scope_key, idempotency_key), UNIQUE(scope_key, client_order_id))",
-    "CREATE TABLE provider_ids(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), provider_name TEXT NOT NULL, provider_tag TEXT NOT NULL, canonical_client_id TEXT NOT NULL, envelope_id TEXT NOT NULL, fencing_token INTEGER NOT NULL CHECK(fencing_token > 0), mapped_at TEXT NOT NULL, mapping_audit_sequence INTEGER NOT NULL CHECK(mapping_audit_sequence > 0), PRIMARY KEY(scope_key, provider_name, provider_tag), UNIQUE(scope_key, provider_name, canonical_client_id))",
-    "CREATE TABLE authorizations(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), authorization_id TEXT NOT NULL, envelope_id TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, envelope_id))",
-    "CREATE TABLE authorization_uses(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), authorization_id TEXT NOT NULL, attempt_id TEXT NOT NULL, used_at TEXT NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, attempt_id))",
-    "CREATE TABLE pre_submit_commits(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), authorization_id TEXT NOT NULL, envelope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, persistence_version TEXT NOT NULL, request_sha256 TEXT NOT NULL, submission_sha256 TEXT NOT NULL, audit_sequence INTEGER NOT NULL, audit_root_digest TEXT NOT NULL, fencing_token INTEGER NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, envelope_id), UNIQUE(scope_key, attempt_id))",
-    "CREATE TABLE submissions_current(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), envelope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL CHECK(version > 0), artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, envelope_id, attempt_id))",
-    "CREATE TABLE submission_history(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), envelope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, version INTEGER NOT NULL, state TEXT NOT NULL, transition_kind TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, envelope_id, attempt_id, version))",
-    "CREATE TABLE high_water(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), trading_date TEXT NOT NULL, maximum_sequence INTEGER NOT NULL CHECK(maximum_sequence > 0), submitted_notional TEXT NOT NULL, PRIMARY KEY(scope_key, trading_date))",
-    "CREATE TABLE audit(scope_key TEXT NOT NULL REFERENCES account_scopes(scope_key), sequence INTEGER NOT NULL CHECK(sequence > 0), event_type TEXT NOT NULL, occurred_at TEXT NOT NULL, actor_reference TEXT NOT NULL, references_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL, previous_digest TEXT NOT NULL, record_digest TEXT NOT NULL, PRIMARY KEY(scope_key, sequence), UNIQUE(scope_key, record_digest))",
+    "CREATE TABLE test_scopes(scope_key TEXT PRIMARY KEY, broker_id TEXT NOT NULL, environment TEXT NOT NULL, account_reference TEXT NOT NULL, phase_c_store_id TEXT NOT NULL, UNIQUE(broker_id, environment, account_reference))",
+    "CREATE TABLE policies(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), policy_sha256 TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, policy_sha256))",
+    "CREATE TABLE envelopes(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), envelope_id TEXT NOT NULL, economic_intent_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, client_order_id TEXT NOT NULL, sequence INTEGER NOT NULL CHECK(sequence > 0), artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, envelope_id), UNIQUE(scope_key, economic_intent_id), UNIQUE(scope_key, idempotency_key), UNIQUE(scope_key, client_order_id))",
+    "CREATE TABLE phase_c_provider_binding_refs(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), provider_name TEXT NOT NULL, provider_tag TEXT NOT NULL, canonical_client_id TEXT NOT NULL, envelope_id TEXT NOT NULL, fencing_token INTEGER NOT NULL CHECK(fencing_token > 0), mapped_at TEXT NOT NULL, phase_c_audit_sequence INTEGER NOT NULL CHECK(phase_c_audit_sequence > 0), phase_c_audit_root TEXT NOT NULL, mapping_audit_sequence INTEGER NOT NULL CHECK(mapping_audit_sequence > 0), PRIMARY KEY(scope_key, provider_name, provider_tag), UNIQUE(scope_key, provider_name, canonical_client_id))",
+    "CREATE TABLE operator_opt_ins(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), operator_opt_in_id TEXT NOT NULL, envelope_id TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, fencing_token INTEGER NOT NULL CHECK(fencing_token > 0), issue_audit_sequence INTEGER NOT NULL CHECK(issue_audit_sequence > 0), PRIMARY KEY(scope_key, operator_opt_in_id), UNIQUE(scope_key, envelope_id))",
+    "CREATE TABLE authorizations(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), authorization_id TEXT NOT NULL, envelope_id TEXT NOT NULL, operator_opt_in_id TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, envelope_id), UNIQUE(scope_key, operator_opt_in_id))",
+    "CREATE TABLE authorization_uses(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), authorization_id TEXT NOT NULL, operator_opt_in_id TEXT NOT NULL, attempt_id TEXT NOT NULL, used_at TEXT NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, operator_opt_in_id), UNIQUE(scope_key, attempt_id))",
+    "CREATE TABLE pre_submit_commits(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), authorization_id TEXT NOT NULL, operator_opt_in_id TEXT NOT NULL, envelope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, persistence_version TEXT NOT NULL, request_sha256 TEXT NOT NULL, submission_sha256 TEXT NOT NULL, audit_sequence INTEGER NOT NULL, audit_root_digest TEXT NOT NULL, fencing_token INTEGER NOT NULL, PRIMARY KEY(scope_key, authorization_id), UNIQUE(scope_key, envelope_id), UNIQUE(scope_key, attempt_id))",
+    "CREATE TABLE submissions_current(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), envelope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL CHECK(version > 0), artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, envelope_id, attempt_id))",
+    "CREATE TABLE submission_history(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), envelope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, version INTEGER NOT NULL, state TEXT NOT NULL, transition_kind TEXT NOT NULL, artifact_json TEXT NOT NULL, artifact_sha256 TEXT NOT NULL, PRIMARY KEY(scope_key, envelope_id, attempt_id, version))",
+    "CREATE TABLE high_water(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), trading_date TEXT NOT NULL, maximum_sequence INTEGER NOT NULL CHECK(maximum_sequence > 0), submitted_notional TEXT NOT NULL, PRIMARY KEY(scope_key, trading_date))",
+    "CREATE TABLE audit(scope_key TEXT NOT NULL REFERENCES test_scopes(scope_key), sequence INTEGER NOT NULL CHECK(sequence > 0), event_type TEXT NOT NULL, occurred_at TEXT NOT NULL, actor_reference TEXT NOT NULL, references_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL, previous_digest TEXT NOT NULL, record_digest TEXT NOT NULL, PRIMARY KEY(scope_key, sequence), UNIQUE(scope_key, record_digest))",
 )
 TEST_STORE_MIGRATION_CHECKSUM = sha256("\n".join(_SCHEMA).encode()).hexdigest()
 
@@ -149,16 +152,22 @@ class _Connection(sqlite3.Connection):
 
 
 class SQLiteBrokerTestMutationStore:
-    """TEST-only sidecar store; it has no live artifact or broker transport path."""
+    """Non-promotable lifecycle store with no lease or provider-ID authority."""
 
     def __init__(
         self,
         path: str | Path,
+        controller_store: SQLiteBrokerSafetyStore,
         *,
         busy_timeout_ms: int = 5000,
         migration_applied_at: str = "1970-01-01T00:00:00Z",
     ) -> None:
+        if type(controller_store) is not SQLiteBrokerSafetyStore:
+            raise BrokerSafetyStoreError("TEST lifecycle requires the exact Phase C store")
+        self.controller_store = controller_store
         self.path = Path(path).resolve()
+        if self.path == controller_store.path:
+            raise BrokerSafetyStoreError("TEST lifecycle namespace must be a distinct database")
         if type(busy_timeout_ms) is not int or busy_timeout_ms <= 0:
             raise BrokerSafetyStoreError("busy timeout must be exact and positive")
         self.busy_timeout_ms = busy_timeout_ms
@@ -236,71 +245,32 @@ class SQLiteBrokerTestMutationStore:
             raise BrokerSafetyStoreError("TEST mutation store structurally rejects LIVE")
         key = _scope_key(scope)
         connection.execute(
-            "INSERT OR IGNORE INTO account_scopes VALUES(?, ?, ?, ?)",
-            (key, scope.broker_id, scope.environment.value, scope.account_reference),
+            "INSERT OR IGNORE INTO test_scopes VALUES(?, ?, ?, ?, ?)",
+            (key, scope.broker_id, scope.environment.value, scope.account_reference, self.controller_store.store_id),
         )
         row = connection.execute(
-            "SELECT broker_id, environment, account_reference FROM account_scopes WHERE scope_key=?",
+            "SELECT broker_id, environment, account_reference, phase_c_store_id FROM test_scopes WHERE scope_key=?",
             (key,),
         ).fetchone()
-        if row is None or tuple(row) != (scope.broker_id, scope.environment.value, scope.account_reference):
+        if row is None or tuple(row) != (scope.broker_id, scope.environment.value, scope.account_reference, self.controller_store.store_id):
             raise StoreCorruptionError("TEST scope identity conflict")
         return key
 
-    def acquire_lease(
+    def _check_fence(
         self,
         scope: BrokerAccountScope,
-        *,
-        owner_id: str,
-        acquired_at: str,
-        expires_at: str,
-    ) -> BrokerAccountLease:
-        owner_id = _safe("owner_id", owner_id)
-        acquired = _timestamp("acquired_at", acquired_at)
-        expires = _timestamp("expires_at", expires_at)
-        if acquired >= expires:
-            raise BrokerSafetyStoreError("lease expiry must follow acquisition")
-        with self._transaction() as connection:
-            key = self._ensure_scope(connection, scope)
-            row = connection.execute(
-                "SELECT owner_id, fencing_token, acquired_at, expires_at, last_renewed_at FROM leases WHERE scope_key=?",
-                (key,),
-            ).fetchone()
-            if row is None:
-                token = 1
-                original = acquired_at
-                connection.execute(
-                    "INSERT INTO leases VALUES(?, ?, ?, ?, ?, ?)",
-                    (key, owner_id, token, acquired_at, expires_at, acquired_at),
-                )
-            elif row[0] == owner_id and row[3] > acquired_at:
-                raise LeaseConflictError("TEST lease already belongs to this live owner")
-            elif row[3] <= acquired_at:
-                token = row[1] + 1
-                original = acquired_at
-                connection.execute(
-                    "UPDATE leases SET owner_id=?, fencing_token=?, acquired_at=?, expires_at=?, last_renewed_at=? WHERE scope_key=?",
-                    (owner_id, token, acquired_at, expires_at, acquired_at, key),
-                )
-            else:
-                raise LeaseConflictError("TEST lease is held by another live owner")
-        return BrokerAccountLease(scope, owner_id, token, original, expires_at, acquired_at)
-
-    @staticmethod
-    def _check_fence(
-        connection: sqlite3.Connection,
-        key: str,
         owner_id: str,
         fencing_token: int,
         now: str,
     ) -> None:
-        _safe("owner_id", owner_id)
-        _timestamp("now", now)
-        row = connection.execute(
-            "SELECT owner_id, fencing_token, expires_at FROM leases WHERE scope_key=?", (key,)
-        ).fetchone()
-        if row is None or tuple(row[:2]) != (owner_id, fencing_token) or row[2] <= now:
-            raise StaleFenceError("TEST write requires the current unexpired fence")
+        key = _phase_c_scope_key(scope)
+        plan = self.controller_store.recovery_plan(scope)
+        if "STORE_OR_AUDIT_CORRUPTION" in plan.blocking_reasons:
+            raise StoreCorruptionError("Phase C authority is not recoverable")
+        with self.controller_store._connect(readonly=True) as connection:
+            self.controller_store._check_fence(
+                connection, key, owner_id, fencing_token, now
+            )
 
     @staticmethod
     def _append_audit(
@@ -347,7 +317,12 @@ class SQLiteBrokerTestMutationStore:
 
     @staticmethod
     def _validate_scope_artifact(scope: BrokerAccountScope, value: object) -> None:
-        if type(value) not in (BrokerTestMutationPolicy, BrokerTestMutationEnvelope, BrokerTestExecutionAuthorization):
+        if type(value) not in (
+            BrokerTestMutationPolicy,
+            BrokerTestMutationEnvelope,
+            BrokerTestOperatorOptIn,
+            BrokerTestExecutionAuthorization,
+        ):
             raise BrokerSafetyStoreError("TEST store requires an exact TEST artifact")
         if (
             value.broker_id,
@@ -355,6 +330,37 @@ class SQLiteBrokerTestMutationStore:
             getattr(value, "account_reference", scope.account_reference),
         ) != (scope.broker_id, BrokerEnvironment.SANDBOX, scope.account_reference):
             raise PersistenceConflictError("TEST artifact account scope mismatch")
+
+    def _verify_phase_c_provider_mapping(
+        self,
+        scope: BrokerAccountScope,
+        envelope: BrokerTestMutationEnvelope,
+        *,
+        provider_name: str,
+        provider_tag: str,
+        owner_id: str,
+        fencing_token: int,
+        now: str,
+    ) -> tuple[int, str]:
+        self._check_fence(scope, owner_id, fencing_token, now)
+        key = _phase_c_scope_key(scope)
+        with self.controller_store._connect(readonly=True) as connection:
+            row = connection.execute(
+                "SELECT canonical_client_id FROM provider_ids WHERE scope_key=? AND provider_name=? AND provider_client_id=?",
+                (key, provider_name, provider_tag),
+            ).fetchone()
+        if row is None or row[0] != envelope.canonical_client_order_id:
+            raise PersistenceConflictError(
+                "exact Phase C durable provider-ID mapping is required"
+            )
+        return self.controller_store.verify_audit_chain(scope)
+
+    def _assert_lifecycle_integrity(self, scope: BrokerAccountScope) -> None:
+        plan = self.recovery_plan(scope)
+        if any("CORRUPTION" in reason for reason in plan.blocking_reasons):
+            raise StoreCorruptionError(
+                "TEST lifecycle recovery failed; no new TEST write is allowed"
+            )
 
     def map_test_provider_tag(
         self,
@@ -369,6 +375,7 @@ class SQLiteBrokerTestMutationStore:
         now: str,
         actor_reference: str,
     ) -> DurableTestProviderTagBinding:
+        self._assert_lifecycle_integrity(scope)
         self._validate_scope_artifact(scope, policy)
         self._validate_scope_artifact(scope, envelope)
         provider_name = _safe("provider_name", provider_name)
@@ -377,17 +384,31 @@ class SQLiteBrokerTestMutationStore:
             raise PersistenceConflictError("TEST envelope is not bound to the exact policy")
         policy_text, policy_digest = _artifact(policy)
         envelope_text, envelope_digest = _artifact(envelope)
+        phase_c_sequence, phase_c_root = self._verify_phase_c_provider_mapping(
+            scope,
+            envelope,
+            provider_name=provider_name,
+            provider_tag=provider_tag,
+            owner_id=owner_id,
+            fencing_token=fencing_token,
+            now=now,
+        )
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
-            self._check_fence(connection, key, owner_id, fencing_token, now)
+            self._check_fence(scope, owner_id, fencing_token, now)
             existing = connection.execute(
-                "SELECT canonical_client_id, envelope_id, fencing_token, mapped_at, mapping_audit_sequence FROM provider_ids WHERE scope_key=? AND provider_name=? AND provider_tag=?",
+                "SELECT canonical_client_id, envelope_id, fencing_token, mapped_at, phase_c_audit_sequence, phase_c_audit_root, mapping_audit_sequence FROM phase_c_provider_binding_refs WHERE scope_key=? AND provider_name=? AND provider_tag=?",
                 (key, provider_name, provider_tag),
             ).fetchone()
             if existing is not None:
                 if tuple(existing[:2]) != (envelope.canonical_client_order_id, envelope.envelope_id):
                     raise PersistenceConflictError("TEST provider tag collision")
-                if existing[2] == fencing_token:
+                if tuple(existing[2:6]) == (
+                    fencing_token,
+                    existing[3],
+                    phase_c_sequence,
+                    phase_c_root,
+                ):
                     return DurableTestProviderTagBinding(
                         TEST_PROVIDER_BINDING_SCHEMA_VERSION,
                         scope.broker_id,
@@ -400,7 +421,7 @@ class SQLiteBrokerTestMutationStore:
                         envelope.canonical_client_order_id,
                         existing[2],
                         existing[3],
-                        existing[4],
+                        existing[6],
                         _TEST_BINDING_AUTHORITY,
                     )
                 payload = _digest(
@@ -427,8 +448,8 @@ class SQLiteBrokerTestMutationStore:
                     payload_sha256=payload,
                 )
                 connection.execute(
-                    "UPDATE provider_ids SET fencing_token=?, mapped_at=?, mapping_audit_sequence=? WHERE scope_key=? AND provider_name=? AND provider_tag=?",
-                    (fencing_token, now, sequence, key, provider_name, provider_tag),
+                    "UPDATE phase_c_provider_binding_refs SET fencing_token=?, mapped_at=?, phase_c_audit_sequence=?, phase_c_audit_root=?, mapping_audit_sequence=? WHERE scope_key=? AND provider_name=? AND provider_tag=?",
+                    (fencing_token, now, phase_c_sequence, phase_c_root, sequence, key, provider_name, provider_tag),
                 )
                 return DurableTestProviderTagBinding(
                     TEST_PROVIDER_BINDING_SCHEMA_VERSION,
@@ -473,8 +494,8 @@ class SQLiteBrokerTestMutationStore:
             )
             try:
                 connection.execute(
-                    "INSERT INTO provider_ids VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                    (key, provider_name, provider_tag, envelope.canonical_client_order_id, envelope.envelope_id, fencing_token, now, sequence),
+                    "INSERT INTO phase_c_provider_binding_refs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (key, provider_name, provider_tag, envelope.canonical_client_order_id, envelope.envelope_id, fencing_token, now, phase_c_sequence, phase_c_root, sequence),
                 )
             except sqlite3.IntegrityError as exc:
                 raise PersistenceConflictError("TEST provider tag or canonical identity collision") from exc
@@ -494,10 +515,93 @@ class SQLiteBrokerTestMutationStore:
             _TEST_BINDING_AUTHORITY,
         )
 
+    def issue_test_operator_opt_in(
+        self,
+        scope: BrokerAccountScope,
+        policy: BrokerTestMutationPolicy,
+        envelope: BrokerTestMutationEnvelope,
+        *,
+        operator_opt_in_id: str,
+        issued_at: str,
+        expires_at: str,
+        operator_reference: str,
+        owner_id: str,
+        fencing_token: int,
+        actor_reference: str,
+    ) -> BrokerTestOperatorOptIn:
+        self._assert_lifecycle_integrity(scope)
+        self._validate_scope_artifact(scope, policy)
+        self._validate_scope_artifact(scope, envelope)
+        self._check_fence(scope, owner_id, fencing_token, issued_at)
+        if (
+            envelope.policy_sha256 != test_mutation_artifact_sha256(policy)
+            or issued_at < envelope.created_at
+            or expires_at > envelope.expires_at
+        ):
+            raise PersistenceConflictError("operator opt-in is outside the exact envelope")
+        opt_in = BrokerTestOperatorOptIn(
+            TEST_MUTATION_SCHEMA_VERSION,
+            "broker_test_operator_opt_in",
+            operator_opt_in_id,
+            envelope.broker_id,
+            envelope.environment,
+            envelope.endpoint,
+            envelope.account_reference,
+            envelope.envelope_id,
+            test_mutation_artifact_sha256(envelope),
+            envelope.policy_sha256,
+            envelope.trading_date,
+            issued_at,
+            expires_at,
+            operator_reference,
+            True,
+            _TEST_OPT_IN_AUTHORITY,
+        )
+        policy_text, policy_digest = _artifact(policy)
+        envelope_text, envelope_digest = _artifact(envelope)
+        opt_in_text, opt_in_digest = _artifact(opt_in)
+        with self._transaction() as connection:
+            key = self._ensure_scope(connection, scope)
+            self._check_fence(scope, owner_id, fencing_token, issued_at)
+            connection.execute(
+                "INSERT OR IGNORE INTO policies VALUES(?, ?, ?, ?)",
+                (key, envelope.policy_sha256, policy_text, policy_digest),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO envelopes VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                (key, envelope.envelope_id, envelope.economic_intent_id, envelope.idempotency_key, envelope.canonical_client_order_id, envelope.sequence, envelope_text, envelope_digest),
+            )
+            existing = connection.execute(
+                "SELECT artifact_json, artifact_sha256 FROM operator_opt_ins WHERE scope_key=? AND operator_opt_in_id=?",
+                (key, operator_opt_in_id),
+            ).fetchone()
+            if existing is not None:
+                if tuple(existing) != (opt_in_text, opt_in_digest):
+                    raise PersistenceConflictError("operator opt-in identity conflict")
+                return opt_in
+            sequence, _ = self._append_audit(
+                connection,
+                key,
+                event_type="TEST_OPERATOR_OPT_IN_ISSUED",
+                occurred_at=issued_at,
+                actor_reference=actor_reference,
+                references={"envelope_id": envelope.envelope_id, "operator_opt_in_id": operator_opt_in_id},
+                payload_sha256=opt_in_digest,
+            )
+            try:
+                connection.execute(
+                    "INSERT INTO operator_opt_ins VALUES(?, ?, ?, ?, ?, ?, ?)",
+                    (key, operator_opt_in_id, envelope.envelope_id, opt_in_text, opt_in_digest, fencing_token, sequence),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise PersistenceConflictError("operator opt-in is not one-envelope exact") from exc
+        return opt_in
+
     def commit_test_pre_submit(
         self,
         scope: BrokerAccountScope,
         policy: BrokerTestMutationPolicy,
+        operator_opt_in: BrokerTestOperatorOptIn,
         authorization: BrokerTestExecutionAuthorization,
         envelope: BrokerTestMutationEnvelope,
         *,
@@ -510,7 +614,9 @@ class SQLiteBrokerTestMutationStore:
         actor_reference: str,
         fail_before_commit: bool = False,
     ) -> BrokerTestPreSubmitCommit:
+        self._assert_lifecycle_integrity(scope)
         self._validate_scope_artifact(scope, policy)
+        self._validate_scope_artifact(scope, operator_opt_in)
         self._validate_scope_artifact(scope, authorization)
         self._validate_scope_artifact(scope, envelope)
         provider_name = _safe("provider_name", provider_name)
@@ -522,20 +628,41 @@ class SQLiteBrokerTestMutationStore:
         except (TypeError, ValueError, AttributeError) as exc:
             raise BrokerSafetyStoreError("attempt_id must be an exact UUIDv4") from exc
         now = _timestamp("occurred_at", occurred_at)
-        if now < _timestamp("authorization.issued_at", authorization.issued_at) or now >= _timestamp("authorization.expires_at", authorization.expires_at):
+        if (
+            now < _timestamp("authorization.issued_at", authorization.issued_at)
+            or now >= _timestamp("authorization.expires_at", authorization.expires_at)
+            or now < _timestamp("operator_opt_in.issued_at", operator_opt_in.issued_at)
+            or now >= _timestamp("operator_opt_in.expires_at", operator_opt_in.expires_at)
+        ):
             raise PersistenceConflictError("TEST authorization is not currently valid")
         if (
             authorization.envelope_id,
             authorization.envelope_sha256,
             authorization.policy_sha256,
             authorization.endpoint,
+            authorization.operator_opt_in_id,
+            authorization.operator_opt_in_sha256,
         ) != (
             envelope.envelope_id,
             test_mutation_artifact_sha256(envelope),
             test_mutation_artifact_sha256(policy),
             envelope.endpoint,
+            operator_opt_in.operator_opt_in_id,
+            test_mutation_artifact_sha256(operator_opt_in),
         ) or envelope.order_notional > policy.maximum_order_notional:
             raise PersistenceConflictError("TEST authorization, policy, and envelope binding mismatch")
+        if (
+            operator_opt_in.envelope_id,
+            operator_opt_in.envelope_sha256,
+            operator_opt_in.policy_sha256,
+            operator_opt_in.trading_date,
+        ) != (
+            envelope.envelope_id,
+            test_mutation_artifact_sha256(envelope),
+            envelope.policy_sha256,
+            envelope.trading_date,
+        ):
+            raise PersistenceConflictError("TEST operator opt-in binding mismatch")
         auth_text, auth_digest = _artifact(authorization)
         submission = BrokerTestSubmissionRecord(
             TEST_MUTATION_SCHEMA_VERSION,
@@ -554,7 +681,7 @@ class SQLiteBrokerTestMutationStore:
         request_digest = _digest(_canonical({"authorization_sha256": auth_digest, "envelope_sha256": test_mutation_artifact_sha256(envelope), "persistence_version": TEST_PRE_SUBMIT_PERSISTENCE_VERSION, "provider_name": provider_name, "provider_tag": provider_tag, "submission_sha256": submission_digest}))
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
-            self._check_fence(connection, key, owner_id, fencing_token, occurred_at)
+            self._check_fence(scope, owner_id, fencing_token, occurred_at)
             existing_commit = connection.execute(
                 "SELECT envelope_id, attempt_id, persistence_version, request_sha256, submission_sha256, audit_sequence, audit_root_digest, fencing_token FROM pre_submit_commits WHERE scope_key=? AND authorization_id=?",
                 (key, authorization.authorization_id),
@@ -576,11 +703,31 @@ class SQLiteBrokerTestMutationStore:
                     submission,
                 )
             binding = connection.execute(
-                "SELECT canonical_client_id, envelope_id, fencing_token FROM provider_ids WHERE scope_key=? AND provider_name=? AND provider_tag=?",
+                "SELECT canonical_client_id, envelope_id, fencing_token FROM phase_c_provider_binding_refs WHERE scope_key=? AND provider_name=? AND provider_tag=?",
                 (key, provider_name, provider_tag),
             ).fetchone()
             if binding is None or tuple(binding) != (envelope.canonical_client_order_id, envelope.envelope_id, fencing_token):
                 raise PersistenceConflictError("current fenced TEST provider-tag mapping is required before pre-submit")
+            self._verify_phase_c_provider_mapping(
+                scope,
+                envelope,
+                provider_name=provider_name,
+                provider_tag=provider_tag,
+                owner_id=owner_id,
+                fencing_token=fencing_token,
+                now=occurred_at,
+            )
+            opt_in_row = connection.execute(
+                "SELECT envelope_id, artifact_json, artifact_sha256 FROM operator_opt_ins WHERE scope_key=? AND operator_opt_in_id=?",
+                (key, operator_opt_in.operator_opt_in_id),
+            ).fetchone()
+            opt_in_text, opt_in_digest = _artifact(operator_opt_in)
+            if opt_in_row is None or tuple(opt_in_row) != (
+                envelope.envelope_id,
+                opt_in_text,
+                opt_in_digest,
+            ):
+                raise PersistenceConflictError("durable exact operator opt-in is required")
             unresolved = connection.execute(
                 "SELECT COUNT(*) FROM submissions_current WHERE scope_key=? AND state IN (?, ?, ?)",
                 (key, TestSubmissionState.SUBMITTING.value, TestSubmissionState.RECONCILIATION_REQUIRED.value, TestSubmissionState.UNKNOWN_SUBMISSION_STATE.value),
@@ -604,12 +751,12 @@ class SQLiteBrokerTestMutationStore:
                 (key, envelope.trading_date, envelope.sequence, str(prior_notional + envelope.order_notional)),
             )
             connection.execute(
-                "INSERT INTO authorizations VALUES(?, ?, ?, ?, ?)",
-                (key, authorization.authorization_id, envelope.envelope_id, auth_text, auth_digest),
+                "INSERT INTO authorizations VALUES(?, ?, ?, ?, ?, ?)",
+                (key, authorization.authorization_id, envelope.envelope_id, operator_opt_in.operator_opt_in_id, auth_text, auth_digest),
             )
             connection.execute(
-                "INSERT INTO authorization_uses VALUES(?, ?, ?, ?)",
-                (key, authorization.authorization_id, attempt_id, occurred_at),
+                "INSERT INTO authorization_uses VALUES(?, ?, ?, ?, ?)",
+                (key, authorization.authorization_id, operator_opt_in.operator_opt_in_id, attempt_id, occurred_at),
             )
             connection.execute(
                 "INSERT INTO submissions_current VALUES(?, ?, ?, ?, ?, ?, ?)",
@@ -629,8 +776,8 @@ class SQLiteBrokerTestMutationStore:
                 payload_sha256=request_digest,
             )
             connection.execute(
-                "INSERT INTO pre_submit_commits VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (key, authorization.authorization_id, envelope.envelope_id, attempt_id, TEST_PRE_SUBMIT_PERSISTENCE_VERSION, request_digest, submission_digest, audit_sequence, audit_root, fencing_token),
+                "INSERT INTO pre_submit_commits VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (key, authorization.authorization_id, operator_opt_in.operator_opt_in_id, envelope.envelope_id, attempt_id, TEST_PRE_SUBMIT_PERSISTENCE_VERSION, request_digest, submission_digest, audit_sequence, audit_root, fencing_token),
             )
             if fail_before_commit:
                 raise BrokerSafetyStoreError("injected TEST transaction failure")
@@ -662,6 +809,8 @@ class SQLiteBrokerTestMutationStore:
     ) -> BrokerTestSubmissionRecord:
         """Persist fail-closed lost-ACK handling; only provider validation may MATCH."""
 
+        self._assert_lifecycle_integrity(scope)
+
         from tw_stock_tool.broker_adapters.fubon_neo.test_mutation import (
             ValidatedProviderOrderMatch,
         )
@@ -690,7 +839,7 @@ class SQLiteBrokerTestMutationStore:
         }
         with self._transaction() as connection:
             key = self._ensure_scope(connection, scope)
-            self._check_fence(connection, key, owner_id, fencing_token, recorded_at)
+            self._check_fence(scope, owner_id, fencing_token, recorded_at)
             row = connection.execute(
                 "SELECT state, version, artifact_json, artifact_sha256 FROM submissions_current WHERE scope_key=? AND envelope_id=? AND attempt_id=?",
                 (key, envelope.envelope_id, attempt_id),
@@ -739,40 +888,234 @@ class SQLiteBrokerTestMutationStore:
     def recovery_plan(self, scope: BrokerAccountScope) -> BrokerTestMutationRecoveryPlan:
         key = _scope_key(scope)
         reasons: list[str] = []
+        controller_plan = self.controller_store.recovery_plan(scope)
+        if "STORE_OR_AUDIT_CORRUPTION" in controller_plan.blocking_reasons:
+            reasons.append("TEST_PHASE_C_AUTHORITY_CORRUPTION")
         with self._connect(readonly=True) as connection:
             if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 reasons.append("TEST_STORE_CORRUPTION")
-            lease = connection.execute("SELECT fencing_token FROM leases WHERE scope_key=?", (key,)).fetchone()
-            envelope_rows = connection.execute("SELECT artifact_json, artifact_sha256 FROM envelopes WHERE scope_key=?", (key,)).fetchall()
+            scope_row = connection.execute(
+                "SELECT broker_id, environment, account_reference, phase_c_store_id FROM test_scopes WHERE scope_key=?",
+                (key,),
+            ).fetchone()
+            if scope_row is not None and tuple(scope_row) != (
+                scope.broker_id,
+                scope.environment.value,
+                scope.account_reference,
+                self.controller_store.store_id,
+            ):
+                reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            with self.controller_store._connect(readonly=True) as controller:
+                lease = controller.execute(
+                    "SELECT fencing_token FROM leases WHERE scope_key=?",
+                    (_phase_c_scope_key(scope),),
+                ).fetchone()
+            envelope_rows = connection.execute("SELECT envelope_id, artifact_json, artifact_sha256 FROM envelopes WHERE scope_key=?", (key,)).fetchall()
             envelopes: dict[str, BrokerTestMutationEnvelope] = {}
+            policy_rows = connection.execute(
+                "SELECT policy_sha256, artifact_json, artifact_sha256 FROM policies WHERE scope_key=?",
+                (key,),
+            ).fetchall()
+            policies: set[str] = set()
+            for row in policy_rows:
+                try:
+                    value = load_test_mutation_artifact_json(row[1])
+                    if (
+                        type(value) is not BrokerTestMutationPolicy
+                        or test_mutation_artifact_sha256(value) != row[0]
+                        or _digest(row[1].encode()) != row[2]
+                    ):
+                        raise ValueError
+                    policies.add(row[0])
+                except Exception:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
             for row in envelope_rows:
                 try:
-                    value = load_test_mutation_artifact_json(row[0])
-                    if type(value) is not BrokerTestMutationEnvelope or _digest(row[0].encode()) != row[1]:
+                    value = load_test_mutation_artifact_json(row[1])
+                    if type(value) is not BrokerTestMutationEnvelope or value.envelope_id != row[0] or value.policy_sha256 not in policies or _digest(row[1].encode()) != row[2]:
                         raise ValueError
                     envelopes[value.envelope_id] = value
                 except Exception:
-                    reasons.append("TEST_STORE_CORRUPTION")
-            rows = connection.execute("SELECT state, artifact_json, artifact_sha256 FROM submissions_current WHERE scope_key=?", (key,)).fetchall()
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            opt_in_rows = connection.execute(
+                "SELECT operator_opt_in_id, envelope_id, artifact_json, artifact_sha256, issue_audit_sequence FROM operator_opt_ins WHERE scope_key=?",
+                (key,),
+            ).fetchall()
+            opt_ins: dict[str, BrokerTestOperatorOptIn] = {}
+            for row in opt_in_rows:
+                try:
+                    value = load_test_mutation_artifact_json(row[2])
+                    if (
+                        type(value) is not BrokerTestOperatorOptIn
+                        or (value.operator_opt_in_id, value.envelope_id) != tuple(row[:2])
+                        or value.envelope_id not in envelopes
+                        or _digest(row[2].encode()) != row[3]
+                    ):
+                        raise ValueError
+                    issue_audit = connection.execute(
+                        "SELECT event_type, references_json, payload_sha256 FROM audit WHERE scope_key=? AND sequence=?",
+                        (key, row[4]),
+                    ).fetchone()
+                    if (
+                        issue_audit is None
+                        or issue_audit[0] != "TEST_OPERATOR_OPT_IN_ISSUED"
+                        or json.loads(issue_audit[1])
+                        != {
+                            "envelope_id": value.envelope_id,
+                            "operator_opt_in_id": value.operator_opt_in_id,
+                        }
+                        or issue_audit[2] != row[3]
+                    ):
+                        raise ValueError
+                    opt_ins[value.operator_opt_in_id] = value
+                except Exception:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            authorization_rows = connection.execute(
+                "SELECT authorization_id, envelope_id, operator_opt_in_id, artifact_json, artifact_sha256 FROM authorizations WHERE scope_key=?",
+                (key,),
+            ).fetchall()
+            authorizations: dict[str, BrokerTestExecutionAuthorization] = {}
+            for row in authorization_rows:
+                try:
+                    value = load_test_mutation_artifact_json(row[3])
+                    if (
+                        type(value) is not BrokerTestExecutionAuthorization
+                        or (value.authorization_id, value.envelope_id, value.operator_opt_in_id) != tuple(row[:3])
+                        or value.envelope_id not in envelopes
+                        or value.operator_opt_in_id not in opt_ins
+                        or value.operator_opt_in_sha256 != test_mutation_artifact_sha256(opt_ins[value.operator_opt_in_id])
+                        or _digest(row[3].encode()) != row[4]
+                    ):
+                        raise ValueError
+                    authorizations[value.authorization_id] = value
+                except Exception:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            use_rows = connection.execute(
+                "SELECT authorization_id, operator_opt_in_id, attempt_id, used_at FROM authorization_uses WHERE scope_key=?",
+                (key,),
+            ).fetchall()
+            uses_by_authorization = {row[0]: row for row in use_rows}
+            for row in use_rows:
+                authorization = authorizations.get(row[0])
+                if authorization is None or authorization.operator_opt_in_id != row[1]:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            rows = connection.execute("SELECT envelope_id, attempt_id, state, version, artifact_json, artifact_sha256 FROM submissions_current WHERE scope_key=?", (key,)).fetchall()
+            current_by_pair: dict[tuple[str, str], sqlite3.Row] = {}
             for row in rows:
                 try:
-                    value = load_test_mutation_artifact_json(row[1])
-                    if type(value) is not BrokerTestSubmissionRecord or value.state.value != row[0] or _digest(row[1].encode()) != row[2]:
+                    value = load_test_mutation_artifact_json(row[4])
+                    if type(value) is not BrokerTestSubmissionRecord or (value.envelope_id, value.attempt_id, value.state.value, value.version) != tuple(row[:4]) or _digest(row[4].encode()) != row[5]:
                         raise ValueError
+                    current_by_pair[(row[0], row[1])] = row
                 except Exception:
-                    reasons.append("TEST_STORE_CORRUPTION")
-            unresolved = sum(row[0] in {TestSubmissionState.SUBMITTING.value, TestSubmissionState.RECONCILIATION_REQUIRED.value, TestSubmissionState.UNKNOWN_SUBMISSION_STATE.value} for row in rows)
-            active = sum(row[0] in {TestSubmissionState.SUBMITTING.value, TestSubmissionState.PROVIDER_ACKNOWLEDGED.value} for row in rows)
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            unresolved = sum(row[2] in {TestSubmissionState.SUBMITTING.value, TestSubmissionState.RECONCILIATION_REQUIRED.value, TestSubmissionState.UNKNOWN_SUBMISSION_STATE.value} for row in rows)
+            active = sum(row[2] in {TestSubmissionState.SUBMITTING.value, TestSubmissionState.PROVIDER_ACKNOWLEDGED.value} for row in rows)
             if unresolved:
                 reasons.append("TEST_UNRESOLVED_SUBMISSION_STATE")
             if active:
                 reasons.append("TEST_ACTIVE_ORDER_STATE")
-            uses = connection.execute("SELECT COUNT(*) FROM authorization_uses WHERE scope_key=?", (key,)).fetchone()[0]
+            uses = len(use_rows)
             commits = connection.execute(
-                "SELECT envelope_id FROM pre_submit_commits WHERE scope_key=?",
+                "SELECT authorization_id, operator_opt_in_id, envelope_id, attempt_id, persistence_version, request_sha256, submission_sha256, audit_sequence, audit_root_digest, fencing_token FROM pre_submit_commits WHERE scope_key=?",
                 (key,),
             ).fetchall()
-            committed = [envelopes.get(row[0]) for row in commits]
+            binding_rows = connection.execute(
+                "SELECT provider_name, provider_tag, canonical_client_id, envelope_id, phase_c_audit_sequence, phase_c_audit_root, mapping_audit_sequence FROM phase_c_provider_binding_refs WHERE scope_key=?",
+                (key,),
+            ).fetchall()
+            bindings = {row[3]: row for row in binding_rows}
+            committed: list[BrokerTestMutationEnvelope | None] = []
+            for commit in commits:
+                authorization = authorizations.get(commit[0])
+                use = uses_by_authorization.get(commit[0])
+                envelope = envelopes.get(commit[2])
+                pair = (commit[2], commit[3])
+                binding = bindings.get(commit[2])
+                audit_row = connection.execute(
+                    "SELECT record_digest, event_type, references_json, payload_sha256 FROM audit WHERE scope_key=? AND sequence=?",
+                    (key, commit[7]),
+                ).fetchone()
+                first_history = connection.execute(
+                    "SELECT version, state, transition_kind, artifact_sha256 FROM submission_history WHERE scope_key=? AND envelope_id=? AND attempt_id=? AND version=1",
+                    (key, commit[2], commit[3]),
+                ).fetchone()
+                if (
+                    authorization is None
+                    or use is None
+                    or envelope is None
+                    or binding is None
+                    or tuple(use[:3]) != (commit[0], commit[1], commit[3])
+                    or authorization.operator_opt_in_id != commit[1]
+                    or commit[4] != TEST_PRE_SUBMIT_PERSISTENCE_VERSION
+                    or pair not in current_by_pair
+                    or first_history is None
+                    or tuple(first_history) != (
+                        1,
+                        TestSubmissionState.SUBMITTING.value,
+                        "ATOMIC_TEST_PRE_SUBMIT",
+                        commit[6],
+                    )
+                    or audit_row is None
+                    or (audit_row[0], audit_row[1], audit_row[3]) != (commit[8], "TEST_PRE_SUBMIT_COMMITTED", commit[5])
+                    or json.loads(audit_row[2]) != {"authorization_id": commit[0], "envelope_id": commit[2]}
+                ):
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+                committed.append(envelope)
+            if set(uses_by_authorization) != {row[0] for row in commits} or set(authorizations) != {row[0] for row in commits}:
+                reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            if set(current_by_pair) != {(row[2], row[3]) for row in commits}:
+                reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            history_rows = connection.execute(
+                "SELECT envelope_id, attempt_id, version, state, transition_kind, artifact_json, artifact_sha256 FROM submission_history WHERE scope_key=? ORDER BY envelope_id, attempt_id, version",
+                (key,),
+            ).fetchall()
+            histories: dict[tuple[str, str], list[sqlite3.Row]] = {}
+            for history in history_rows:
+                histories.setdefault((history[0], history[1]), []).append(history)
+            if set(histories) != set(current_by_pair):
+                reasons.append("TEST_LIFECYCLE_CORRUPTION")
+            allowed_version_two = {
+                "VALIDATED_LOST_ACK:MATCHED": TestSubmissionState.PROVIDER_ACKNOWLEDGED.value,
+                "VALIDATED_LOST_ACK:NO_MATCH": TestSubmissionState.RECONCILIATION_REQUIRED.value,
+                "VALIDATED_LOST_ACK:AMBIGUOUS": TestSubmissionState.UNKNOWN_SUBMISSION_STATE.value,
+            }
+            for pair, history in histories.items():
+                if pair not in current_by_pair:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
+                    continue
+                current = current_by_pair[pair]
+                try:
+                    if [item[2] for item in history] != list(range(1, current[3] + 1)) or len(history) not in (1, 2):
+                        raise ValueError
+                    first = history[0]
+                    if (first[2], first[3], first[4]) != (1, TestSubmissionState.SUBMITTING.value, "ATOMIC_TEST_PRE_SUBMIT"):
+                        raise ValueError
+                    if len(history) == 2 and allowed_version_two.get(history[1][4]) != history[1][3]:
+                        raise ValueError
+                    for item in history:
+                        value = load_test_mutation_artifact_json(item[5])
+                        if type(value) is not BrokerTestSubmissionRecord or (value.envelope_id, value.attempt_id, value.version, value.state.value) != tuple(item[:4]) or _digest(item[5].encode()) != item[6]:
+                            raise ValueError
+                    if (history[-1][2], history[-1][3], history[-1][5], history[-1][6]) != (current[3], current[2], current[4], current[5]):
+                        raise ValueError
+                    if len(history) == 2:
+                        match_state = history[1][4].split(":", 1)[1]
+                        audits = connection.execute(
+                            "SELECT references_json, payload_sha256 FROM audit WHERE scope_key=? AND event_type='TEST_LOST_ACK_RESOLVED'",
+                            (key,),
+                        ).fetchall()
+                        exact = [
+                            item
+                            for item in audits
+                            if json.loads(item[0])
+                            == {"attempt_id": pair[1], "match_state": match_state}
+                            and item[1] == history[1][6]
+                        ]
+                        if len(exact) != 1:
+                            raise ValueError
+                except Exception:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
             high_rows = connection.execute(
                 "SELECT trading_date, maximum_sequence, submitted_notional FROM high_water WHERE scope_key=?",
                 (key,),
@@ -780,7 +1123,7 @@ class SQLiteBrokerTestMutationStore:
             expected_high: dict[str, tuple[int, Decimal]] = {}
             for envelope in committed:
                 if envelope is None:
-                    reasons.append("TEST_STORE_CORRUPTION")
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
                     continue
                 prior = expected_high.get(envelope.trading_date, (0, Decimal("0")))
                 expected_high[envelope.trading_date] = (
@@ -818,6 +1161,35 @@ class SQLiteBrokerTestMutationStore:
                     reasons.append("TEST_AUDIT_CORRUPTION")
                     break
             audit = None if not audit_rows else audit_rows[-1]
+            for binding in binding_rows:
+                envelope = envelopes.get(binding[3])
+                try:
+                    if envelope is None:
+                        raise ValueError
+                    with self.controller_store._connect(readonly=True) as controller:
+                        mapping = controller.execute(
+                            "SELECT canonical_client_id FROM provider_ids WHERE scope_key=? AND provider_name=? AND provider_client_id=?",
+                            (_phase_c_scope_key(scope), binding[0], binding[1]),
+                        ).fetchone()
+                        phase_c_audit = controller.execute(
+                            "SELECT record_digest FROM audit WHERE scope_key=? AND sequence=?",
+                            (_phase_c_scope_key(scope), binding[4]),
+                        ).fetchone()
+                    mapping_audit = connection.execute(
+                        "SELECT event_type, references_json FROM audit WHERE scope_key=? AND sequence=?",
+                        (key, binding[6]),
+                    ).fetchone()
+                    if mapping is None or mapping[0] != binding[2] or binding[2] != envelope.canonical_client_order_id or phase_c_audit is None or phase_c_audit[0] != binding[5]:
+                        raise ValueError
+                    if (
+                        mapping_audit is None
+                        or mapping_audit[0] not in {"TEST_PROVIDER_TAG_MAPPED", "TEST_PROVIDER_TAG_REBOUND"}
+                        or json.loads(mapping_audit[1])
+                        != {"envelope_id": envelope.envelope_id, "provider_name": binding[0]}
+                    ):
+                        raise ValueError
+                except Exception:
+                    reasons.append("TEST_LIFECYCLE_CORRUPTION")
         return BrokerTestMutationRecoveryPlan(
             scope,
             None if lease is None else lease[0],

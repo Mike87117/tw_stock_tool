@@ -12,13 +12,16 @@ from typing import Any, NoReturn, Union, get_args, get_origin, get_type_hints
 from tw_stock_tool.broker_safety.test_mutation_models import (
     TEST_AUTHORIZATION_ARTIFACT_TYPE,
     TEST_ENVELOPE_ARTIFACT_TYPE,
+    TEST_OPERATOR_OPT_IN_ARTIFACT_TYPE,
     TEST_POLICY_ARTIFACT_TYPE,
     TEST_SUBMISSION_ARTIFACT_TYPE,
     BrokerTestExecutionAuthorization,
     BrokerTestMutationEnvelope,
     BrokerTestMutationModelError,
     BrokerTestMutationPolicy,
+    BrokerTestOperatorOptIn,
     BrokerTestSubmissionRecord,
+    _TEST_OPT_IN_AUTHORITY,
 )
 
 
@@ -29,6 +32,7 @@ class BrokerTestMutationSerializationError(ValueError):
 _ARTIFACTS = {
     TEST_POLICY_ARTIFACT_TYPE: BrokerTestMutationPolicy,
     TEST_ENVELOPE_ARTIFACT_TYPE: BrokerTestMutationEnvelope,
+    TEST_OPERATOR_OPT_IN_ARTIFACT_TYPE: BrokerTestOperatorOptIn,
     TEST_AUTHORIZATION_ARTIFACT_TYPE: BrokerTestExecutionAuthorization,
     TEST_SUBMISSION_ARTIFACT_TYPE: BrokerTestSubmissionRecord,
 }
@@ -115,12 +119,13 @@ def _decode(value: Any, annotation: Any, path: str) -> Any:
         payload = _strict_object(value, annotation, path)
         hints = get_type_hints(annotation)
         try:
-            return annotation(
-                **{
-                    item.name: _decode(payload[item.name], hints[item.name], f"{path}.{item.name}")
-                    for item in fields(annotation)
-                }
-            )
+            kwargs = {
+                item.name: _decode(payload[item.name], hints[item.name], f"{path}.{item.name}")
+                for item in fields(annotation)
+            }
+            if annotation is BrokerTestOperatorOptIn:
+                kwargs["_authority"] = _TEST_OPT_IN_AUTHORITY
+            return annotation(**kwargs)
         except (BrokerTestMutationModelError, TypeError, ValueError) as exc:
             raise BrokerTestMutationSerializationError(f"{path}: model validation failed: {exc}") from exc
     if annotation in (str, int, bool):
