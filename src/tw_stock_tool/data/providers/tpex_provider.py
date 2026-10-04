@@ -6,6 +6,8 @@ from typing import Any
 import pandas as pd
 import requests
 
+from tw_stock_tool.data.providers.response_validation import month_has_data
+
 
 def download_tpex_stock(
     stock_id: str,
@@ -47,13 +49,17 @@ def download_tpex_stock(
         if hasattr(response, "raise_for_status"):
             response.raise_for_status()
         data = response.json()
-        if str(data.get("stat", "")).lower() != "ok":
+        if not month_has_data(data, "TPEX", month, error_type):
             continue
-        tables = data.get("tables", [])
-        month_rows = tables[0].get("data", []) if tables else []
+        tables = data.get("tables")
+        if not isinstance(tables, list) or (tables and not isinstance(tables[0], dict)):
+            raise error_type(f"TPEX {month:%Y-%m} response is missing a valid data table.")
+        month_rows = tables[0].get("data") if tables else []
+        if not isinstance(month_rows, list):
+            raise error_type(f"TPEX {month:%Y-%m} response is missing a valid data table.")
         for row in month_rows:
-            if len(row) < 7:
-                continue
+            if not isinstance(row, list) or len(row) < 7:
+                raise error_type(f"TPEX {month:%Y-%m} contains an incomplete price row.")
             rows.append(
                 {
                     "Date": parse_tpex_date(row[0], month),
@@ -67,6 +73,8 @@ def download_tpex_stock(
 
     if rows:
         return finalize_official_rows(rows, stock_id, ".TWO", start, period)
+    if period != "1d":
+        raise error_type(f"TPEX fallback has no historical data: {stock_id}.TWO ({period}).")
     return download_latest_quote(stock_id, period, start)
 
 

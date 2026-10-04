@@ -104,6 +104,7 @@ def download_tw_stock(
                     write_cache(df, path)
                 except Exception as exc:
                     errors.append(f"{symbol} cache write failed: {exc}")
+                    print(f"[WARNING] {symbol} cache write failed: {exc}. Returning live data without updating the cache.", file=sys.stderr)
                 if verbose:
                     print(f"{symbol}: Downloaded")
                 return df, symbol
@@ -130,6 +131,7 @@ def download_tw_stock(
                     write_cache(df, path)
                 except Exception as exc:
                     errors.append(f"{symbol} cache write failed: {exc}")
+                    print(f"[WARNING] {symbol} cache write failed: {exc}. Returning live data without updating the cache.", file=sys.stderr)
                 if verbose:
                     source = "TWSE" if suffix == ".TW" else "TPEX"
                     print(f"{symbol}: Downloaded from {source} fallback")

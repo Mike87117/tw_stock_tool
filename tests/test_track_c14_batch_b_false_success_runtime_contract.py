@@ -86,7 +86,7 @@ DIRECT_CASES = (
         ),
         "boundary": "collect_stock_ids",
         "success": ["2330"],
-        "success_patches": {"scan_ai_stocks": pd.DataFrame({"Stock": ["2330"]})},
+        "success_patches": {"scan_ai_stocks": pd.DataFrame({"Stock": ["2330"], "Status": ["OK"]})},
         "exports": ("export_ai_stock_ranking",),
         "marker": "AI stock scanner is for research only",
         "error": "Error:",
@@ -112,7 +112,7 @@ DIRECT_CASES = (
         ),
         "boundary": "run_ai_prediction_report",
         "success": {
-            "Summary": pd.DataFrame({"Stock": ["2330"]}),
+            "Summary": pd.DataFrame({"Stock": ["2330"], "Status": ["OK"]}),
             "Detail": pd.DataFrame({"Window": [1]}),
         },
         "exports": ("export_ai_prediction_report_excel",),
@@ -159,14 +159,14 @@ def _package_harness(spec: dict[str, object], success: bool) -> str:
     if spec["name"] == "ai_stock_scanner" and success:
         setup = (
             "module.collect_stock_ids = lambda *args, **kwargs: ['2330']\n"
-            "module.scan_ai_stocks = lambda *args, **kwargs: module.pd.DataFrame({'Stock': ['2330']})"
+            "module.scan_ai_stocks = lambda *args, **kwargs: module.pd.DataFrame({'Stock': ['2330'], 'Status': ['OK']})"
         )
     elif success:
         setup = f"module.{boundary} = lambda *args, **kwargs: module.pd.DataFrame({{'Value': [1]}})"
         if spec["name"] == "ai_prediction_report":
             setup = (
                 "module.run_ai_prediction_report = lambda *args, **kwargs: "
-                "{'Summary': module.pd.DataFrame({'Stock': ['2330']}), 'Detail': module.pd.DataFrame({'Window': [1]})}"
+                "{'Summary': module.pd.DataFrame({'Stock': ['2330'], 'Status': ['OK']}), 'Detail': module.pd.DataFrame({'Window': [1]})}"
             )
     else:
         setup = (
@@ -193,7 +193,7 @@ def _unified_harness(route: str, target: object, args: list[str], boundary: str,
         if route == "ai-scan":
             setup = (
                 "target.collect_stock_ids = lambda *args, **kwargs: ['2330']\n"
-                "target.scan_ai_stocks = lambda *args, **kwargs: target.pd.DataFrame({'Stock': ['2330']})\n"
+                "target.scan_ai_stocks = lambda *args, **kwargs: target.pd.DataFrame({'Stock': ['2330'], 'Status': ['OK']})\n"
                 "target.export_ai_stock_ranking = lambda *args, **kwargs: None"
             )
         else:
@@ -337,7 +337,7 @@ class BatchBFalseSuccessRuntimeContractTest(unittest.TestCase):
                         stack.enter_context(patch.object(module, boundary, return_value=pd.DataFrame({"Strategy": ["ma_cross"]})))
                     else:
                         stack.enter_context(patch.object(module, "collect_stock_ids", return_value=["2330"]))
-                        stack.enter_context(patch.object(module, "scan_ai_stocks", return_value=pd.DataFrame({"Stock": ["2330"]})))
+                        stack.enter_context(patch.object(module, "scan_ai_stocks", return_value=pd.DataFrame({"Stock": ["2330"], "Status": ["OK"]})))
                         stack.enter_context(patch.object(module, "export_ai_stock_ranking", return_value=None))
                     with redirect_stdout(StringIO()):
                         status = twstock_cli.main(argv)

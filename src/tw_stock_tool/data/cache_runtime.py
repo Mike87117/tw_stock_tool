@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import pandas as pd
 
@@ -35,5 +37,19 @@ def _read_cache(path: Path) -> pd.DataFrame:
 
 
 def _write_cache(df: pd.DataFrame, path: Path) -> None:
+    """Replace a cache only after a complete write, preserving it on failure."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path)
+    temporary_path = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", delete=False,
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp",
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            df.to_csv(temporary)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)

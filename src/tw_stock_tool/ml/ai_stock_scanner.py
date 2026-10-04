@@ -14,7 +14,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from tw_stock_tool.reports.ai_prediction_report import run_ai_prediction_report
+from tw_stock_tool.reports.ai_prediction_report import prediction_status, run_ai_prediction_report
 from tw_stock_tool.utils.config import DEFAULT_PERIOD, OUTPUT_DIR
 from tw_stock_tool.analysis.scanner import load_stock_ids_from_file, normalize_stock_ids
 from tw_stock_tool.data import stock_list_updater as stock_list_updater_module
@@ -76,21 +76,25 @@ def collect_stock_ids(
 
 def _summary_to_row(stock_id: str, summary: pd.DataFrame) -> dict[str, object]:
     row = summary.iloc[0].to_dict()
+    status = prediction_status(int(row.get("Windows", 0)), int(row.get("Error Windows", 0)))
+    error = row.get("Error", "")
+    if status != "OK" and not error:
+        error = f"{row.get('Error Windows', 0)} of {row.get('Windows', 0)} prediction windows failed."
     return {
         "Rank": None,
         "Stock": stock_id,
         "Period": row.get("Period", ""),
         "Horizon": row.get("Horizon", None),
         "Windows": row.get("Windows", None),
-        "Avg Accuracy": row.get("Avg Accuracy", None),
-        "Avg Precision": row.get("Avg Precision", None),
-        "Avg Recall": row.get("Avg Recall", None),
-        "Avg F1": row.get("Avg F1", None),
-        "Avg Test Positive Rate %": row.get("Avg Test Positive Rate %", None),
-        "Avg Predicted Positive Rate %": row.get("Avg Predicted Positive Rate %", None),
+        "Avg Accuracy": row.get("Avg Accuracy", None) if status != "ERROR" else None,
+        "Avg Precision": row.get("Avg Precision", None) if status != "ERROR" else None,
+        "Avg Recall": row.get("Avg Recall", None) if status != "ERROR" else None,
+        "Avg F1": row.get("Avg F1", None) if status != "ERROR" else None,
+        "Avg Test Positive Rate %": row.get("Avg Test Positive Rate %", None) if status != "ERROR" else None,
+        "Avg Predicted Positive Rate %": row.get("Avg Predicted Positive Rate %", None) if status != "ERROR" else None,
         "Error Windows": row.get("Error Windows", None),
-        "Status": "OK",
-        "Error": "",
+        "Status": status,
+        "Error": error,
     }
 
 
@@ -144,13 +148,15 @@ def scan_one_stock(
 
 
 def rank_ai_stock_results(rows: list[dict[str, object]]) -> pd.DataFrame:
-    """Sort OK rows by model metrics, then append error rows."""
+    """Rank successful and partial runs, then append unranked failures."""
     result = pd.DataFrame(rows, columns=AI_STOCK_RANKING_COLUMNS)
     if result.empty:
         return result
 
-    ok = result[result["Status"] == "OK"].copy()
-    errors = result[result["Status"] != "OK"].copy()
+    valid = result["Status"].isin(["OK", "PARTIAL"])
+    ok = result[valid].copy()
+    errors = result[~valid].copy()
+    errors["Rank"] = None
     for column in ["Avg F1", "Avg Accuracy", "Error Windows"]:
         ok[column] = pd.to_numeric(ok[column], errors="coerce")
     ok = ok.sort_values(
@@ -289,6 +295,11 @@ def main() -> int | None:
         if output_path:
             print(f"\nAI stock ranking exported: {output_path}")
         print("\nAI stock scanner is for research only and is not investment advice.")
+        if ranking.empty or not ranking["Status"].isin(["OK", "PARTIAL"]).any():
+            print("Error: No stocks have valid prediction windows.")
+            return 1
+        if (ranking["Status"] != "OK").any():
+            print("Warning: Some stocks or prediction windows failed; see Status and Error.")
     except Exception as exc:
         print(f"Error: {exc}")
         return 1

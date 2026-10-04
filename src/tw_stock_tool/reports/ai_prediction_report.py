@@ -30,6 +30,8 @@ SUMMARY_COLUMNS = [
     "Avg Test Positive Rate %",
     "Avg Predicted Positive Rate %",
     "Error Windows",
+    "Status",
+    "Error",
 ]
 
 
@@ -49,12 +51,21 @@ def _error_rows(detail_df: pd.DataFrame) -> pd.DataFrame:
     return detail_df[detail_df["Error"].astype(str) != ""].copy()
 
 
-def _mean_numeric(df: pd.DataFrame, column: str) -> float:
+def prediction_status(windows: int, error_windows: int) -> str:
+    """Classify a prediction run without treating failed windows as results."""
+    if windows < 0 or error_windows < 0 or error_windows > windows:
+        raise AIPredictionReportError("Invalid prediction window counts.")
+    if windows == error_windows:
+        return "ERROR"
+    return "PARTIAL" if error_windows else "OK"
+
+
+def _mean_numeric(df: pd.DataFrame, column: str) -> float | None:
     if df.empty or column not in df.columns:
-        return 0.0
+        return None
     value = pd.to_numeric(df[column], errors="coerce").mean()
     if pd.isna(value):
-        return 0.0
+        return None
     return round(float(value), 4)
 
 
@@ -70,6 +81,10 @@ def build_summary(
     """Build one-row summary statistics from baseline ML detail results."""
     ok = _ok_rows(detail_df)
     errors = _error_rows(detail_df)
+    status = prediction_status(len(detail_df), len(errors))
+    error = "; ".join(dict.fromkeys(errors["Error"].astype(str))) if not errors.empty else ""
+    if detail_df.empty:
+        error = "No prediction windows were evaluated."
     row = {
         "Stock": stock_id,
         "Period": period,
@@ -77,7 +92,7 @@ def build_summary(
         "Train Size": train_size,
         "Test Size": test_size,
         "Step Size": test_size if step_size is None else step_size,
-        "Windows": int(detail_df["Window"].nunique()) if "Window" in detail_df.columns else 0,
+        "Windows": len(detail_df),
         "Avg Accuracy": _mean_numeric(ok, "Accuracy"),
         "Avg Precision": _mean_numeric(ok, "Precision"),
         "Avg Recall": _mean_numeric(ok, "Recall"),
@@ -85,6 +100,8 @@ def build_summary(
         "Avg Test Positive Rate %": _mean_numeric(ok, "Test Positive Rate %"),
         "Avg Predicted Positive Rate %": _mean_numeric(ok, "Predicted Positive Rate %"),
         "Error Windows": len(errors),
+        "Status": status,
+        "Error": error,
     }
     return pd.DataFrame([row], columns=SUMMARY_COLUMNS)
 
@@ -219,6 +236,12 @@ def main() -> int | None:
         if output_path:
             print(f"\nAI prediction report exported: {output_path}")
         print("\nBaseline ML report is for research only and is not investment advice.")
+        summary = frames["Summary"].iloc[0]
+        if summary["Status"] == "ERROR":
+            print(f"Error: No valid prediction windows. {summary['Error']}")
+            return 1
+        if summary["Status"] == "PARTIAL":
+            print(f"Warning: {summary['Error Windows']} prediction windows failed. {summary['Error']}")
     except Exception as exc:
         print(f"Error: {exc}")
         return 1

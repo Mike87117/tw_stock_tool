@@ -54,6 +54,7 @@ class TpexProviderTest(unittest.TestCase):
         months=None,
         finalize=None,
         latest=None,
+        period="2mo",
     ):
         if finalize is None:
             finalize = Mock(return_value=pd.DataFrame({"Close": [11.0]}))
@@ -66,7 +67,7 @@ class TpexProviderTest(unittest.TestCase):
         ) as request_get:
             result = tpex_provider.download_tpex_stock(
                 "6488",
-                "2mo",
+                period,
                 "1d",
                 period_start=Mock(return_value=self.start),
                 month_starts=Mock(return_value=self.months if months is None else months),
@@ -80,7 +81,7 @@ class TpexProviderTest(unittest.TestCase):
         return result, request_get, finalize, latest
 
     def test_monthly_requests_map_rows_and_finalize_without_latest_fallback(self) -> None:
-        first = _Response({"stat": "not ok"})
+        first = _Response({"stat": "no data"})
         second = _Response(
             {
                 "stat": "ok",
@@ -157,15 +158,10 @@ class TpexProviderTest(unittest.TestCase):
         )
         latest.assert_not_called()
 
-    def test_non_ok_empty_tables_and_short_rows_fall_back_to_latest_quote(self) -> None:
+    def test_explicit_no_data_and_empty_tables_allow_latest_quote_for_one_day(self) -> None:
         responses = [
-            _Response({"stat": "fail"}),
-            _Response(
-                {
-                    "stat": "OK",
-                    "tables": [{"data": [["113/02/05", "1", "too short"]]}],
-                }
-            ),
+            _Response({"stat": "no data"}),
+            _Response({"stat": "OK", "tables": []}),
         ]
         expected = pd.DataFrame({"Close": [12.0]})
         latest = Mock(return_value=expected)
@@ -175,11 +171,46 @@ class TpexProviderTest(unittest.TestCase):
             responses=responses,
             finalize=finalize,
             latest=latest,
+            period="1d",
         )
 
         self.assertIs(actual, expected)
         finalize.assert_not_called()
-        latest.assert_called_once_with("6488", "2mo", self.start)
+        latest.assert_called_once_with("6488", "1d", self.start)
+
+    def test_no_history_does_not_substitute_latest_quote_for_requested_period(self) -> None:
+        finalize = Mock()
+        latest = Mock()
+        with self.assertRaisesRegex(RuntimeError, "TPEX fallback has no historical data"):
+            self._download_monthly(responses=[_Response({"stat": "no data"})] * 2,
+                                   finalize=finalize, latest=latest)
+        finalize.assert_not_called()
+        latest.assert_not_called()
+
+    def test_unknown_status_rejects_partial_history_without_latest_fallback(self) -> None:
+        responses = [
+            _Response({"stat": "OK", "tables": [{"data": [["113/01/05", "1000", "", "10", "12", "9", "11"]]}]}),
+            _Response({"stat": "service unavailable"}),
+        ]
+        finalize = Mock()
+        latest = Mock()
+        with self.assertRaisesRegex(RuntimeError, "TPEX 2024-02 request failed: service unavailable"):
+            self._download_monthly(responses=responses, finalize=finalize, latest=latest)
+        finalize.assert_not_called()
+        latest.assert_not_called()
+
+    def test_invalid_status_and_tables_are_rejected_with_month(self) -> None:
+        for payload in ({}, [], {"stat": "FAIL"}, {"stat": "OK"},
+                        {"stat": "OK", "tables": [{}]},
+                        {"stat": "OK", "tables": [{"data": [["113/01/05", "too short"]]}]}):
+            with self.subTest(payload=payload):
+                finalize = Mock()
+                latest = Mock()
+                with self.assertRaisesRegex(RuntimeError, "TPEX 2024-01"):
+                    self._download_monthly(responses=[_Response(payload)], months=[self.months[0]],
+                                           finalize=finalize, latest=latest)
+                finalize.assert_not_called()
+                latest.assert_not_called()
 
     def test_monthly_http_error_propagates_before_json_or_latest_fallback(self) -> None:
         response = _Response({}, error=RuntimeError("monthly http failure"))

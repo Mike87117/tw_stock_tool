@@ -58,7 +58,7 @@ class TwseProviderTest(unittest.TestCase):
         return result, request_get, finalize
 
     def test_requests_each_month_and_maps_rows_before_finalizing(self) -> None:
-        first = _Response({"stat": "not ok", "data": []})
+        first = _Response({"stat": "很抱歉，沒有符合條件的資料!", "data": []})
         second = _Response(
             {
                 "stat": "OK",
@@ -128,9 +128,9 @@ class TwseProviderTest(unittest.TestCase):
             ],
         )
 
-    def test_non_ok_months_are_skipped_and_empty_rows_reach_finalizer(self) -> None:
+    def test_explicit_no_data_months_are_skipped_and_empty_rows_reach_finalizer(self) -> None:
         responses = [
-            _Response({"stat": "FAIL"}),
+            _Response({"stat": "很抱歉，沒有符合條件的資料!"}),
             _Response({"stat": "no data"}),
         ]
         finalize = Mock(side_effect=RuntimeError("no official rows"))
@@ -139,6 +139,25 @@ class TwseProviderTest(unittest.TestCase):
             self._download(responses=responses, finalize=finalize)
 
         finalize.assert_called_once_with([], "2330", ".TW", self.start, "2mo")
+
+    def test_unknown_status_rejects_partial_history_before_finalization(self) -> None:
+        responses = [
+            _Response({"stat": "OK", "data": [["113/01/05", "1000", "", "10", "12", "9", "11"]]}),
+            _Response({"stat": "service unavailable"}),
+        ]
+        finalize = Mock()
+        with self.assertRaisesRegex(RuntimeError, "TWSE 2024-02 request failed: service unavailable"):
+            self._download(responses=responses, finalize=finalize)
+        finalize.assert_not_called()
+
+    def test_invalid_status_and_tables_are_rejected_with_month(self) -> None:
+        for payload in ({}, [], {"stat": "FAIL"}, {"stat": "OK"},
+                        {"stat": "OK", "data": [["113/01/05", "too short"]]}):
+            with self.subTest(payload=payload):
+                finalize = Mock()
+                with self.assertRaisesRegex(RuntimeError, "TWSE 2024-01"):
+                    self._download(responses=[_Response(payload)], months=[self.months[0]], finalize=finalize)
+                finalize.assert_not_called()
 
     def test_http_error_propagates_before_json_and_finalization(self) -> None:
         response = _Response({}, error=RuntimeError("http failure"))

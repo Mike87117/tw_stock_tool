@@ -174,11 +174,26 @@ class FallbackOrchestrationTest(unittest.TestCase):
         deps["download_yfinance"].return_value = downloaded
         deps["write_cache"].side_effect = RuntimeError("disk full")
 
-        actual, symbol = self._run(deps)
+        with redirect_stderr(StringIO()) as stderr:
+            actual, symbol = self._run(deps)
 
         self.assertIs(actual, downloaded)
         self.assertEqual(symbol, "2330.TW")
         deps["format_no_data_error"].assert_not_called()
+        self.assertIn("cache write failed: disk full", stderr.getvalue())
+        self.assertIn("Returning live data", stderr.getvalue())
+
+    def test_official_cache_write_failure_returns_data_with_warning(self) -> None:
+        deps = self._deps()
+        official = _frame(50)
+        deps["download_official"].side_effect = None
+        deps["download_official"].return_value = official
+        deps["write_cache"].side_effect = RuntimeError("disk full")
+        with redirect_stderr(StringIO()) as stderr:
+            actual, symbol = self._run(deps, auto_adjust=False)
+        self.assertIs(actual, official)
+        self.assertEqual(symbol, "2330.TW")
+        self.assertIn("cache write failed: disk full", stderr.getvalue())
 
     def test_official_fallback_runs_after_all_yahoo_candidates_when_unadjusted(self) -> None:
         deps = self._deps()

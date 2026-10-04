@@ -6,6 +6,8 @@ from typing import Any
 import pandas as pd
 import requests
 
+from tw_stock_tool.data.providers.response_validation import month_has_data
+
 
 def download_twse_stock(
     stock_id: str,
@@ -46,9 +48,14 @@ def download_twse_stock(
         if hasattr(response, "raise_for_status"):
             response.raise_for_status()
         data = response.json()
-        if data.get("stat") != "OK":
+        if not month_has_data(data, "TWSE", month, error_type):
             continue
-        for row in data.get("data", []):
+        month_rows = data.get("data")
+        if not isinstance(month_rows, list):
+            raise error_type(f"TWSE {month:%Y-%m} response is missing a valid data table.")
+        for row in month_rows:
+            if not isinstance(row, list) or len(row) < 7:
+                raise error_type(f"TWSE {month:%Y-%m} contains an incomplete price row.")
             rows.append(
                 {
                     "Date": parse_roc_date(row[0]),
