@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Union
 from datetime import datetime
 
+from tw_stock_tool.backtesting.window_results import valid_window_rows, window_outcome
+
 WINDOW_CANDIDATES = [
     "Window",
     "Fold",
@@ -72,7 +74,7 @@ def build_walk_forward_report_data(result: Union[pd.DataFrame, dict[str, Any], N
         "Window Columns": [],
         "Metric Columns": [],
         "Results": pd.DataFrame(),
-        "Summary": {},
+        "Summary": {"Rows": 0, **window_outcome(pd.DataFrame())},
         "Best Window": None,
         "Notes": [
             "Research report only, not investment advice.",
@@ -103,6 +105,7 @@ def build_walk_forward_report_data(result: Union[pd.DataFrame, dict[str, Any], N
         df = pd.DataFrame()
 
     data["Results"] = df
+    data["Summary"] = {"Rows": len(df), **window_outcome(df)}
 
     if df.empty:
         return data
@@ -114,6 +117,8 @@ def build_walk_forward_report_data(result: Union[pd.DataFrame, dict[str, Any], N
     if not data["Metric Columns"]:
         data["Metric Columns"] = [c for c in df.columns if c in METRIC_CANDIDATES]
 
+    # Failed evaluations remain in Results for diagnosis, but cannot rank.
+    valid_df = valid_window_rows(df)
     # Best Window logic
     sort_cols = [
         "Test Sharpe Ratio",
@@ -129,32 +134,32 @@ def build_walk_forward_report_data(result: Union[pd.DataFrame, dict[str, Any], N
             break
 
     if sort_col:
-        temp_df = df.copy()
+        temp_df = valid_df.copy()
         temp_df[sort_col] = pd.to_numeric(temp_df[sort_col], errors='coerce')
-        sorted_df = df.loc[temp_df[sort_col].sort_values(ascending=False).index]
+        sorted_df = temp_df.dropna(subset=[sort_col]).sort_values(sort_col, ascending=False, kind="mergesort")
     else:
-        sorted_df = df
+        sorted_df = valid_df
 
     if not sorted_df.empty:
         data["Best Window"] = sorted_df.iloc[0].to_dict()
 
     # Summary logic
-    summary: dict[str, Any] = {"Rows": len(df)}
+    summary: dict[str, Any] = data["Summary"]
 
     if "Test Sharpe Ratio" in df.columns:
-        numeric_col = pd.to_numeric(df["Test Sharpe Ratio"], errors='coerce').dropna()
+        numeric_col = pd.to_numeric(valid_df["Test Sharpe Ratio"], errors='coerce').dropna()
         if not numeric_col.empty:
             summary["Best Test Sharpe Ratio"] = numeric_col.max()
             summary["Average Test Sharpe Ratio"] = numeric_col.mean()
 
     if "Test Total Return %" in df.columns:
-        numeric_col = pd.to_numeric(df["Test Total Return %"], errors='coerce').dropna()
+        numeric_col = pd.to_numeric(valid_df["Test Total Return %"], errors='coerce').dropna()
         if not numeric_col.empty:
             summary["Best Test Total Return %"] = numeric_col.max()
             summary["Average Test Total Return %"] = numeric_col.mean()
 
     if "Test Max Drawdown %" in df.columns:
-        numeric_col = pd.to_numeric(df["Test Max Drawdown %"], errors='coerce').dropna()
+        numeric_col = pd.to_numeric(valid_df["Test Max Drawdown %"], errors='coerce').dropna()
         if not numeric_col.empty:
             summary["Worst Test Max Drawdown %"] = numeric_col.min()
 

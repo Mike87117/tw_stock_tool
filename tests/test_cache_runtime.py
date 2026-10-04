@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tempfile
+from threading import Event
 import unittest
 from unittest.mock import patch
 
@@ -71,6 +72,47 @@ class AtomicCacheWriteTest(unittest.TestCase):
             actual = cache_runtime._read_cache(path)
             pd.testing.assert_frame_equal(actual, _frame(actual.iloc[0]["Open"]), check_freq=False)
             self.assertEqual(list(path.parent.iterdir()), [path])
+
+    def test_writer_waits_for_active_reader_and_both_get_complete_data(self):
+        reader_started = Event()
+        writer_started = Event()
+        release_reader = Event()
+        replacement_started = Event()
+        original_read_csv = pd.read_csv
+        original_replace = cache_runtime.os.replace
+
+        def blocked_read(path, **kwargs):
+            with open(path, encoding="utf-8") as stream:
+                reader_started.set()
+                if not release_reader.wait(5):
+                    raise RuntimeError("reader was not released")
+                return original_read_csv(stream, **kwargs)
+
+        def replace(source, destination):
+            replacement_started.set()
+            return original_replace(source, destination)
+
+        def write(path):
+            writer_started.set()
+            cache_runtime._write_cache(_frame(200), path)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "prices.csv"
+            cache_runtime._write_cache(_frame(), path)
+            with patch.object(pd, "read_csv", side_effect=blocked_read), \
+                 patch.object(cache_runtime.os, "replace", side_effect=replace), \
+                 ThreadPoolExecutor(max_workers=2) as executor:
+                reader = executor.submit(cache_runtime._read_cache, path)
+                try:
+                    self.assertTrue(reader_started.wait(5))
+                    writer = executor.submit(write, path)
+                    self.assertTrue(writer_started.wait(5))
+                    self.assertFalse(replacement_started.wait(.05))
+                finally:
+                    release_reader.set()
+                pd.testing.assert_frame_equal(reader.result(timeout=5), _frame(), check_freq=False)
+                writer.result(timeout=5)
+            pd.testing.assert_frame_equal(cache_runtime._read_cache(path), _frame(200), check_freq=False)
 
 
 if __name__ == "__main__":

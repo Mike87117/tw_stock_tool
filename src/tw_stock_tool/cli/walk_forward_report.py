@@ -93,6 +93,7 @@ def main() -> int | None:
             },
             "Results": wf_df,
         }
+        report_data = build_walk_forward_report_data(result_dict)
 
         out_dir = Path(args.output_dir)
 
@@ -107,16 +108,22 @@ def main() -> int | None:
             print(f"Markdown report: {md_path}")
 
         if args.output_excel is None and args.output_md is None:
-            print("Walk forward finished. Summary:")
+            print("Walk forward finished. Summary:" if report_data["Summary"]["Status"] == "OK" else "Walk forward summary:")
             print(f"  Total Windows Evaluated: {len(wf_df)}")
             if not wf_df.empty:
-                report_data = build_walk_forward_report_data(result_dict)
                 best_window = report_data.get("Best Window")
                 if best_window:
                     print(f"  Top Walk-Forward Strategy: {best_window.get('Strategy', 'N/A')}")
                     print(f"  Top Walk-Forward Parameters: {best_window.get('Parameters', 'N/A')}")
                     print(f"  Top Walk-Forward Test Total Return: {best_window.get('Test Total Return %', 0)}%")
                     print(f"  Top Walk-Forward Test Sharpe Ratio: {best_window.get('Test Sharpe Ratio', 'N/A')}")
+
+        summary = report_data["Summary"]
+        if summary["Status"] == "ERROR":
+            print(f"Error: No valid walk-forward windows. {summary['Error']}")
+            return 1
+        if summary["Status"] == "PARTIAL":
+            print(f"Warning: {summary['Error Rows']} walk-forward evaluations failed. {summary['Error']}")
 
     except Exception as exc:
         print(f"Error: {exc}")

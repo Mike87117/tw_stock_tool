@@ -297,13 +297,13 @@ def _patch_success(stack: ExitStack, case):
         )
     elif name == "walk_forward_report":
         stack.enter_context(
-            patch.object(module, "run_walk_forward", return_value=pd.DataFrame())
-        )
-        stack.enter_context(
             patch.object(
                 module,
-                "build_walk_forward_report_data",
-                return_value={"Best Window": {}},
+                "run_walk_forward",
+                return_value=pd.DataFrame([{
+                    "Window": 1, "Strategy": "ma_cross", "Error": "",
+                    "Test Total Return %": 1.0, "Test Sharpe Ratio": 1.0,
+                }]),
             )
         )
     else:

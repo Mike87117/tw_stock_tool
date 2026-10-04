@@ -1,8 +1,25 @@
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from threading import Lock
+from weakref import WeakValueDictionary
 
 import pandas as pd
+
+
+# Keep one lock per active path without retaining every historical cache key.
+_cache_locks = WeakValueDictionary()
+_cache_locks_guard = Lock()
+
+
+def _cache_lock(path: Path):
+    key = os.path.normcase(os.path.abspath(path))
+    with _cache_locks_guard:
+        lock = _cache_locks.get(key)
+        if lock is None:
+            lock = Lock()
+            _cache_locks[key] = lock
+        return lock
 
 
 def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool, *, cache_dir: Path) -> Path:
@@ -31,13 +48,20 @@ def _get_cache_age_days(path: Path) -> float:
 
 
 def _read_cache(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, index_col=0, parse_dates=True)
+    with _cache_lock(path):
+        df = pd.read_csv(path, index_col=0, parse_dates=True)
     df.index.name = "Date"
     return df
 
 
 def _write_cache(df: pd.DataFrame, path: Path) -> None:
     """Replace a cache only after a complete write, preserving it on failure."""
+    # Windows can reject simultaneous replaces or a replace during a CSV read.
+    with _cache_lock(path):
+        _write_cache_locked(df, path)
+
+
+def _write_cache_locked(df: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:

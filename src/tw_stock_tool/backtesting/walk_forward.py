@@ -10,6 +10,7 @@ import pandas as pd
 
 from tw_stock_tool.analysis.analysis import StockAnalysis, analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest
+from tw_stock_tool.backtesting.window_results import valid_window_rows, window_outcome
 from tw_stock_tool.utils.config import (
     DEFAULT_AUTO_ADJUST,
     DEFAULT_INTERVAL,
@@ -70,6 +71,8 @@ SUMMARY_COLUMNS = [
     "Positive Test Windows",
     "Positive Test Windows %",
     "Error Windows",
+    "Status",
+    "Error",
 ]
 
 SORTABLE_COLUMNS = {
@@ -532,16 +535,16 @@ def build_summary(
     test_days: int,
     step_days: int,
 ) -> pd.DataFrame:
-    ok = detail_df[detail_df["Error"].astype(str) == ""].copy()
-    errors = detail_df[detail_df["Error"].astype(str) != ""].copy()
+    ok = valid_window_rows(detail_df)
+    outcome = window_outcome(detail_df)
 
-    def mean_value(column: str) -> float:
+    def mean_value(column: str) -> float | None:
         if ok.empty:
-            return 0.0
+            return None
         return float(pd.to_numeric(ok[column], errors="coerce").mean())
 
     positive = int((pd.to_numeric(ok["Test Total Return %"], errors="coerce") > 0).sum())
-    positive_pct = (positive / len(ok) * 100) if len(ok) else 0.0
+    positive_pct = (positive / len(ok) * 100) if len(ok) else None
     row = {
         "Stock": stock_id,
         "Period": period,
@@ -556,7 +559,9 @@ def build_summary(
         "Avg Test Max Drawdown %": mean_value("Test Max Drawdown %"),
         "Positive Test Windows": positive,
         "Positive Test Windows %": positive_pct,
-        "Error Windows": len(errors),
+        "Error Windows": outcome["Error Rows"],
+        "Status": outcome["Status"],
+        "Error": outcome["Error"],
     }
     return pd.DataFrame([row], columns=SUMMARY_COLUMNS)
 
@@ -665,6 +670,12 @@ def main() -> int | None:
         if output_path:
             print(f"\nWalk-forward Excel exported: {output_path}")
         print("\nWalk-forward results are historical validation only, not investment advice.")
+        outcome = window_outcome(result)
+        if outcome["Status"] == "ERROR":
+            print(f"Error: No valid walk-forward windows. {outcome['Error']}")
+            return 1
+        if outcome["Status"] == "PARTIAL":
+            print(f"Warning: {outcome['Error Rows']} walk-forward evaluations failed. {outcome['Error']}")
     except Exception as exc:
         print(f"Error: {exc}")
         return 1

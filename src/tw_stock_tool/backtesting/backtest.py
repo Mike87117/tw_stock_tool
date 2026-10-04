@@ -63,6 +63,13 @@ def _validate_inputs(
     if not has_legacy_signal(df) and not has_standard_signals(df):
         raise BacktestError("回測資料缺少訊號欄位，必須提供 'Signal' 或 'entry_signal'/'exit_signal'")
 
+    if isinstance(df.index, pd.DatetimeIndex) and df.index.hasnans:
+        raise BacktestError("回測資料索引不得含有 NaT。")
+    if not df.index.is_unique:
+        raise BacktestError("回測資料索引不得含有重複值。")
+    if not df.index.is_monotonic_increasing:
+        raise BacktestError("回測資料索引必須依時間遞增排序。")
+
     for name, value in (
         ("initial_capital", initial_capital),
         ("fee_rate", fee_rate),
@@ -72,6 +79,13 @@ def _validate_inputs(
         _validate_finite_real(name, value)
     _validate_finite_real("stop_loss_pct", stop_loss_pct, allow_none=True)
     _validate_finite_real("take_profit_pct", take_profit_pct, allow_none=True)
+
+    if initial_capital <= 0:
+        raise BacktestError("initial_capital must be greater than 0.")
+    if fee_rate < 0:
+        raise BacktestError("fee_rate must be greater than or equal to 0.")
+    if tax_rate < 0:
+        raise BacktestError("tax_rate must be greater than or equal to 0.")
 
     if not isinstance(interval, str) or interval not in VALID_INTERVALS:
         supported = ", ".join(sorted(VALID_INTERVALS))
