@@ -1,7 +1,20 @@
 from pathlib import Path
 import os
 import shutil
-from tempfile import TemporaryDirectory
+from tempfile import mkdtemp
+
+
+class CsvExportRecoveryError(OSError):
+    """Publication failed and recovery files must be retained for manual restore."""
+
+    def __init__(self, recovery_directory, publication_error, rollback_errors):
+        self.recovery_directory = recovery_directory
+        self.publication_error = publication_error
+        self.rollback_errors = tuple(rollback_errors)
+        super().__init__(
+            f"CSV export failed: {publication_error}. Recovery was incomplete; "
+            f"original backups and staged files were retained at {recovery_directory}."
+        )
 
 def write_text_report(
     content: str,
@@ -66,8 +79,9 @@ def write_csv_files(csv_bundle, output_dir, *, basename, overwrite=False):
                 raise FileExistsError(f"File already exists: {path}")
     directory = Path(output_dir).resolve()
     directory.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix=".csv-export-", dir=directory) as temporary:
-        staging = Path(temporary)
+    staging = Path(mkdtemp(prefix=".csv-export-", dir=directory))
+    retain_recovery_files = False
+    try:
         staged = {}
         backups = {}
         for key, content in csv_bundle.items():
@@ -86,20 +100,32 @@ def write_csv_files(csv_bundle, output_dir, *, basename, overwrite=False):
                 else:
                     os.link(staged[key], target)
                 published.append((key, identity))
-        except BaseException:
+        except BaseException as publication_error:
             # Undo only files still owned by this export. A concurrent replacement
             # must not be deleted or restored over.
+            rollback_errors = []
             for key, identity in reversed(published):
                 target = paths[key]
                 try:
-                    current = target.stat()
-                except FileNotFoundError:
-                    continue
-                if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
-                    continue
-                if key in backups:
-                    os.replace(backups[key], target)
-                else:
-                    target.unlink()
+                    try:
+                        current = target.stat()
+                    except FileNotFoundError:
+                        continue
+                    if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+                        continue
+                    if key in backups:
+                        os.replace(backups[key], target)
+                    else:
+                        target.unlink()
+                except OSError as rollback_error:
+                    rollback_errors.append((target, rollback_error))
+            if rollback_errors:
+                retain_recovery_files = True
+                raise CsvExportRecoveryError(staging, publication_error, rollback_errors) from publication_error
             raise
+    finally:
+        if not retain_recovery_files:
+            if staging.resolve().parent != directory:
+                raise ValueError("CSV staging directory must stay within output directory.")
+            shutil.rmtree(staging)
     return paths

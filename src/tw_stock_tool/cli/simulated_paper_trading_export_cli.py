@@ -1,5 +1,6 @@
 import argparse
 import sys
+from tw_stock_tool.utils.output.writers import CsvExportRecoveryError
 
 from tw_stock_tool.paper_trading.models import PaperTradingModelError
 from tw_stock_tool.paper_trading.serialization_files import (
@@ -79,7 +80,7 @@ def main(argv: list[str] | None = None) -> int | None:
             file=sys.stderr,
         )
         return 1
-    except (FileNotFoundError, IsADirectoryError, PermissionError, ValueError) as e:
+    except (FileNotFoundError, IsADirectoryError, PermissionError, ValueError, CsvExportRecoveryError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 

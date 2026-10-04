@@ -16,6 +16,11 @@ class PaperTradingModelError(Exception):
     pass
 
 
+def _validate_positive_quantity(quantity: object) -> None:
+    if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+        raise PaperTradingModelError("Quantity must be a positive integer.")
+
+
 def _validate_finite_real(name: str, value: object, *, strictly_positive: bool) -> None:
     if isinstance(value, bool) or not isinstance(value, Real):
         raise PaperTradingModelError(f"{name} must be finite numeric data.")
@@ -143,8 +148,7 @@ class SimulatedOrder:
             raise PaperTradingModelError("Symbol must not be blank.")
         if self.side not in ("BUY", "SELL"):
             raise PaperTradingModelError(f"Invalid side: {self.side}")
-        if self.quantity <= 0:
-            raise PaperTradingModelError("Quantity must be positive.")
+        _validate_positive_quantity(self.quantity)
 
 
 @dataclass(slots=True)
@@ -172,8 +176,7 @@ class SimulatedFill:
             raise PaperTradingModelError("Symbol must not be blank.")
         if self.side not in ("BUY", "SELL"):
             raise PaperTradingModelError(f"Invalid side: {self.side}")
-        if self.quantity <= 0:
-            raise PaperTradingModelError("Quantity must be positive.")
+        _validate_positive_quantity(self.quantity)
         _validate_finite_real("Price", self.price, strictly_positive=True)
         for name in ("fee", "tax", "slippage"):
             _validate_finite_real(name, getattr(self, name), strictly_positive=False)
@@ -197,6 +200,7 @@ class SimulatedFill:
 def _validate_simulated_fill(fill: object) -> SimulatedFill:
     if not isinstance(fill, SimulatedFill):
         raise PaperTradingModelError("fill must be a SimulatedFill.")
+    _validate_positive_quantity(fill.quantity)
     _validate_finite_real("Price", fill.price, strictly_positive=True)
     for name in ("fee", "tax", "slippage"):
         _validate_finite_real(name, getattr(fill, name), strictly_positive=False)
@@ -306,7 +310,11 @@ class SimulatedPortfolio:
             if not pos or pos.quantity < fill.quantity:
                 raise PaperTradingModelError("Insufficient simulated shares for SELL fill.")
 
-        self.cash += fill.net_cash_effect
+        resulting_cash = self.cash + fill.net_cash_effect
+        if resulting_cash < 0:
+            raise PaperTradingModelError(f"Insufficient simulated cash for {fill.side} fill.")
+        _validate_finite_real("Resulting cash", resulting_cash, strictly_positive=False)
+        self.cash = resulting_cash
 
         if fill.symbol not in self.positions:
             self.positions[fill.symbol] = SimulatedPosition(symbol=fill.symbol)

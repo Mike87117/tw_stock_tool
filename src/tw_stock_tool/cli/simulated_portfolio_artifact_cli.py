@@ -4,6 +4,7 @@ Offline CLI for multi-symbol simulated portfolio trading JSON artifacts.
 
 import argparse
 import sys
+from tw_stock_tool.utils.output.writers import CsvExportRecoveryError
 
 from tw_stock_tool.paper_trading.models import PaperTradingModelError
 from tw_stock_tool.paper_trading.portfolio_export_files import (
@@ -157,7 +158,7 @@ def main(argv: list[str] | None = None) -> int | None:
     except FileExistsError as exc:
         print(f"error: {exc}. Use --overwrite to replace existing files.", file=sys.stderr)
         return 1
-    except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError, PaperTradingModelError, ValueError) as exc:
+    except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError, PaperTradingModelError, ValueError, CsvExportRecoveryError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
