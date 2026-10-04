@@ -1,4 +1,5 @@
 import math
+from numbers import Real
 from typing import Any, Callable, Mapping
 
 from tw_stock_tool.paper_trading.models import (
@@ -19,6 +20,26 @@ from tw_stock_tool.simulated_paper_trading_guard.models import (
 )
 
 
+def validate_simulated_costs(fee_rate, tax_rate, slippage_per_share) -> None:
+    values = (fee_rate, tax_rate, slippage_per_share)
+    if any(isinstance(v, bool) or not isinstance(v, Real) or not math.isfinite(v) for v in values):
+        raise PaperTradingModelError("fee_rate, tax_rate, and slippage_per_share must be finite numeric values.")
+    if any(v < 0 for v in values):
+        raise PaperTradingModelError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
+
+
+def validate_pending_fill_time(runtime_state, symbol, index_label) -> None:
+    pending = runtime_state.pending_orders.get(symbol)
+    if pending is None:
+        return
+    try:
+        later = bool(index_label > pending.order.signal_time)
+    except (TypeError, ValueError) as exc:
+        raise PaperTradingModelError("Fill time must be comparable to signal time.") from exc
+    if not later:
+        raise PaperTradingModelError("Fill time must be strictly after signal time.")
+
+
 def process_simulated_pending_fill(
     runtime_state: SimulatedPaperTradingRuntimeState,
     *,
@@ -29,6 +50,8 @@ def process_simulated_pending_fill(
     tax_rate: float = 0.0,
     slippage_per_share: float = 0.0,
 ) -> None:
+    validate_simulated_costs(fee_rate, tax_rate, slippage_per_share)
+    validate_pending_fill_time(runtime_state, symbol, index_label)
     try:
         op = float(open_price)
         is_valid_open = math.isfinite(op) and op > 0.0
@@ -237,8 +260,7 @@ def step_simulated_symbol_bar(
         raise PaperTradingModelError("bar_position must be a non-negative integer.")
     if isinstance(quantity_per_trade, bool) or not isinstance(quantity_per_trade, int) or quantity_per_trade <= 0:
         raise PaperTradingModelError("quantity_per_trade must be a positive integer.")
-    if fee_rate < 0 or tax_rate < 0 or slippage_per_share < 0:
-        raise PaperTradingModelError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
+    validate_simulated_costs(fee_rate, tax_rate, slippage_per_share)
     if guard_decision is not None and guard_decision_provider is not None:
         raise PaperTradingModelError("Cannot provide both guard_decision and guard_decision_provider.")
     if guard_decision is not None and not isinstance(guard_decision, SimulatedPaperTradingGuardDecision):

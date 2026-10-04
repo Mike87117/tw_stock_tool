@@ -172,9 +172,9 @@ class TestCanonicalSimulatedTradeLog(unittest.TestCase):
         self.assertEqual(failed.status, SimulatedTradeStatus.FAILED_PORTFOLIO_VALIDATION)
         self.assertIn("Insufficient simulated cash", failed.error_message)
 
-        sell = SimulatedOrder("sell-1", "2330", "SELL", 10, "t", "t")
+        sell = SimulatedOrder("sell-1", "2330", "SELL", 10, 0, 0)
         state = SimulatedPaperTradingRuntimeState(SimulatedPortfolio(1000.0), {"2330": SimulatedPendingOrderState(sell, 10.0)})
-        process_simulated_pending_fill(state, symbol="2330", open_price=10.0, index_label="next")
+        process_simulated_pending_fill(state, symbol="2330", open_price=10.0, index_label=1)
         self.assertIn("Insufficient simulated shares", state.portfolio.trade_log.records[-1].error_message)
         self.assertNotIn("2330", state.pending_orders)
 

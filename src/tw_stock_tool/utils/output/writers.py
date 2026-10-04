@@ -12,7 +12,7 @@ def write_text_report(
         raise FileExistsError(f"File already exists: {p}")
 
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
+    with open(p, "w" if overwrite else "x", encoding="utf-8") as f:
         f.write(content)
 
     return p
@@ -38,24 +38,29 @@ def write_csv_bundle(
             msg.append(f"extra keys: {extra}")
         raise ValueError("Invalid CSV bundle: " + ", ".join(msg))
 
-    dir_path = Path(output_dir).resolve()
+    return write_csv_files(csv_bundle, output_dir, basename=basename, overwrite=overwrite)
 
-    target_paths = {
-        "summary": dir_path / f"{basename}_summary.csv",
-        "orders": dir_path / f"{basename}_orders.csv",
-        "fills": dir_path / f"{basename}_fills.csv",
-    }
 
-    # Check for existing files before writing any
+def csv_target_paths(keys, output_dir, basename):
+    if type(basename) is not str:
+        raise ValueError("basename must be an exact str instance")
+    if not basename or basename.isspace() or basename in (".", ".."):
+        raise ValueError("basename must be a nonempty filename")
+    if "/" in basename or "\\" in basename or ":" in basename:
+        raise ValueError("basename must not contain path separators or a drive prefix")
+    directory = Path(output_dir).resolve()
+    paths = {key: (directory / f"{basename}_{key}.csv").resolve() for key in keys}
+    if any(path.parent != directory for path in paths.values()):
+        raise ValueError("basename escapes output directory")
+    return paths
+
+
+def write_csv_files(csv_bundle, output_dir, *, basename, overwrite=False):
+    paths = csv_target_paths(csv_bundle, output_dir, basename)
     if not overwrite:
-        for p in target_paths.values():
-            if p.exists():
-                raise FileExistsError(f"File already exists: {p}")
-
-    dir_path.mkdir(parents=True, exist_ok=True)
-
+        for path in paths.values():
+            if path.exists():
+                raise FileExistsError(f"File already exists: {path}")
     for key, content in csv_bundle.items():
-        with open(target_paths[key], "w", encoding="utf-8") as f:
-            f.write(content)
-
-    return target_paths
+        write_text_report(content, paths[key], overwrite=overwrite)
+    return paths

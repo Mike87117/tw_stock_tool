@@ -11,6 +11,7 @@ from tw_stock_tool.paper_trading.portfolio_exporters import (
 )
 from tw_stock_tool.paper_trading.portfolio_results import SimulatedPortfolioTradingResult
 from tw_stock_tool.utils.output import write_text_report
+from tw_stock_tool.utils.output.writers import write_csv_files
 
 
 def export_simulated_portfolio_trading_markdown_file(
@@ -73,14 +74,4 @@ def export_simulated_portfolio_trading_csv_files(
     if tuple(csv_bundle.keys()) != expected_keys:
         raise PaperTradingModelError("CSV bundle keys do not match expected portfolio 7-file schema.")
 
-    # 5. Create output directory & write files
-    resolved_output_dir.mkdir(parents=True, exist_ok=True)
-    written_paths: dict[str, Path] = {}
-    for k in expected_keys:
-        target_path = target_paths[k]
-        csv_text = csv_bundle[k]
-        with open(target_path, "w", encoding="utf-8", newline="") as f:
-            f.write(csv_text)
-        written_paths[k] = target_path
-
-    return written_paths
+    return write_csv_files(csv_bundle, output_dir, basename=basename, overwrite=overwrite)

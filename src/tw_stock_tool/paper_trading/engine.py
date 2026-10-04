@@ -13,7 +13,7 @@ from tw_stock_tool.paper_trading.results import (
     build_simulated_paper_trading_result,
 )
 from tw_stock_tool.simulated_paper_trading_guard.models import SimulatedPaperTradingGuardDecision
-from tw_stock_tool.paper_trading.stepper import step_simulated_symbol_bar
+from tw_stock_tool.paper_trading.stepper import step_simulated_symbol_bar, validate_simulated_costs
 
 
 def run_simulated_paper_trading(
@@ -43,8 +43,10 @@ def run_simulated_paper_trading(
         raise ValueError("initial_cash must be non-negative.")
     if quantity_per_trade <= 0:
         raise ValueError("quantity_per_trade must be positive.")
-    if fee_rate < 0 or tax_rate < 0 or slippage_per_share < 0:
-        raise ValueError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
+    try:
+        validate_simulated_costs(fee_rate, tax_rate, slippage_per_share)
+    except PaperTradingModelError as exc:
+        raise ValueError(str(exc)) from exc
     if "Open" not in df.columns:
         raise ValueError("DataFrame must contain 'Open' column.")
     if guard_decision is not None and guard_decision_provider is not None:

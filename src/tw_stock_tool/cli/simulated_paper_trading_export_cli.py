@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int | None:
 
     try:
         result = load_simulated_paper_trading_result_json_file(args.input_json)
-    except (FileNotFoundError, IsADirectoryError, PermissionError) as e:
+    except (FileNotFoundError, IsADirectoryError, PermissionError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     except PaperTradingModelError as e:
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int | None:
             file=sys.stderr,
         )
         return 1
-    except (FileNotFoundError, IsADirectoryError, PermissionError) as e:
+    except (FileNotFoundError, IsADirectoryError, PermissionError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 

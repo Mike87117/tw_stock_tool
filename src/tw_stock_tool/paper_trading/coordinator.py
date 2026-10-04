@@ -10,6 +10,7 @@ from tw_stock_tool.paper_trading.stepper import (
     process_simulated_pending_fill,
     build_simulated_symbol_candidate_order,
     evaluate_and_record_simulated_candidate,
+    validate_pending_fill_time,
 )
 
 
@@ -102,6 +103,8 @@ def run_chronological_multi_symbol_simulated_paper_trading(
         raise TypeError("Mixed index types cannot be compared globally.") from e
 
     cursors = {sym: 0 for sym in dataframes}
+    for symbol, df in dataframes.items():
+        validate_pending_fill_time(runtime_state, symbol, df.index[0])
     deterministic_symbols = sorted(dataframes.keys())
 
     for t in timeline:
