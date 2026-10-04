@@ -240,12 +240,15 @@ def require_unambiguous_provider_tag_binding(
 
 
 def resolve_fubon_lost_ack(match_state: ProviderOrderMatchState) -> LostAckDisposition:
-    """Return a terminal/reconciliation disposition; absence never means retry."""
+    """Resolve only fail-closed nonmatches; MATCHED needs D0.1 validation."""
 
     if type(match_state) is not ProviderOrderMatchState:
         raise D0ReadinessModelError("provider match state must be exact")
+    if match_state is ProviderOrderMatchState.MATCHED:
+        raise D0ReadinessModelError(
+            "MATCHED requires the validated D0.1 provider observation correlation boundary"
+        )
     return {
-        ProviderOrderMatchState.MATCHED: LostAckDisposition.RECONCILED_EXISTING_ORDER,
         ProviderOrderMatchState.NO_MATCH: LostAckDisposition.RECONCILIATION_REQUIRED,
         ProviderOrderMatchState.AMBIGUOUS: LostAckDisposition.UNKNOWN_SUBMISSION_STATE,
     }[match_state]

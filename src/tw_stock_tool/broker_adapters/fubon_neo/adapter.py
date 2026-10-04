@@ -199,7 +199,6 @@ class FubonNeoReadonlyAdapter:
             retrieved_at=retrieved_at,
         ).require_complete_snapshot()
 
-
 def require_fubon_neo_sdk() -> None:
     """Load and version-check the proprietary SDK for explicit TEST use."""
     try:
