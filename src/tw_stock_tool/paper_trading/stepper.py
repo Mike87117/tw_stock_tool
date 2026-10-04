@@ -28,6 +28,19 @@ def validate_simulated_costs(fee_rate, tax_rate, slippage_per_share) -> None:
         raise PaperTradingModelError("fee_rate, tax_rate, and slippage_per_share must be non-negative.")
 
 
+def validate_simulated_bar_time(runtime_state, symbol, index_label, *, continuation=False) -> None:
+    for previous_symbol, previous_time in runtime_state.last_processed_times.items():
+        try:
+            if continuation or previous_symbol == symbol:
+                valid = bool(index_label > previous_time)
+            else:
+                valid = bool(index_label >= previous_time)
+        except (TypeError, ValueError) as exc:
+            raise PaperTradingModelError("Bar time must be comparable to previously processed time.") from exc
+        if not valid:
+            raise PaperTradingModelError("Bar time must follow previously processed time.")
+
+
 def validate_pending_fill_time(runtime_state, symbol, index_label) -> None:
     pending = runtime_state.pending_orders.get(symbol)
     if pending is None:
@@ -268,6 +281,8 @@ def step_simulated_symbol_bar(
     if guard_decision_provider is not None and not callable(guard_decision_provider):
         raise PaperTradingModelError("guard_decision_provider must be callable or None.")
 
+    validate_simulated_bar_time(runtime_state, symbol, index_label)
+    bar_position = max(bar_position, runtime_state.next_bar_positions.get(symbol, 0))
     process_simulated_pending_fill(
         runtime_state=runtime_state,
         symbol=symbol,
@@ -277,6 +292,8 @@ def step_simulated_symbol_bar(
         tax_rate=tax_rate,
         slippage_per_share=slippage_per_share,
     )
+    runtime_state.last_processed_times[symbol] = index_label
+    runtime_state.next_bar_positions[symbol] = bar_position + 1
     candidate = build_simulated_symbol_candidate_order(
         runtime_state=runtime_state,
         symbol=symbol,

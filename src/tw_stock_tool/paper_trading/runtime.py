@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 import math
 from numbers import Real
+from typing import Any
 
 from tw_stock_tool.paper_trading.models import (
     PaperTradingModelError,
@@ -48,12 +49,22 @@ class SimulatedPaperTradingRuntimeState:
     pending_orders: dict[str, SimulatedPendingOrderState] = field(
         default_factory=dict
     )
+    last_processed_times: dict[str, Any] = field(default_factory=dict)
+    next_bar_positions: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.portfolio, SimulatedPortfolio):
             raise PaperTradingModelError("portfolio must be a SimulatedPortfolio.")
         if not isinstance(self.pending_orders, dict):
             raise PaperTradingModelError("pending_orders must be a dictionary.")
+        for name in ("last_processed_times", "next_bar_positions"):
+            values = getattr(self, name)
+            if not isinstance(values, dict):
+                raise PaperTradingModelError(f"{name} must be a dictionary.")
+            if any(not isinstance(symbol, str) or not symbol.strip() for symbol in values):
+                raise PaperTradingModelError(f"{name} keys must be non-blank strings.")
+        if any(type(position) is not int or position < 0 for position in self.next_bar_positions.values()):
+            raise PaperTradingModelError("next_bar_positions values must be non-negative integers.")
 
         for symbol, state in self.pending_orders.items():
             if not isinstance(symbol, str) or not symbol.strip():

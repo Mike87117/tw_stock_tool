@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import shutil
+from tempfile import TemporaryDirectory
 
 def write_text_report(
     content: str,
@@ -12,7 +15,7 @@ def write_text_report(
         raise FileExistsError(f"File already exists: {p}")
 
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w" if overwrite else "x", encoding="utf-8") as f:
+    with open(p, "w" if overwrite else "x", encoding="utf-8", newline="") as f:
         f.write(content)
 
     return p
@@ -61,6 +64,42 @@ def write_csv_files(csv_bundle, output_dir, *, basename, overwrite=False):
         for path in paths.values():
             if path.exists():
                 raise FileExistsError(f"File already exists: {path}")
-    for key, content in csv_bundle.items():
-        write_text_report(content, paths[key], overwrite=overwrite)
+    directory = Path(output_dir).resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".csv-export-", dir=directory) as temporary:
+        staging = Path(temporary)
+        staged = {}
+        backups = {}
+        for key, content in csv_bundle.items():
+            staged[key] = write_text_report(content, staging / paths[key].name)
+            if overwrite and paths[key].exists():
+                backup = staging / f"{key}.backup"
+                shutil.copy2(paths[key], backup)
+                backups[key] = backup
+
+        published = []
+        try:
+            for key, target in paths.items():
+                identity = staged[key].stat()
+                if overwrite:
+                    os.replace(staged[key], target)
+                else:
+                    os.link(staged[key], target)
+                published.append((key, identity))
+        except BaseException:
+            # Undo only files still owned by this export. A concurrent replacement
+            # must not be deleted or restored over.
+            for key, identity in reversed(published):
+                target = paths[key]
+                try:
+                    current = target.stat()
+                except FileNotFoundError:
+                    continue
+                if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+                    continue
+                if key in backups:
+                    os.replace(backups[key], target)
+                else:
+                    target.unlink()
+            raise
     return paths

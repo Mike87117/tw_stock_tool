@@ -11,6 +11,7 @@ from tw_stock_tool.paper_trading.stepper import (
     build_simulated_symbol_candidate_order,
     evaluate_and_record_simulated_candidate,
     validate_pending_fill_time,
+    validate_simulated_bar_time,
 )
 
 
@@ -103,6 +104,8 @@ def run_chronological_multi_symbol_simulated_paper_trading(
         raise TypeError("Mixed index types cannot be compared globally.") from e
 
     cursors = {sym: 0 for sym in dataframes}
+    starting_positions = {sym: runtime_state.next_bar_positions.get(sym, 0) for sym in dataframes}
+    validate_simulated_bar_time(runtime_state, None, timeline[0], continuation=True)
     for symbol, df in dataframes.items():
         validate_pending_fill_time(runtime_state, symbol, df.index[0])
     deterministic_symbols = sorted(dataframes.keys())
@@ -131,6 +134,8 @@ def run_chronological_multi_symbol_simulated_paper_trading(
                 tax_rate=float(tax_rate),
                 slippage_per_share=float(slippage_per_share),
             )
+            runtime_state.last_processed_times[symbol] = t
+            runtime_state.next_bar_positions[symbol] = starting_positions[symbol] + pos + 1
 
         # Pass 2 & 3: Build Candidates and Evaluate
         for symbol in symbols_at_t:
@@ -144,7 +149,7 @@ def run_chronological_multi_symbol_simulated_paper_trading(
             candidate = build_simulated_symbol_candidate_order(
                 runtime_state=runtime_state,
                 symbol=symbol,
-                bar_position=pos,
+                bar_position=starting_positions[symbol] + pos,
                 index_label=t,
                 open_price=open_price,
                 entry_signal=entry_sig,
