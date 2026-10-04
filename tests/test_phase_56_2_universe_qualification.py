@@ -53,6 +53,15 @@ def _request(symbol_data, benchmark=None, **kwargs):
 
 
 class UniverseQualificationTests(unittest.TestCase):
+    def test_test_window_uses_train_history_for_ma_signal(self):
+        prices = list(range(19, 9, -1)) + [20, 21, 22, 23, 24]
+        result = evaluate_universe_qualification(_request({"2330": _frame(size=15, close=prices)}))
+
+        window = result.symbols[0].windows[0]
+        self.assertTrue(window.valid, window.error)
+        self.assertEqual(window.completed_trades, 1)
+        self.assertGreater(window.test_return_pct, 0)
+
     def test_parameter_selection_uses_train_only(self):
         first = _frame()
         second = _frame(close=np.r_[np.arange(1.0, 11.0), np.arange(100.0, 110.0)])

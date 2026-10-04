@@ -117,6 +117,39 @@ class OhlcvNormalizationTest(unittest.TestCase):
                 error_type=RuntimeError,
             )
 
+    def test_prepare_sorts_reverse_chronological_prices(self) -> None:
+        frame = pd.DataFrame(
+            {"Open": [12, 11], "High": [13, 12], "Low": [11, 10],
+             "Close": [12, 11], "Volume": [120, 110]},
+            index=["2024-01-03", "2024-01-02"],
+        )
+
+        actual = ohlcv_normalization.prepare_ohlcv(
+            frame, "2330.TW",
+            normalize_columns=ohlcv_normalization.normalize_columns,
+            error_type=RuntimeError,
+        )
+
+        self.assertEqual(actual.index.tolist(), [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])
+        self.assertEqual(actual["Close"].tolist(), [11, 12])
+
+    def test_prepare_rejects_duplicate_or_missing_dates(self) -> None:
+        for index, message in (
+            (["2024-01-02", "2024-01-02"], "duplicate dates"),
+            (["2024-01-02", None], "not a valid DatetimeIndex"),
+        ):
+            with self.subTest(index=index):
+                frame = pd.DataFrame(
+                    {name: [1, 2] for name in ("Open", "High", "Low", "Close", "Volume")},
+                    index=index,
+                )
+                with self.assertRaisesRegex(RuntimeError, message):
+                    ohlcv_normalization.prepare_ohlcv(
+                        frame, "2330.TW",
+                        normalize_columns=ohlcv_normalization.normalize_columns,
+                        error_type=RuntimeError,
+                    )
+
     def test_finalize_rejects_empty_rows_with_exact_symbol(self) -> None:
         with self.assertRaisesRegex(
             RuntimeError,

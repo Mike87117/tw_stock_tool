@@ -59,12 +59,17 @@ def prepare_ohlcv(
     ):
         try:
             out.index = pd.to_datetime(out.index)
-        except Exception:
+        except (TypeError, ValueError):
             raise error_type(
                 f"{symbol} index is not a valid "
                 "DatetimeIndex."
             )
 
+    if not isinstance(out.index, pd.DatetimeIndex) or out.index.hasnans:
+        raise error_type(f"{symbol} index is not a valid DatetimeIndex.")
+    if not out.index.is_unique:
+        raise error_type(f"{symbol} index contains duplicate dates.")
+    out = out.sort_index()
     out.index.name = "Date"
     return out
 

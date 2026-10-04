@@ -214,8 +214,15 @@ def _run_strategy_backtest(
     fee_rate: float,
     tax_rate: float,
     interval: str = DEFAULT_INTERVAL,
+    signal_history: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
-    strategy_df = _build_strategy_df(strategy, df, params)
+    if signal_history is not None and not signal_history.empty:
+        if df.empty or signal_history.index.max() >= df.index.min():
+            raise ValueError("signal history must end before the backtest window")
+        # Past bars initialize rolling indicators; only df bars may trade.
+        strategy_df = _build_strategy_df(strategy, pd.concat([signal_history, df]), params).iloc[len(signal_history):]
+    else:
+        strategy_df = _build_strategy_df(strategy, df, params)
     strategy_df = strategy_df.dropna(subset=["Close", "Signal"])
     return run_backtest(
         strategy_df,
@@ -258,11 +265,12 @@ def run_strategy_backtest(
     fee_rate: float,
     tax_rate: float,
     interval: str = DEFAULT_INTERVAL,
+    signal_history: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Run one strategy backtest through the stable Walk Forward boundary."""
     return _run_strategy_backtest(
         df, strategy, params, stop_loss_pct, take_profit_pct, max_hold_days,
-        position_size, initial_capital, fee_rate, tax_rate, interval,
+        position_size, initial_capital, fee_rate, tax_rate, interval, signal_history,
     )
 
 
@@ -419,6 +427,7 @@ def _evaluate_window_strategy(
         fee_rate,
         tax_rate,
         interval,
+        train,
     )
     return _result_row(
         window_number,

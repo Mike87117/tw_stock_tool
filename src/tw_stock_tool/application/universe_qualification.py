@@ -972,8 +972,8 @@ def _window_evidence(request: UniverseQualificationRequest, symbol: str, number:
     starts = (_as_text(train.index[0]), _as_text(train.index[-1]), _as_text(test.index[0]), _as_text(test.index[-1]))
     try:
         params, train_result = _select_parameters(request, train)
-        test_result = run_strategy_backtest(test, request.strategy, params, request.stop_loss_pct, request.take_profit_pct, request.max_hold_days, request.position_size, request.initial_capital, request.fee_rate, request.tax_rate, request.interval)
-        stressed = run_strategy_backtest(test, request.strategy, params, request.stop_loss_pct, request.take_profit_pct, request.max_hold_days, request.position_size, request.initial_capital, request.resolved_stress_fee_rate, request.resolved_stress_tax_rate, request.interval)
+        test_result = run_strategy_backtest(test, request.strategy, params, request.stop_loss_pct, request.take_profit_pct, request.max_hold_days, request.position_size, request.initial_capital, request.fee_rate, request.tax_rate, request.interval, train)
+        stressed = run_strategy_backtest(test, request.strategy, params, request.stop_loss_pct, request.take_profit_pct, request.max_hold_days, request.position_size, request.initial_capital, request.resolved_stress_fee_rate, request.resolved_stress_tax_rate, request.interval, train)
         benchmark_available = False
         benchmark_return = None
         benchmark_error = "benchmark_missing: benchmark data not supplied"
@@ -990,7 +990,7 @@ def _window_evidence(request: UniverseQualificationRequest, symbol: str, number:
         neighbor_errors: list[str | None] = []
         for neighbor in neighbors:
             try:
-                neighbor_result = run_strategy_backtest(test, request.strategy, neighbor, request.stop_loss_pct, request.take_profit_pct, request.max_hold_days, request.position_size, request.initial_capital, request.fee_rate, request.tax_rate, request.interval)
+                neighbor_result = run_strategy_backtest(test, request.strategy, neighbor, request.stop_loss_pct, request.take_profit_pct, request.max_hold_days, request.position_size, request.initial_capital, request.fee_rate, request.tax_rate, request.interval, train)
                 neighbor_returns.append(float(neighbor_result["Total Return %"]))
                 neighbor_errors.append(None)
             except Exception as exc:

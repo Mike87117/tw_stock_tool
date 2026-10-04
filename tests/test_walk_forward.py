@@ -102,6 +102,39 @@ class WalkForwardTest(unittest.TestCase):
         self.assertFalse(result.empty)
         self.assertEqual(set(result["Strategy"]), {"ma_cross"})
 
+    def test_ma_cross_uses_train_prices_to_initialize_test_signal(self) -> None:
+        prices = [15, 14, 13, 12, 11, 10, 20, 21, 22, 23]
+        index = pd.date_range("2025-01-01", periods=len(prices), freq="B")
+        frame = pd.DataFrame({"Open": prices, "Close": prices}, index=index)
+
+        result = walk_forward._evaluate_window_strategy(
+            window_number=1,
+            train=frame.iloc[:6],
+            test=frame.iloc[6:],
+            strategy="ma_cross",
+            sort_by="Train Sharpe Ratio",
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            max_hold_days=None,
+            position_size=1.0,
+            initial_capital=100000.0,
+            fee_rate=0.0,
+            tax_rate=0.0,
+            ma_short_windows=(2,),
+            ma_long_windows=(3,),
+        )
+
+        self.assertEqual(result["Test Trade Count"], 1)
+        self.assertAlmostEqual(result["Test Total Return %"], 9.52)
+
+    def test_signal_history_cannot_include_test_dates(self) -> None:
+        frame = self._sample_df(8)
+        with self.assertRaisesRegex(ValueError, "history must end before"):
+            walk_forward.run_strategy_backtest(
+                frame.iloc[4:], "ma_cross", {"short_window": 2, "long_window": 3},
+                None, None, None, 1.0, 100000.0, 0.0, 0.0, "1d", frame.iloc[:5],
+            )
+
     def test_rsi_walk_forward(self) -> None:
         with patch("tw_stock_tool.backtesting.walk_forward.analyze_stock", return_value=self._analysis()), patch(
             "tw_stock_tool.backtesting.walk_forward.run_backtest",

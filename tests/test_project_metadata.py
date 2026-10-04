@@ -31,7 +31,7 @@ class ProjectMetadataTest(unittest.TestCase):
             "pandas>=2.1,<3.0",
             "numpy>=1.26,<3.0",
             "matplotlib>=3.8,<4.0",
-            "mplfinance>=0.12,<0.13",
+            "mplfinance>=0.12.10b0,<0.13",
             "openpyxl>=3.1,<4.0",
             "requests>=2.31,<3.0",
             "scikit-learn>=1.3,<2.0",
