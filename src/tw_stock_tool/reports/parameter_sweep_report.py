@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Union
 from datetime import datetime
 
+from tw_stock_tool.backtesting.window_results import valid_window_rows, window_outcome
+
 SHARPE_COLUMNS = ["Sharpe Ratio", "sharpe"]
 RETURN_COLUMNS = ["Total Return %", "total_return"]
 METRIC_CANDIDATES = [
@@ -61,6 +63,7 @@ def build_parameter_sweep_report_data(result: Union[pd.DataFrame, dict[str, Any]
         "Results": pd.DataFrame(),
         "Top Results": pd.DataFrame(),
         "Best Row": None,
+        "Summary": window_outcome(pd.DataFrame(), empty_message="No parameter combinations were evaluated."),
         "Notes": [
             "Research report only, not investment advice.",
             "Historical performance does not guarantee future results."
@@ -90,6 +93,7 @@ def build_parameter_sweep_report_data(result: Union[pd.DataFrame, dict[str, Any]
         df = pd.DataFrame()
 
     data["Results"] = df
+    data["Summary"] = window_outcome(df, empty_message="No parameter combinations were evaluated.")
 
     if df.empty:
         return data
@@ -113,14 +117,15 @@ def build_parameter_sweep_report_data(result: Union[pd.DataFrame, dict[str, Any]
     if not sort_col:
         sort_col = _first_existing(RETURN_COLUMNS)
 
+    valid_df = valid_window_rows(df)
     if sort_col:
-        # Sort descending
-        # Ensure numeric first to avoid crash if strings present
-        temp_df = df.copy()
-        temp_df[sort_col] = pd.to_numeric(temp_df[sort_col], errors='coerce')
-        sorted_df = df.loc[temp_df[sort_col].sort_values(ascending=False).index]
+        numeric = pd.to_numeric(valid_df[sort_col], errors="coerce")
+        sorted_df = valid_df.loc[numeric.notna()].sort_values(
+            by=sort_col, key=lambda values: pd.to_numeric(values, errors="coerce"),
+            ascending=False, kind="mergesort",
+        )
     else:
-        sorted_df = df
+        sorted_df = valid_df
 
     data["Top Results"] = sorted_df.head(10).copy()
     
@@ -152,6 +157,7 @@ def export_parameter_sweep_report_markdown(result: Union[pd.DataFrame, dict[str,
         f"- Stock: {data['Stock']}",
         f"- Strategy: {data['Strategy']}",
         f"- Rows: {len(data['Results'])}",
+        *[f"- {key}: {value}" for key, value in data["Summary"].items()],
         f"- Parameter Columns: {', '.join(data['Parameter Columns']) if data['Parameter Columns'] else 'N/A'}",
         f"- Metric Columns: {', '.join(data['Metric Columns']) if data['Metric Columns'] else 'N/A'}",
         ""
@@ -216,6 +222,9 @@ def export_parameter_sweep_report_excel(result: Union[pd.DataFrame, dict[str, An
             ", ".join(data["Metric Columns"]) if data["Metric Columns"] else "N/A",
         ]
     }
+    for key, value in data["Summary"].items():
+        summary_data["Field"].append(key)
+        summary_data["Value"].append(value)
     if data.get("Parameters"):
         for section, params in data["Parameters"].items():
             if isinstance(params, dict):

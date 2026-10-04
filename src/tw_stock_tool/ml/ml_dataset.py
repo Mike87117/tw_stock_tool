@@ -58,11 +58,18 @@ def build_ml_dataset_from_signal_df(
 
     Features are restricted to same-day or historical columns already present
     in ``signal_df``. The target uses future returns and is never included in
-    the feature column list.
+    the feature column list. Input rows must have a unique, increasing index
+    without missing dates; sorting after feature calculation cannot repair it.
     """
     _validate_horizon(horizon)
     if "Close" not in signal_df.columns:
         raise MLDatasetError("signal_df must contain Close column.")
+    if isinstance(signal_df.index, pd.DatetimeIndex) and signal_df.index.hasnans:
+        raise MLDatasetError("signal_df index must not contain NaT.")
+    if not signal_df.index.is_unique:
+        raise MLDatasetError("signal_df index must be unique.")
+    if not signal_df.index.is_monotonic_increasing:
+        raise MLDatasetError("signal_df index must be in increasing chronological order.")
 
     feature_columns = available_feature_columns(signal_df)
     future_return_column = f"Future_Return_{horizon}D"

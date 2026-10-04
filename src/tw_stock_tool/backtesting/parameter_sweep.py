@@ -7,6 +7,7 @@ import pandas as pd
 
 from tw_stock_tool.analysis.analysis import StockAnalysis, analyze_stock
 from tw_stock_tool.backtesting.backtest import run_backtest
+from tw_stock_tool.backtesting.window_results import window_outcome
 from tw_stock_tool.utils.config import (
     DEFAULT_AUTO_ADJUST,
     DEFAULT_INTERVAL,
@@ -352,8 +353,8 @@ def _parse_args() -> argparse.Namespace:
         const="",
         help="Export Excel; omit path for default output",
     )
-    parser.add_argument("--stop-loss", type=float, dest="stop_loss_pct")
-    parser.add_argument("--take-profit", type=float, dest="take_profit_pct")
+    parser.add_argument("--stop-loss", type=float, dest="stop_loss_pct", help="Stop loss percentage (e.g., 5 for 5%%)")
+    parser.add_argument("--take-profit", type=float, dest="take_profit_pct", help="Take profit percentage (e.g., 5 for 5%%)")
     parser.add_argument("--max-hold-days", type=int)
     parser.add_argument("--position-size", type=float, default=1.0)
     return parser.parse_args()
@@ -381,6 +382,12 @@ def main() -> int | None:
         excel_path = export_parameter_sweep_excel(result, args.stock, args.output_excel)
         if excel_path:
             print(f"\nParameter sweep Excel exported: {excel_path}")
+        outcome = window_outcome(result, empty_message="No parameter combinations were evaluated.")
+        if outcome["Status"] == "ERROR":
+            print(f"Error: No valid parameter combinations. {outcome['Error']}")
+            return 1
+        if outcome["Status"] == "PARTIAL":
+            print(f"Warning: {outcome['Error Rows']} parameter evaluations failed. {outcome['Error']}")
     except Exception as exc:
         print(f"Error: {exc}")
         return 1

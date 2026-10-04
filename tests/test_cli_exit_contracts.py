@@ -261,14 +261,10 @@ def _patch_success(stack: ExitStack, case):
             patch.object(
                 module,
                 "run_parameter_sweep",
-                return_value=pd.DataFrame({"Result": [1]}),
-            )
-        )
-        stack.enter_context(
-            patch.object(
-                module,
-                "build_parameter_sweep_report_data",
-                return_value={"Best Row": {}},
+                return_value=pd.DataFrame([{
+                    "Strategy": "ma_cross", "Error": "",
+                    "Total Return %": 1.0, "Sharpe Ratio": 1.0,
+                }]),
             )
         )
     elif name == "simulated_paper_trading_cli":

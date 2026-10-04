@@ -28,8 +28,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fee-rate", type=float, default=FEE_RATE, help="Fee rate (default from config)")
     parser.add_argument("--tax-rate", type=float, default=TAX_RATE, help="Tax rate (default from config)")
     parser.add_argument("--position-size", type=float, default=1.0, help="Position size (0 to 1.0, default 1.0)")
-    parser.add_argument("--stop-loss-pct", type=float, default=None, help="Stop loss percentage (e.g., 0.05 for 5%%)")
-    parser.add_argument("--take-profit-pct", type=float, default=None, help="Take profit percentage")
+    parser.add_argument("--stop-loss-pct", type=float, default=None, help="Stop loss percentage (e.g., 5 for 5%%)")
+    parser.add_argument("--take-profit-pct", type=float, default=None, help="Take profit percentage (e.g., 5 for 5%%)")
     parser.add_argument("--max-hold-days", type=int, default=None, help="Maximum holding days")
     return parser.parse_args(argv)
 
@@ -111,6 +111,7 @@ def main() -> int | None:
             },
             "Results": sweep_df,
         }
+        report_data = build_parameter_sweep_report_data(result_dict)
         
         if excel_output is not None:
             excel_path = export_parameter_sweep_report_excel(result_dict, excel_output)
@@ -121,16 +122,21 @@ def main() -> int | None:
             print(f"Markdown report: {md_path}")
             
         if args.output_excel is None and args.output_md is None:
-            print("Parameter sweep finished. Summary:")
+            print("Parameter sweep finished. Summary:" if report_data["Summary"]["Status"] == "OK" else "Parameter sweep summary:")
             print(f"  Total Rows: {len(sweep_df)}")
             if not sweep_df.empty:
-                report_data = build_parameter_sweep_report_data(result_dict)
                 best_row = report_data.get("Best Row")
                 if best_row:
                     print(f"  Top In-Sample Strategy: {best_row.get('Strategy', 'N/A')}")
                     print(f"  Top In-Sample Parameters: {best_row.get('Parameters', 'N/A')}")
                     print(f"  Top In-Sample Total Return: {best_row.get('Total Return %', 0)}%")
                     print(f"  Top In-Sample Sharpe Ratio: {best_row.get('Sharpe Ratio', 'N/A')}")
+        summary = report_data["Summary"]
+        if summary["Status"] == "ERROR":
+            print(f"Error: No valid parameter combinations. {summary['Error']}")
+            return 1
+        if summary["Status"] == "PARTIAL":
+            print(f"Warning: {summary['Error Rows']} parameter evaluations failed. {summary['Error']}")
             
     except Exception as exc:
         print(f"Error: {exc}")
