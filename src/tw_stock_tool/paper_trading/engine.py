@@ -55,6 +55,12 @@ def run_simulated_paper_trading(
         raise PaperTradingModelError("guard_decision_provider must be callable or None.")
 
     validate_standard_signals(df)
+    if isinstance(df.index, pd.DatetimeIndex) and df.index.hasnans:
+        raise ValueError("DataFrame index must not contain NaT.")
+    if not df.index.is_unique:
+        raise ValueError("DataFrame index must be unique.")
+    if not df.index.is_monotonic_increasing:
+        raise ValueError("DataFrame index must be monotonic increasing.")
 
     runtime_state = SimulatedPaperTradingRuntimeState(
         portfolio=SimulatedPortfolio(cash=float(initial_cash))
