@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from typing import Any
 
 import pandas as pd
@@ -31,11 +32,12 @@ class DataLoaderError(Exception):
 
 
 def _validate_inputs(stock_id: str, period: str, interval: str) -> None:
-    if not stock_id or not stock_id.strip():
+    if not stock_id or (isinstance(stock_id, str) and not stock_id.strip()):
         raise DataLoaderError("Stock id cannot be blank.")
 
-    base = stock_id.strip().upper().replace(".TWO", "").replace(".TW", "")
-    if not any(c.isdigit() for c in base):
+    if not isinstance(stock_id, str) or re.fullmatch(
+        r"[0-9]+[A-Z]*(?:\.TW(?:O)?)?", stock_id.strip().upper()
+    ) is None:
         raise DataLoaderError(f"Invalid stock ID format: {stock_id}")
 
     if period not in VALID_PERIODS:

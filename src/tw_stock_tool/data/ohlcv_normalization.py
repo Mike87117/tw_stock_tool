@@ -5,6 +5,8 @@ from typing import Any
 
 import pandas as pd
 
+from tw_stock_tool.utils.price_validation import validate_close_prices
+
 
 def normalize_columns(
     df: pd.DataFrame,
@@ -53,6 +55,7 @@ def prepare_ohlcv(
         raise error_type(
             f"{symbol} has no usable OHLC data."
         )
+    validate_close_prices(out["Close"], error_type=error_type)
 
     if not pd.api.types.is_datetime64_any_dtype(
         out.index

@@ -293,18 +293,16 @@ class TerminalPositionAccountingTest(unittest.TestCase):
                 with self.assertRaisesRegex(BacktestError, "finite numeric value"):
                     run_backtest_result(self._held_to_final_bar(final_close))
 
-    def test_unusable_final_close_without_open_position_is_unaffected(self) -> None:
-        """Fail-closed is scoped to the terminal position, not to prices generally."""
-        result = run_backtest_result(
-            _frame(
-                closes=[10.0, 12.0, 14.0, 0.0],
-                signals=["BUY", "HOLD", "SELL", "HOLD"],
-                opens=[10.0, 10.0, 12.0, 14.0],
+    def test_unusable_final_close_is_rejected_even_without_open_position(self) -> None:
+        """Every close must be valid, including bars after a signal exit."""
+        with self.assertRaisesRegex(BacktestError, "Close.*greater than 0"):
+            run_backtest_result(
+                _frame(
+                    closes=[10.0, 12.0, 14.0, 0.0],
+                    signals=["BUY", "HOLD", "SELL", "HOLD"],
+                    opens=[10.0, 10.0, 12.0, 14.0],
+                )
             )
-        )
-
-        self.assertEqual(result.trade_count, 1)
-        self.assertEqual(result.trades.iloc[-1]["Exit Reason"], "SELL")
 
     def test_legacy_run_backtest_propagates_the_same_failure(self) -> None:
         with self.assertRaises(BacktestError):

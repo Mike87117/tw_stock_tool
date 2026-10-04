@@ -13,6 +13,7 @@ import pandas as pd
 
 from tw_stock_tool.analysis.analysis import analyze_stock
 from tw_stock_tool.utils.config import DEFAULT_PERIOD, OUTPUT_DIR
+from tw_stock_tool.utils.price_validation import validate_close_prices
 
 FEATURE_COLUMNS = [
     "Close",
@@ -70,6 +71,7 @@ def build_ml_dataset_from_signal_df(
         raise MLDatasetError("signal_df index must be unique.")
     if not signal_df.index.is_monotonic_increasing:
         raise MLDatasetError("signal_df index must be in increasing chronological order.")
+    validate_close_prices(signal_df["Close"], error_type=MLDatasetError)
 
     feature_columns = available_feature_columns(signal_df)
     future_return_column = f"Future_Return_{horizon}D"

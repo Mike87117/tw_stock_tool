@@ -1,5 +1,5 @@
 import math
-from numbers import Real
+from numbers import Integral, Real
 from typing import Any
 
 import pandas as pd
@@ -18,6 +18,7 @@ from tw_stock_tool.backtesting.metrics import (
 )
 from tw_stock_tool.backtesting.results import BacktestResult
 from tw_stock_tool.utils.config import DEFAULT_INTERVAL, VALID_INTERVALS
+from tw_stock_tool.utils.price_validation import validate_close_prices
 
 
 class BacktestError(Exception):
@@ -39,9 +40,9 @@ def _validate_finite_real(
 
 
 def _validate_price_columns(df: pd.DataFrame) -> None:
-    for column in ("Open", "Close"):
-        for value in df[column]:
-            _validate_finite_real(column, value)
+    for value in df["Open"]:
+        _validate_finite_real("Open", value)
+    validate_close_prices(df["Close"], error_type=BacktestError)
 
 
 def _validate_inputs(
@@ -51,6 +52,7 @@ def _validate_inputs(
     tax_rate: float,
     stop_loss_pct: float | None,
     take_profit_pct: float | None,
+    max_hold_days: int | None,
     position_size: float,
     interval: str,
 ) -> None:
@@ -79,6 +81,10 @@ def _validate_inputs(
         _validate_finite_real(name, value)
     _validate_finite_real("stop_loss_pct", stop_loss_pct, allow_none=True)
     _validate_finite_real("take_profit_pct", take_profit_pct, allow_none=True)
+    if max_hold_days is not None and (
+        isinstance(max_hold_days, bool) or not isinstance(max_hold_days, Integral) or max_hold_days <= 0
+    ):
+        raise BacktestError("max_hold_days must be a positive integer or None.")
 
     if initial_capital <= 0:
         raise BacktestError("initial_capital must be greater than 0.")
@@ -131,6 +137,7 @@ def run_backtest_result(
         tax_rate,
         stop_loss_pct,
         take_profit_pct,
+        max_hold_days,
         position_size,
         interval,
     )

@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import Lock
@@ -23,8 +24,13 @@ def _cache_lock(path: Path):
 
 
 def _cache_path(symbol: str, period: str, interval: str, auto_adjust: bool, *, cache_dir: Path) -> Path:
-    safe_symbol = symbol.replace("/", "_")
-    return cache_dir / f"{safe_symbol}_{period}_{interval}_adjusted-{auto_adjust}.csv"
+    for name, value in (("symbol", symbol), ("period", period), ("interval", interval)):
+        if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) is None:
+            raise ValueError(f"Invalid cache key component: {name}.")
+    path = cache_dir / f"{symbol}_{period}_{interval}_adjusted-{auto_adjust}.csv"
+    if not path.resolve().is_relative_to(cache_dir.resolve()):
+        raise ValueError("Cache path must stay within cache_dir.")
+    return path
 
 
 def _is_cache_fresh(path: Path) -> bool:
