@@ -141,14 +141,14 @@ def calculate_sortino(
     equity_curve: pd.Series | Sequence[float],
     interval: str = DEFAULT_INTERVAL,
 ) -> float:
-    """Return annualized Sortino ratio from equity-curve downside returns."""
+    """Return annualized Sortino using MAR=0 and all-period downside deviation."""
     periods_per_year = _periods_per_year(interval)
     returns = _equity_returns(equity_curve)
-    downside = returns[returns < 0]
-    if downside.empty:
+    if returns.empty:
         return 0.0
+    downside_deviation = math.sqrt(float(returns.clip(upper=0).pow(2).mean()))
     return (
-        _safe_ratio(float(returns.mean()), float(downside.std(ddof=0)))
+        _safe_ratio(float(returns.mean()), downside_deviation)
         * math.sqrt(periods_per_year)
     )
 

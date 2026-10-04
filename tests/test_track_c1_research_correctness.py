@@ -204,9 +204,8 @@ class TrackC1ResearchCorrectnessTest(unittest.TestCase):
     def test_metrics_use_interval_specific_annualization(self):
         equity = pd.Series([100.0, 110.0, 99.0, 108.0, 91.8, 101.0])
         returns = equity.pct_change().dropna()
-        downside = returns[returns < 0]
         sharpe_base = returns.mean() / returns.std(ddof=0)
-        sortino_base = returns.mean() / downside.std(ddof=0)
+        sortino_base = returns.mean() / math.sqrt(returns.clip(upper=0).pow(2).mean())
         self.assertEqual(VALID_INTERVALS, {"1d", "1wk", "1mo"})
         for interval, periods_per_year in (("1d", 252), ("1wk", 52), ("1mo", 12)):
             with self.subTest(metric="sharpe", interval=interval):

@@ -1,6 +1,8 @@
 """Shared OHLCV normalization helpers."""
 
 from collections.abc import Callable
+import math
+from numbers import Number, Real
 from typing import Any
 
 import pandas as pd
@@ -56,6 +58,25 @@ def prepare_ohlcv(
             f"{symbol} has no usable OHLC data."
         )
     validate_close_prices(out["Close"], error_type=error_type)
+
+    for column in ("Open", "High", "Low", "Volume"):
+        for value in out[column]:
+            # Missing volume remains supported; missing OHLC rows were dropped.
+            if column == "Volume" and pd.api.types.is_scalar(value) and pd.isna(value):
+                continue
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not math.isfinite(float(value))
+                or (value < 0 if column == "Volume" else value <= 0)
+            ):
+                bound = "greater than or equal to 0" if column == "Volume" else "greater than 0"
+                raise error_type(f"{column} must be a finite numeric value {bound}; got {value!r}.")
+
+    # Integer bar positions are not epoch timestamps. Mixed object indexes
+    # need the same check before pandas can interpret numbers as nanoseconds.
+    if pd.api.types.is_numeric_dtype(out.index.dtype) or any(isinstance(value, Number) for value in out.index):
+        raise error_type(f"{symbol} index is not a valid DatetimeIndex.")
 
     if not pd.api.types.is_datetime64_any_dtype(
         out.index

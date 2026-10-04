@@ -13,6 +13,7 @@ import tempfile
 import unittest
 
 from tests import test_phase_56_5a4_broker_execution_contracts as a4_tests
+from tests.repository_file_test_support import iter_repository_files
 from tw_stock_tool.broker_safety import (
     A4_SCHEMA_VERSION,
     AuthorizationUseState,
@@ -1507,7 +1508,7 @@ class DurableBrokerStoreTests(unittest.TestCase):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     self.assertNotIn(node.name, forbidden_calls)
         root = HERE.parent
-        self.assertFalse(any(path.suffix.lower() in {".whl", ".pfx", ".p12", ".pem"} for path in root.rglob("*") if ".git" not in path.parts))
+        self.assertFalse(any(path.suffix.lower() in {".whl", ".pfx", ".p12", ".pem"} for path in iter_repository_files(root)))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,9 @@ import pandas as pd
 from tw_stock_tool.backtesting.backtest import run_backtest, run_backtest_result
 from tw_stock_tool.backtesting.signals import ensure_standard_signals, legacy_signal_to_standard
 from tw_stock_tool.paper_trading import engine
+from tw_stock_tool.paper_trading import coordinator
+from tw_stock_tool.paper_trading.models import SimulatedPortfolio
+from tw_stock_tool.paper_trading.runtime import SimulatedPaperTradingRuntimeState
 
 
 def _bars() -> pd.DataFrame:
@@ -87,6 +90,60 @@ class SignalParsingRegressionTest(unittest.TestCase):
         bars = pd.read_csv(StringIO(text), index_col=0, parse_dates=True)
         result = run_backtest_result(bars, fee_rate=0, tax_rate=0)
         self.assertEqual(result.trade_count, 0)
+
+
+class PaperMissingSignalRegressionTest(unittest.TestCase):
+    def test_missing_signals_fail_before_single_symbol_execution(self):
+        for runner in (engine.run_simulated_paper_trading, engine.run_simulated_paper_trading_result):
+            for column in ("entry_signal", "exit_signal"):
+                with self.subTest(runner=runner.__name__, column=column):
+                    bars = _bars()
+                    bars[column] = bars[column].astype("boolean")
+                    bars.at[bars.index[1], column] = pd.NA
+                    original = bars.copy(deep=True)
+                    with patch.object(engine, "step_simulated_symbol_bar") as step, \
+                         patch.object(engine, "SimulatedPortfolio") as portfolio:
+                        with self.assertRaisesRegex(ValueError, f"'{column}' must not contain missing values"):
+                            runner(bars, "2330.TW", initial_cash=1000., quantity_per_trade=1)
+                        step.assert_not_called()
+                        portfolio.assert_not_called()
+                    pd.testing.assert_frame_equal(bars, original)
+
+    def test_missing_signals_in_later_symbol_fail_before_any_runtime_mutation(self):
+        for column in ("entry_signal", "exit_signal"):
+            with self.subTest(column=column):
+                bars = _bars()
+                bars[column] = bars[column].astype("boolean")
+                bars.at[bars.index[1], column] = pd.NA
+                original = bars.copy(deep=True)
+                runtime = SimulatedPaperTradingRuntimeState(portfolio=SimulatedPortfolio(cash=1000.))
+                with patch.object(coordinator, "process_simulated_pending_fill") as fill, \
+                     patch.object(coordinator, "build_simulated_symbol_candidate_order") as candidate:
+                    with self.assertRaisesRegex(ValueError, f"'{column}' must not contain missing values"):
+                        coordinator.run_chronological_multi_symbol_simulated_paper_trading(
+                            {"A": _bars(), "B": bars}, runtime, quantity_per_trade=1,
+                        )
+                    fill.assert_not_called()
+                    candidate.assert_not_called()
+                self.assertEqual(runtime.portfolio.cash, 1000.)
+                self.assertEqual(len(runtime.portfolio.trade_log.orders), 0)
+                self.assertEqual(len(runtime.portfolio.trade_log.fills), 0)
+                self.assertEqual(runtime.pending_orders, {})
+                pd.testing.assert_frame_equal(bars, original)
+
+    def test_nullable_boolean_without_missing_values_preserves_trades(self):
+        bars = _bars()
+        bars[["entry_signal", "exit_signal"]] = bars[["entry_signal", "exit_signal"]].astype("boolean")
+        original = bars.copy(deep=True)
+        portfolio = engine.run_simulated_paper_trading(bars, "2330.TW", initial_cash=1000., quantity_per_trade=1)
+        runtime = SimulatedPaperTradingRuntimeState(portfolio=SimulatedPortfolio(cash=1000.))
+        coordinator.run_chronological_multi_symbol_simulated_paper_trading(
+            {"2330.TW": bars}, runtime, quantity_per_trade=1,
+        )
+        for result in (portfolio, runtime.portfolio):
+            self.assertEqual(result.cash, 1000.)
+            self.assertEqual(len(result.trade_log.fills), 2)
+        pd.testing.assert_frame_equal(bars, original)
 
 
 class SingleSymbolPaperIndexRegressionTest(unittest.TestCase):

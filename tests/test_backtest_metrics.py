@@ -78,8 +78,7 @@ class BacktestMetricsTest(unittest.TestCase):
         equity = _interval_equity()
         returns = equity.pct_change().dropna()
         sharpe_base = returns.mean() / returns.std(ddof=0)
-        downside = returns[returns < 0]
-        sortino_base = returns.mean() / downside.std(ddof=0)
+        sortino_base = returns.mean() / math.sqrt(returns.clip(upper=0).pow(2).mean())
 
         for interval, periods_per_year in (("1d", 252), ("1wk", 52), ("1mo", 12)):
             with self.subTest(metric="sharpe", interval=interval):
@@ -92,6 +91,17 @@ class BacktestMetricsTest(unittest.TestCase):
                     calculate_sortino(equity, interval),
                     sortino_base * math.sqrt(periods_per_year),
                 )
+
+    def test_sortino_constant_losses_retain_negative_downside_risk(self) -> None:
+        for equity in ([100.0, 90.0], [100.0, 90.0, 81.0]):
+            for interval, periods_per_year in (("1d", 252), ("1wk", 52), ("1mo", 12)):
+                with self.subTest(equity=equity, interval=interval):
+                    self.assertAlmostEqual(calculate_sortino(equity, interval), -math.sqrt(periods_per_year))
+
+    def test_sortino_includes_nonnegative_periods_in_downside_denominator(self) -> None:
+        # Returns +20%, -10%, 0%: mean=1/30, downside deviation=0.1/sqrt(3).
+        equity = [100.0, 120.0, 108.0, 108.0]
+        self.assertAlmostEqual(calculate_sortino(equity), math.sqrt(3 * 252) / 3)
 
     def test_interval_scaling_relationships(self) -> None:
         equity = _interval_equity()

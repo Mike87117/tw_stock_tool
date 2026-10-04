@@ -76,6 +76,10 @@ def validate_standard_signals(df: pd.DataFrame) -> None:
         raise ValueError("'entry_signal' must be boolean dtype.")
     if not pd.api.types.is_bool_dtype(df["exit_signal"]):
         raise ValueError("'exit_signal' must be boolean dtype.")
+
+    for column in ("entry_signal", "exit_signal"):
+        if df[column].isna().any():
+            raise ValueError(f"'{column}' must not contain missing values.")
     
     conflict_mask = df["entry_signal"] & df["exit_signal"]
     if conflict_mask.any():

@@ -165,6 +165,74 @@ class OhlcvNormalizationTest(unittest.TestCase):
                 error_type=RuntimeError,
             )
 
+    def _valid_price_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {"Open": [10., 11.], "High": [12., 13.], "Low": [9., 10.],
+             "Close": [11., 12.], "Volume": [100., 200.]},
+            index=pd.date_range("2026-01-01", periods=2),
+        )
+
+    def test_prepare_rejects_nonfinite_nonpositive_or_nonnumeric_prices(self) -> None:
+        for column in ("Open", "High", "Low"):
+            for value in (float("inf"), float("-inf"), 0., -1., True, "10"):
+                with self.subTest(column=column, value=value):
+                    frame = self._valid_price_frame()
+                    frame[column] = frame[column].astype(object)
+                    frame.at[frame.index[-1], column] = value
+                    original = frame.copy(deep=True)
+                    with self.assertRaisesRegex(RuntimeError, column):
+                        ohlcv_normalization.prepare_ohlcv(
+                            frame, "2330.TW", normalize_columns=ohlcv_normalization.normalize_columns,
+                            error_type=RuntimeError,
+                        )
+                    pd.testing.assert_frame_equal(frame, original)
+
+    def test_prepare_rejects_invalid_volume_but_preserves_zero_and_missing(self) -> None:
+        for value in (float("inf"), float("-inf"), -1., True, "100"):
+            with self.subTest(value=value):
+                frame = self._valid_price_frame()
+                frame["Volume"] = frame["Volume"].astype(object)
+                frame.at[frame.index[-1], "Volume"] = value
+                with self.assertRaisesRegex(RuntimeError, "Volume"):
+                    ohlcv_normalization.prepare_ohlcv(
+                        frame, "2330.TW", normalize_columns=ohlcv_normalization.normalize_columns,
+                        error_type=RuntimeError,
+                    )
+        frame = self._valid_price_frame()
+        frame["Volume"] = [0., float("nan")]
+        result = ohlcv_normalization.prepare_ohlcv(
+            frame, "2330.TW", normalize_columns=ohlcv_normalization.normalize_columns,
+            error_type=RuntimeError,
+        )
+        self.assertEqual(result["Volume"].iloc[0], 0.)
+        self.assertTrue(pd.isna(result["Volume"].iloc[1]))
+
+    def test_prepare_rejects_numeric_and_mixed_date_indexes(self) -> None:
+        for index in (pd.RangeIndex(2), [0., 1.], [True, False],
+                      pd.Index(["2026-01-01", 1], dtype=object),
+                      pd.Index([0, 1], dtype=object)):
+            with self.subTest(index=index):
+                frame = self._valid_price_frame()
+                frame.index = index
+                with self.assertRaisesRegex(RuntimeError, "not a valid DatetimeIndex"):
+                    ohlcv_normalization.prepare_ohlcv(
+                        frame, "2330.TW", normalize_columns=ohlcv_normalization.normalize_columns,
+                        error_type=RuntimeError,
+                    )
+
+    def test_prepare_preserves_timezone_aware_and_calendar_date_indexes(self) -> None:
+        for index in (pd.date_range("2026-01-01", periods=2, tz="Asia/Taipei"),
+                      ["20260101", "20260102"],
+                      pd.date_range("2026-01-01", periods=2).date):
+            with self.subTest(index=index):
+                frame = self._valid_price_frame()
+                frame.index = index
+                result = ohlcv_normalization.prepare_ohlcv(
+                    frame, "2330.TW", normalize_columns=ohlcv_normalization.normalize_columns,
+                    error_type=RuntimeError,
+                )
+                pd.testing.assert_index_equal(result.index, pd.DatetimeIndex(pd.to_datetime(index), name="Date"))
+
     def test_finalize_deduplicates_sorts_filters_and_passes_exact_symbol(self) -> None:
         rows = [
             {

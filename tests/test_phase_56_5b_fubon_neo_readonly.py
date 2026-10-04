@@ -11,6 +11,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from tests.repository_file_test_support import iter_repository_files
+
 from tw_stock_tool.broker_adapters.fubon_neo import (
     FUBON_NEO_BROKER_ID,
     FUBON_NEO_CATALOG_EVIDENCE_SHA256,
@@ -969,7 +971,7 @@ class FubonNeoReadonlyTests(unittest.TestCase):
                     self.assertNotIn(node.arg.lower(), secret_names)
         pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
         self.assertNotIn("fubon_neo", pyproject)
-        self.assertFalse(any(path.suffix.lower() in {".whl", ".pfx", ".p12"} for path in root.rglob("*") if ".git" not in path.parts))
+        self.assertFalse(any(path.suffix.lower() in {".whl", ".pfx", ".p12"} for path in iter_repository_files(root)))
         fixture_text = FIXTURE_PATH.read_text(encoding="utf-8")
         for token in ("raw-name", "raw-id", "raw-key", "certificate"):
             self.assertNotIn(token, fixture_text)
